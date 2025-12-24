@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 ThemeData buildAppTheme() {
-  const seed = Color(0xFF7B61FF); // kannst du später ändern
+  const seed = Color(0xFF7B61FF);
+
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: Brightness.dark,
@@ -9,8 +10,16 @@ ThemeData buildAppTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    colorScheme: scheme,
     brightness: Brightness.dark,
+    colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.surfaceContainerHigh,
+      contentTextStyle: TextStyle(color: scheme.onSurface),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+    ),
   );
 }
