@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -28,24 +29,29 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  Future<void> _login() async {
+    if (_loading) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
     try {
-      final token = await widget.api.login(
+      final tokens = await widget.api.login(
         username: _username.text.trim(),
         password: _password.text,
       );
 
       await widget.authStore.setTokens(
-        accessToken: token.accessToken,
-        refreshToken: token.refreshToken,
-        username: _username.text.trim(),
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
       );
 
       if (!mounted) return;
       context.go('/home');
+    } on DioException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login fehlgeschlagen: $e')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -58,89 +64,60 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Card(
-              elevation: 2,
-              color: cs.surfaceContainerLow,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.gavel_rounded, color: cs.primary),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Verhåårm',
-                            style: Theme.of(context).textTheme.headlineSmall,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Verhåårm', style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _username,
+                          decoration: const InputDecoration(
+                            labelText: 'Benutzername',
+                            prefixIcon: Icon(Icons.person_rounded),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _username,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.username],
-                        decoration: const InputDecoration(
-                          labelText: 'Benutzername',
-                          prefixIcon: Icon(Icons.person_outline_rounded),
+                          validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Bitte Benutzername eingeben.' : null,
                         ),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Benutzername fehlt';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      TextFormField(
-                        controller: _password,
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        autofillHints: const [AutofillHints.password],
-                        decoration: const InputDecoration(
-                          labelText: 'Passwort',
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _password,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Passwort',
+                            prefixIcon: Icon(Icons.lock_rounded),
+                          ),
+                          validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Bitte Passwort eingeben.' : null,
                         ),
-                        onFieldSubmitted: (_) => _submit(),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'Passwort fehlt';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 18),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _loading ? null : _submit,
-                          icon: _loading
-                              ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                              : const Icon(Icons.login_rounded),
-                          label: Text(_loading ? 'Anmelden…' : 'Anmelden'),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _loading ? null : _login,
+                            icon: _loading
+                                ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                                : const Icon(Icons.login_rounded),
+                            label: Text(_loading ? 'Anmelden…' : 'Anmelden'),
+                          ),
                         ),
-                      ),
-
-                      const SizedBox(height: 10),
-                      Text(
-                        'Kein Konto? Der Admin erstellt Benutzer.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

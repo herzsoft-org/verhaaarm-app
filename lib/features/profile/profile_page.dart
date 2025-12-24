@@ -12,53 +12,52 @@ class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key, required this.api, required this.authStore});
 
   Future<void> _logout(BuildContext context) async {
-    final refresh = authStore.refreshToken;
-    await authStore.clear();
-
-    if (refresh != null) {
+    final rt = authStore.refreshToken;
+    if (rt != null && rt.isNotEmpty) {
       try {
-        await api.logoutOnServer(refresh);
+        await api.logoutOnServer(rt);
       } catch (_) {
-        // bewusst ignoriert (hobby app)
+        // ignore
       }
     }
-
+    await authStore.clear();
     if (context.mounted) context.go('/login');
   }
 
   @override
   Widget build(BuildContext context) {
-    final username = authStore.username ?? '—';
-
     return AppScaffold(
       title: 'Profil',
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.person_rounded),
-              title: const Text('Benutzername'),
-              subtitle: Text(username),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Session', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text(authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet'),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: FilledButton.tonalIcon(
+            child: FilledButton.icon(
               onPressed: () => _logout(context),
               icon: const Icon(Icons.logout_rounded),
               label: const Text('Abmelden'),
             ),
           ),
           const SizedBox(height: 24),
-          Opacity(
-            opacity: 0.7,
-            child: Text(
-              'Verhåårm\nFrontend: herz.moe',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+          Text(
+            'Verhåårm\n© herz',
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
           ),
         ],
       ),

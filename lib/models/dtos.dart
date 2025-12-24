@@ -84,3 +84,258 @@ class LiveEventDto {
     expiresAt: json['expiresAt'] as String,
   );
 }
+
+// ---------- Users (Picker) ----------
+class UserPickerDto {
+  final String id;
+  final String username;
+  final String displayName;
+
+  UserPickerDto({
+    required this.id,
+    required this.username,
+    required this.displayName,
+  });
+
+  factory UserPickerDto.fromJson(Map<String, dynamic> json) => UserPickerDto(
+    id: json['id'] as String,
+    username: json['username'] as String,
+    displayName: json['displayName'] as String,
+  );
+}
+
+// ---------- Fine Catalog ----------
+class FineCatalogItemDto {
+  final String id;
+  final String title;
+  final int? defaultAmountCents;
+  final bool active;
+
+  FineCatalogItemDto({
+    required this.id,
+    required this.title,
+    required this.defaultAmountCents,
+    required this.active,
+  });
+
+  factory FineCatalogItemDto.fromJson(Map<String, dynamic> json) => FineCatalogItemDto(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    defaultAmountCents: (json['defaultAmountCents'] == null)
+        ? null
+        : (json['defaultAmountCents'] as num).toInt(),
+    active: (json['active'] as bool?) ?? true,
+  );
+}
+
+// ---------- Fines ----------
+enum FineType { catalog, custom }
+
+FineType _fineTypeFromJson(String s) => (s == 'CATALOG') ? FineType.catalog : FineType.custom;
+
+class FineDto {
+  final String id;
+  final String periodId;
+  final String creatorUserId;
+  final String? catalogItemId;
+  final String? reason;
+  final int? amountCents;
+  final FineType type;
+  final List<String> targetUserIds;
+  final String createdAt;
+
+  final String? suggesterUserId;
+  final String? acceptedFromSuggestionId;
+
+  FineDto({
+    required this.id,
+    required this.periodId,
+    required this.creatorUserId,
+    required this.catalogItemId,
+    required this.reason,
+    required this.amountCents,
+    required this.type,
+    required this.targetUserIds,
+    required this.createdAt,
+    required this.suggesterUserId,
+    required this.acceptedFromSuggestionId,
+  });
+
+  factory FineDto.fromJson(Map<String, dynamic> json) => FineDto(
+    id: json['id'] as String,
+    periodId: json['periodId'] as String,
+    creatorUserId: json['creatorUserId'] as String,
+    catalogItemId: json['catalogItemId'] as String?,
+    reason: json['reason'] as String?,
+    amountCents: json['amountCents'] == null ? null : (json['amountCents'] as num).toInt(),
+    type: _fineTypeFromJson(json['type'] as String),
+    targetUserIds: (json['targetUserIds'] as List).map((e) => e as String).toList(),
+    createdAt: json['createdAt'] as String,
+    suggesterUserId: json['suggesterUserId'] as String?,
+    acceptedFromSuggestionId: json['acceptedFromSuggestionId'] as String?,
+  );
+}
+
+class CreateFineRequest {
+  final String periodId;
+  final List<String> targetUserIds;
+  final String? catalogItemId;
+  final String? reason;
+  final int? amountCents;
+
+  CreateFineRequest({
+    required this.periodId,
+    required this.targetUserIds,
+    this.catalogItemId,
+    this.reason,
+    this.amountCents,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'periodId': periodId,
+    'targetUserIds': targetUserIds,
+    if (catalogItemId != null) 'catalogItemId': catalogItemId,
+    if (reason != null) 'reason': reason,
+    if (amountCents != null) 'amountCents': amountCents,
+  };
+}
+
+// ---------- Fine Suggestions ----------
+class FineSuggestionDto {
+  final String id;
+  final String periodId;
+  final String creatorUserId;
+  final String? catalogItemId;
+  final String? reason;
+  final int? amountCents;
+  final FineType type;
+  final String status; // PENDING/ACCEPTED/REJECTED
+  final List<String> targetUserIds;
+  final String createdAt;
+
+  FineSuggestionDto({
+    required this.id,
+    required this.periodId,
+    required this.creatorUserId,
+    required this.catalogItemId,
+    required this.reason,
+    required this.amountCents,
+    required this.type,
+    required this.status,
+    required this.targetUserIds,
+    required this.createdAt,
+  });
+
+  factory FineSuggestionDto.fromJson(Map<String, dynamic> json) => FineSuggestionDto(
+    id: json['id'] as String,
+    periodId: json['periodId'] as String,
+    creatorUserId: json['creatorUserId'] as String,
+    catalogItemId: json['catalogItemId'] as String?,
+    reason: json['reason'] as String?,
+    amountCents: json['amountCents'] == null ? null : (json['amountCents'] as num).toInt(),
+    type: _fineTypeFromJson(json['type'] as String),
+    status: json['status'] as String,
+    targetUserIds: (json['targetUserIds'] as List).map((e) => e as String).toList(),
+    createdAt: json['createdAt'] as String,
+  );
+}
+
+class CreateFineSuggestionRequest {
+  final String periodId;
+  final List<String> targetUserIds;
+  final String? catalogItemId;
+  final String? reason;
+  final int? amountCents;
+
+  CreateFineSuggestionRequest({
+    required this.periodId,
+    required this.targetUserIds,
+    this.catalogItemId,
+    this.reason,
+    this.amountCents,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'periodId': periodId,
+    'targetUserIds': targetUserIds,
+    if (catalogItemId != null) 'catalogItemId': catalogItemId,
+    if (reason != null) 'reason': reason,
+    if (amountCents != null) 'amountCents': amountCents,
+  };
+}
+
+// ---------- Update Fine ----------
+class UpdateFineRequest {
+  final List<String>? targetUserIds;
+  final String? catalogItemId;
+  final String? reason;
+  final int? amountCents;
+
+  UpdateFineRequest({
+    this.targetUserIds,
+    this.catalogItemId,
+    this.reason,
+    this.amountCents,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (targetUserIds != null) 'targetUserIds': targetUserIds,
+    if (catalogItemId != null) 'catalogItemId': catalogItemId,
+    if (reason != null) 'reason': reason,
+    if (amountCents != null) 'amountCents': amountCents,
+  };
+}
+
+// ---------- Accept Fine Suggestion Result ----------
+class FineDtoAcceptResult {
+  // Backend kann entweder "fine" oder nur "fineId" liefern – wir unterstützen beides.
+  final String? fineId;
+  final FineDto? fine;
+
+  FineDtoAcceptResult({this.fineId, this.fine});
+
+  factory FineDtoAcceptResult.fromJson(Map<String, dynamic> json) => FineDtoAcceptResult(
+    fineId: json['fineId'] as String?,
+    fine: (json['fine'] is Map<String, dynamic>)
+        ? FineDto.fromJson(json['fine'] as Map<String, dynamic>)
+        : null,
+  );
+}
+
+// ---------- Live Events ----------
+class CreateLiveEventRequest {
+  final String title;
+  final String place;
+  final String description;
+
+  CreateLiveEventRequest({
+    required this.title,
+    required this.place,
+    required this.description,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'place': place,
+    'description': description,
+  };
+}
+
+class UpdateLiveEventRequest {
+  final String? title;
+  final String? place;
+  final String? description;
+
+  UpdateLiveEventRequest({
+    this.title,
+    this.place,
+    this.description,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (title != null) 'title': title,
+    if (place != null) 'place': place,
+    if (description != null) 'description': description,
+  };
+}
+
