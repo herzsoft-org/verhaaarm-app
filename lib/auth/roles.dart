@@ -86,4 +86,10 @@ class Roles {
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
   }
 
+  static bool canManagePeriods(Set<AppRole> roles) {
+    // laut Wunsch: nur ADMIN (nicht SENIOR/Sprecher)
+    return roles.contains(AppRole.admin);
+  }
+
+
 }

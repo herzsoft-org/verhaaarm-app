@@ -23,6 +23,7 @@ class OfficePage extends StatelessWidget {
 
     final canUsers = Roles.canManageUsers(roles);
     final canCatalog = Roles.canManageCatalog(roles);
+    final canPeriods = Roles.canManagePeriods(roles);
 
     return AppScaffold(
       title: 'Amtsausführung',
@@ -47,6 +48,21 @@ class OfficePage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+
+          if (canPeriods)
+            _Section(
+              title: 'Semester & Perioden',
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.date_range_rounded),
+                  title: const Text('Semester / Conventsperioden verwalten'),
+                  subtitle: const Text('Erstellen, ändern, aktivieren, locken'),
+                  onTap: () => context.push('/office/periods'),
+                ),
+              ],
+            ),
+          if (canPeriods) const SizedBox(height: 12),
+
           if (canUsers)
             _Section(
               title: 'Nutzerverwaltung',
@@ -60,6 +76,7 @@ class OfficePage extends StatelessWidget {
               ],
             ),
           if (canUsers) const SizedBox(height: 12),
+
           if (canCatalog)
             _Section(
               title: 'Beihängungskatalog',
@@ -76,6 +93,7 @@ class OfficePage extends StatelessWidget {
       ),
     );
   }
+
 
   Future<void> _exportCsv(BuildContext context) async {
     try {

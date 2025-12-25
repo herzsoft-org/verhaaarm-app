@@ -244,6 +244,31 @@ class ApiClient {
     await dio.delete('/fine-catalog/$id');
   }
 
+  Future<ConventPeriodDto> getPeriod(String id) async {
+    final r = await dio.get('/periods/$id');
+    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<ConventPeriodDto> createPeriod(CreateConventPeriodRequest req) async {
+    final r = await dio.post('/periods', data: req.toJson());
+    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<ConventPeriodDto> updatePeriod(String id, UpdateConventPeriodRequest req) async {
+    final r = await dio.patch('/periods/$id', data: req.toJson());
+    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<ConventPeriodDto> activatePeriod(String id) async {
+    final r = await dio.post('/periods/$id/activate');
+    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<ConventPeriodDto> lockPeriod(String id) async {
+    final r = await dio.post('/periods/$id/lock');
+    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
   // --- EXPORT CSV
   Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {
     return dio.get(

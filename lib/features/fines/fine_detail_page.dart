@@ -84,8 +84,14 @@ class _FineDetailPageState extends State<FineDetailPage> {
         title: const Text('Beihängung löschen?'),
         content: const Text('Wird soft-deleted.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Löschen')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Löschen'),
+          ),
         ],
       ),
     );
@@ -93,14 +99,27 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
     try {
       await widget.api.deleteFine(fine.id);
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gelöscht.')));
-      context.go('/fines');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gelöscht.')),
+      );
+
+      // Wichtig: wenn wir via push aus Liste kamen -> pop,
+      // sonst (direkt per URL) hart zur Liste gehen
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/fines');
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Löschen fehlgeschlagen: $e')),
+      );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

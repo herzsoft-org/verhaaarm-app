@@ -567,3 +567,46 @@ class UpdateLiveEventRequest {
     if (description != null) 'description': description,
   };
 }
+
+class CreateConventPeriodRequest {
+  final String semester;
+  final String startAt; // ISO date-time
+  final String endAt;   // ISO date-time
+
+  CreateConventPeriodRequest({
+    required this.semester,
+    required this.startAt,
+    required this.endAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'semester': semester,
+    'startAt': startAt,
+    'endAt': endAt,
+  };
+}
+
+class UpdateConventPeriodRequest {
+  final String? semester;
+  final String? startAt; // ISO date-time
+  final String? endAt;   // ISO date-time
+  final bool? active;
+  final bool? locked;
+
+  UpdateConventPeriodRequest({
+    this.semester,
+    this.startAt,
+    this.endAt,
+    this.active,
+    this.locked,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (semester != null) 'semester': semester,
+    if (startAt != null) 'startAt': startAt,
+    if (endAt != null) 'endAt': endAt,
+    if (active != null) 'active': active,
+    if (locked != null) 'locked': locked,
+  };
+}
+

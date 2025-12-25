@@ -21,6 +21,7 @@ class _FinesListPageState extends State<FinesListPage> {
   List<FineDto> _fines = const [];
   List<ConventPeriodDto> _periods = const [];
   Map<String, UserPickerDto> _userById = const {};
+  Map<String, FineCatalogItemDto> _catalogById = const {};
 
   @override
   void initState() {
@@ -51,13 +52,18 @@ class _FinesListPageState extends State<FinesListPage> {
   }
 
   String _fineTitle(FineDto f) {
+    // 1) Katalog-Titel
     if (f.type == FineType.catalog && f.catalogItemId != null) {
-      // Titel kommt aus Katalog (wird in Detail aufgelöst)
-      return 'Beihängung';
+      final item = _catalogById[f.catalogItemId!];
+      if (item != null && item.title.trim().isNotEmpty) return item.title.trim();
     }
+
+    // 2) Fallback: Reason wenn vorhanden (auch bei custom)
+    final r = (f.reason ?? '').trim();
+    if (r.isNotEmpty) return r;
+
     return 'Beihängung';
   }
-
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -71,12 +77,17 @@ class _FinesListPageState extends State<FinesListPage> {
 
       final userById = {for (final u in users) u.id: u};
 
+      final catalog = await widget.api.listFineCatalog(active: null);
+      final catalogById = {for (final c in catalog) c.id: c};
+
       if (!mounted) return;
       setState(() {
         _periods = periods;
         _userById = userById;
+        _catalogById = catalogById;
         _fines = fines;
       });
+
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -287,6 +298,7 @@ class _PeriodSection extends StatelessWidget {
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: ListTile(
+                  titleAlignment: ListTileTitleAlignment.center,
                   leading: const Icon(Icons.gavel_rounded),
                   title: Text(fineTitle(f)),
                   subtitle: Text(_subtitleForFine(f)),

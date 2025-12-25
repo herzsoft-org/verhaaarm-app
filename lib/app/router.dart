@@ -18,7 +18,8 @@ import '../features/office/users/user_form_page.dart';
 import '../features/office/users/user_password_page.dart';
 import '../features/office/catalog/catalog_page.dart';
 import '../features/office/catalog/catalog_form_page.dart';
-
+import '../features/office/periods/periods_page.dart';
+import '../features/office/periods/period_form_page.dart';
 
 import '../features/live_events/live_events_page.dart';
 import '../features/live_events/live_event_form_page.dart';
@@ -127,6 +128,22 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/office',
         builder: (context, state) => OfficePage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/periods',
+        builder: (context, state) => PeriodsPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/periods/new',
+        builder: (context, state) => PeriodFormPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/periods/:id/edit',
+        builder: (context, state) => PeriodFormPage(
+          api: api,
+          authStore: authStore,
+          periodId: state.pathParameters['id']!,
+        ),
       ),
 
       // Users
