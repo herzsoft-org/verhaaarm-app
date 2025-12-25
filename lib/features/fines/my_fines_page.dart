@@ -52,9 +52,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
   }
 
   String _fineTitle(FineDto f) {
-    if (f.type == FineType.catalog) return 'Katalogbeihängung';
-    final r = f.reason?.trim() ?? '';
-    return r.isEmpty ? 'Beihängung' : r;
+    return 'Beihängung';
   }
 
   Future<void> _load() async {

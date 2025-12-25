@@ -50,7 +50,7 @@ class _CatalogPageState extends State<CatalogPage> {
     final can = Roles.canManageCatalog(roles);
 
     return AppScaffold(
-      title: 'Feinkatalog',
+      title: 'Beihängungskatalog',
       actions: [
         IconButton(
           tooltip: 'Neu laden',

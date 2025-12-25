@@ -7,6 +7,7 @@ import '../../auth/roles.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
+import '../fines/member_picker_sheet.dart';
 
 class EventFormPage extends StatefulWidget {
   final ApiClient api;
@@ -37,6 +38,10 @@ class _EventFormPageState extends State<EventFormPage> {
 
   EventDto? _existing;
 
+  // attendance
+  List<AttendanceDto> _attendance = const [];
+  Map<String, UserPickerDto> _userById = const {};
+
   @override
   void initState() {
     super.initState();
@@ -62,11 +67,16 @@ class _EventFormPageState extends State<EventFormPage> {
       final periods = await widget.api.listPeriods();
       periods.sort((a, b) => b.startAt.compareTo(a.startAt)); // newest first
 
+      final users = await widget.api.pickerUsers();
+      final userById = {for (final u in users) u.id: u};
+
       EventDto? existing;
+      List<AttendanceDto> attendance = const [];
+
       if (widget.eventId != null) {
         existing = await widget.api.getEvent(widget.eventId!);
+        attendance = await widget.api.listAttendance(existing.id);
       } else {
-        // default period: active
         final active = await widget.api.getActivePeriod();
         _periodId = active.id;
       }
@@ -80,7 +90,11 @@ class _EventFormPageState extends State<EventFormPage> {
       }
 
       if (!mounted) return;
-      setState(() => _periods = periods);
+      setState(() {
+        _periods = periods;
+        _userById = userById;
+        _attendance = attendance;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,6 +116,9 @@ class _EventFormPageState extends State<EventFormPage> {
       lastDate: DateTime(now.year + 5),
     );
     if (date == null) return;
+
+    // FIX: mounted check before using context again
+    if (!mounted) return;
 
     final time = await showTimePicker(
       context: context,
@@ -206,6 +223,114 @@ class _EventFormPageState extends State<EventFormPage> {
     }
   }
 
+  String _userLabel(String id) {
+    final u = _userById[id];
+    if (u == null) return id;
+    return u.displayName;
+  }
+
+  Future<String?> _pickOneMember() async {
+    final res = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.85,
+        child: MemberPickerSheet(
+          api: widget.api,
+          initialSelectedIds: const <String>{},
+        ),
+      ),
+    );
+    if (res == null || res.isEmpty) return null;
+    // take first
+    return res.first;
+  }
+
+  Future<int?> _askLateMinutes() async {
+    final ctrl = TextEditingController(text: '5');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Zu spät (Minuten)'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Minuten',
+            hintText: 'z.B. 5',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('OK')),
+        ],
+      ),
+    );
+    if (ok != true) return null;
+    final v = int.tryParse(ctrl.text.trim());
+    if (v == null || v < 0) return null;
+    return v;
+  }
+
+  Future<void> _addAttendance(AttendanceStatus status) async {
+    final e = _existing;
+    if (e == null) return;
+
+    final userId = await _pickOneMember();
+    if (userId == null) return;
+
+    int? lateMinutes;
+    if (status == AttendanceStatus.late) {
+      lateMinutes = await _askLateMinutes();
+      if (lateMinutes == null) return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await widget.api.upsertAttendance(
+        e.id,
+        UpsertAttendanceRequest(
+          userId: userId,
+          status: status,
+          lateMinutes: lateMinutes,
+        ),
+      );
+      final updated = await widget.api.listAttendance(e.id);
+
+      if (!mounted) return;
+      setState(() => _attendance = updated);
+    } catch (ex) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Anwesenheit speichern fehlgeschlagen: $ex')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _removeAttendance(String userId) async {
+    final e = _existing;
+    if (e == null) return;
+
+    setState(() => _saving = true);
+    try {
+      await widget.api.deleteAttendance(e.id, userId);
+      final updated = await widget.api.listAttendance(e.id);
+
+      if (!mounted) return;
+      setState(() => _attendance = updated);
+    } catch (ex) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Anwesenheit löschen fehlgeschlagen: $ex')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
@@ -246,7 +371,6 @@ class _EventFormPageState extends State<EventFormPage> {
                 children: [
                   Text('Details', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
-
                   DropdownButtonFormField<String>(
                     initialValue: _periodId,
                     decoration: const InputDecoration(
@@ -257,15 +381,14 @@ class _EventFormPageState extends State<EventFormPage> {
                         .map(
                           (p) => DropdownMenuItem<String>(
                         value: p.id,
-                        child: Text('${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'),
+                        child: Text(
+                            '${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'),
                       ),
                     )
                         .toList(),
                     onChanged: _saving ? null : (v) => setState(() => _periodId = v),
                   ),
-
                   const SizedBox(height: 12),
-
                   TextField(
                     controller: _title,
                     enabled: !_saving,
@@ -274,9 +397,7 @@ class _EventFormPageState extends State<EventFormPage> {
                       prefixIcon: Icon(Icons.title_rounded),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.schedule_rounded),
@@ -287,7 +408,6 @@ class _EventFormPageState extends State<EventFormPage> {
                       child: const Text('Wählen'),
                     ),
                   ),
-
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _mandatory,
@@ -303,8 +423,69 @@ class _EventFormPageState extends State<EventFormPage> {
             ),
           ),
 
-          const SizedBox(height: 12),
+          // attendance section only for existing events
+          if (_existing != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('Anwesenheit', style: Theme.of(context).textTheme.titleMedium),
+                        const Spacer(),
+                        FilledButton.tonalIcon(
+                          onPressed: _saving ? null : () => _addAttendance(AttendanceStatus.absent),
+                          icon: const Icon(Icons.person_off_rounded),
+                          label: const Text('Abwesend'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
+                          onPressed: _saving ? null : () => _addAttendance(AttendanceStatus.late),
+                          icon: const Icon(Icons.timer_rounded),
+                          label: const Text('Zu spät'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_attendance.isEmpty)
+                      Text('Keine Einträge (Default: alle anwesend).',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    for (final a in _attendance)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          elevation: 0,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          child: ListTile(
+                            leading: Icon(
+                              a.status == AttendanceStatus.absent
+                                  ? Icons.person_off_rounded
+                                  : Icons.timer_rounded,
+                            ),
+                            title: Text(_userLabel(a.userId)),
+                            subtitle: Text(
+                              a.status == AttendanceStatus.absent
+                                  ? 'ABSENT'
+                                  : 'LATE · ${a.lateMinutes ?? 0} min',
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Entfernen',
+                              onPressed: _saving ? null : () => _removeAttendance(a.userId),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
 
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(

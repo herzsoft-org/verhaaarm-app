@@ -51,10 +51,13 @@ class _FinesListPageState extends State<FinesListPage> {
   }
 
   String _fineTitle(FineDto f) {
-    if (f.type == FineType.catalog) return 'Katalogbeihängung';
-    final r = f.reason?.trim() ?? '';
-    return r.isEmpty ? 'Beihängung' : r;
+    if (f.type == FineType.catalog && f.catalogItemId != null) {
+      // Titel kommt aus Katalog (wird in Detail aufgelöst)
+      return 'Beihängung';
+    }
+    return 'Beihängung';
   }
+
 
   Future<void> _load() async {
     setState(() => _loading = true);

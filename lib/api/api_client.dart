@@ -25,7 +25,6 @@ class ApiClient {
     auth = AuthApi(dio);
 
     dio.interceptors.add(AuthInterceptor(authStore: authStore, authApi: auth));
-    // used by AuthInterceptor retry
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
         options.extra['_dio_instance'] = dio;
@@ -162,6 +161,22 @@ class ApiClient {
     await dio.delete('/events/$id');
   }
 
+  // --- ATTENDANCE
+  Future<List<AttendanceDto>> listAttendance(String eventId) async {
+    final r = await dio.get('/events/$eventId/attendance');
+    final list = (r.data as List).cast<dynamic>();
+    return list.map((e) => AttendanceDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<AttendanceDto> upsertAttendance(String eventId, UpsertAttendanceRequest req) async {
+    final r = await dio.put('/events/$eventId/attendance', data: req.toJson());
+    return AttendanceDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteAttendance(String eventId, String userId) async {
+    await dio.delete('/events/$eventId/attendance/$userId');
+  }
+
   // --- LIVE EVENTS
   Future<List<LiveEventDto>> listLiveEvents() async {
     final r = await dio.get('/live-events');
@@ -228,7 +243,6 @@ class ApiClient {
   Future<void> deleteFineCatalogItem(String id) async {
     await dio.delete('/fine-catalog/$id');
   }
-
 
   // --- EXPORT CSV
   Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {

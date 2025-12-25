@@ -32,7 +32,12 @@ class _FineFormPageState extends State<FineFormPage> {
   bool _useCatalog = true;
   FineCatalogItemDto? _selectedCatalogItem;
 
+  int _multiplier = 1;
+
+  // IMPORTANT: reason is required for BOTH catalog + custom
   final _reason = TextEditingController();
+
+  // custom amount input (EUR)
   final _amount = TextEditingController();
 
   Set<String> _targetUserIds = <String>{};
@@ -56,20 +61,12 @@ class _FineFormPageState extends State<FineFormPage> {
       final period = await widget.api.getActivePeriod();
       final catalog = await widget.api.listFineCatalog(active: true);
 
-      // default: erster Katalogeintrag
-      FineCatalogItemDto? selected;
-      if (catalog.isNotEmpty) {
-        selected = catalog.first;
-        if (selected.defaultAmountCents != null) {
-          _amount.text = _toEurText(selected.defaultAmountCents!);
-        }
-      }
-
       if (!mounted) return;
       setState(() {
         _activePeriod = period;
         _catalog = catalog;
-        _selectedCatalogItem = selected;
+        _selectedCatalogItem = null; // placeholder default
+        _multiplier = 1;
       });
     } catch (e) {
       if (!mounted) return;
@@ -82,9 +79,29 @@ class _FineFormPageState extends State<FineFormPage> {
   }
 
   String _toEurText(int cents) {
-    // "1,50" (ohne € Zeichen)
     final s = Format.centsToEur(cents);
     return s.replaceAll('€', '').trim();
+  }
+
+  int _clampMultiplier(int v) => v < 1 ? 1 : (v > 99 ? 99 : v);
+
+  int? _baseAmountCents() {
+    if (_useCatalog) {
+      return _selectedCatalogItem?.defaultAmountCents;
+    }
+    return Format.eurTextToCents(_amount.text);
+  }
+
+  int? _totalAmountCents() {
+    final base = _baseAmountCents();
+    if (base == null) return null;
+    return base * _multiplier;
+  }
+
+  String _totalAmountLabel() {
+    final total = _totalAmountCents();
+    if (total == null) return '—';
+    return _toEurText(total);
   }
 
   Future<void> _pickMembers() async {
@@ -119,10 +136,18 @@ class _FineFormPageState extends State<FineFormPage> {
 
     if (!_formKey.currentState!.validate()) return;
 
-    final amountCents = Format.eurTextToCents(_amount.text);
-    if (amountCents == null || amountCents < 0) {
+    final totalCents = _totalAmountCents();
+    if (totalCents == null || totalCents < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ungültiger Betrag.')),
+      );
+      return;
+    }
+
+    final reason = _reason.text.trim();
+    if (reason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Grund fehlt.')),
       );
       return;
     }
@@ -135,8 +160,8 @@ class _FineFormPageState extends State<FineFormPage> {
           periodId: _activePeriod!.id,
           targetUserIds: _targetUserIds.toList(),
           catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
-          reason: _useCatalog ? null : _reason.text.trim(),
-          amountCents: amountCents,
+          reason: reason,
+          amountCents: totalCents,
         );
 
         final fine = await widget.api.createFine(req);
@@ -148,8 +173,8 @@ class _FineFormPageState extends State<FineFormPage> {
           periodId: _activePeriod!.id,
           targetUserIds: _targetUserIds.toList(),
           catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
-          reason: _useCatalog ? null : _reason.text.trim(),
-          amountCents: amountCents,
+          reason: reason,
+          amountCents: totalCents,
         );
 
         await widget.api.createSuggestion(req);
@@ -161,7 +186,6 @@ class _FineFormPageState extends State<FineFormPage> {
         context.go('/home');
       }
     } on DioException catch (e) {
-      // Wenn jemand keine Berechtigung hat: 403 -> freundlich melden
       final code = e.response?.statusCode;
       if (!mounted) return;
 
@@ -209,7 +233,6 @@ class _FineFormPageState extends State<FineFormPage> {
             ),
           ),
           const SizedBox(height: 12),
-
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -225,14 +248,16 @@ class _FineFormPageState extends State<FineFormPage> {
                           ],
                           selected: {_useCatalog},
                           onSelectionChanged: (s) {
-                            setState(() => _useCatalog = s.first);
+                            setState(() {
+                              _useCatalog = s.first;
+                              _multiplier = 1;
+                            });
                           },
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-
                   Form(
                     key: _formKey,
                     child: Column(
@@ -240,59 +265,92 @@ class _FineFormPageState extends State<FineFormPage> {
                         if (_useCatalog) ...[
                           DropdownButtonFormField<FineCatalogItemDto>(
                             initialValue: _selectedCatalogItem,
-                            items: _catalog
-                                .map(
-                                  (c) => DropdownMenuItem(
-                                value: c,
-                                child: Text(c.title),
+                            items: [
+                              const DropdownMenuItem<FineCatalogItemDto>(
+                                value: null,
+                                child: Text('Beihängung auswählen'),
                               ),
-                            )
-                                .toList(),
+                              ..._catalog.map(
+                                    (c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(c.title),
+                                ),
+                              ),
+                            ],
                             onChanged: (v) {
-                              setState(() => _selectedCatalogItem = v);
-                              final def = v?.defaultAmountCents;
-                              if (def != null) _amount.text = _toEurText(def);
+                              setState(() {
+                                _selectedCatalogItem = v;
+                                _multiplier = 1;
+                              });
                             },
                             decoration: const InputDecoration(
                               labelText: 'Katalogeintrag',
                               prefixIcon: Icon(Icons.list_rounded),
                             ),
                             validator: (v) {
-                              if (_useCatalog && v == null) return 'Bitte Katalogeintrag wählen.';
+                              if (_useCatalog && v == null) return 'Bitte Beihängung auswählen.';
                               return null;
                             },
                           ),
-                        ] else ...[
-                          TextFormField(
-                            controller: _reason,
-                            decoration: const InputDecoration(
-                              labelText: 'Grund',
-                              prefixIcon: Icon(Icons.notes_rounded),
-                            ),
-                            validator: (v) {
-                              if (!_useCatalog && (v == null || v.trim().isEmpty)) {
-                                return 'Grund fehlt.';
-                              }
-                              return null;
-                            },
-                          ),
+                          const SizedBox(height: 12),
                         ],
-                        const SizedBox(height: 12),
 
+                        // IMPORTANT: reason always required (catalog + custom)
                         TextFormField(
-                          controller: _amount,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          controller: _reason,
+                          enabled: !_saving,
                           decoration: const InputDecoration(
-                            labelText: 'Betrag (z.B. 1,50)',
-                            prefixIcon: Icon(Icons.euro_rounded),
+                            labelText: 'Grund',
+                            prefixIcon: Icon(Icons.notes_rounded),
                           ),
                           validator: (v) {
+                            if ((v ?? '').trim().isEmpty) return 'Grund fehlt.';
+                            return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // amount:
+                        // - catalog: not editable (uses defaultAmountCents)
+                        // - custom: editable EUR
+                        TextFormField(
+                          controller: _amount,
+                          enabled: !_useCatalog && !_saving,
+                          readOnly: _useCatalog,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(
+                            labelText: _useCatalog ? 'Betrag (aus Katalog)' : 'Betrag (z.B. 1,50)',
+                            prefixIcon: const Icon(Icons.euro_rounded),
+                            hintText: _useCatalog ? '—' : 'z.B. 2,50',
+                          ),
+                          validator: (v) {
+                            if (_useCatalog) {
+                              final def = _selectedCatalogItem?.defaultAmountCents;
+                              if (def == null) return 'Katalogbetrag fehlt (Default Betrag).';
+                              if (def < 0) return 'Ungültiger Betrag.';
+                              return null;
+                            }
                             final cents = Format.eurTextToCents(v ?? '');
                             if (cents == null) return 'Ungültiger Betrag.';
                             if (cents < 0) return 'Ungültiger Betrag.';
                             return null;
                           },
                         ),
+
+                        const SizedBox(height: 12),
+
+                        _MultiplierRow(
+                          value: _multiplier,
+                          onMinus: _saving
+                              ? null
+                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier - 1)),
+                          onPlus: _saving
+                              ? null
+                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier + 1)),
+                          totalLabel: _totalAmountLabel(),
+                        ),
+
                         const SizedBox(height: 16),
 
                         SizedBox(
@@ -337,8 +395,52 @@ class _FineFormPageState extends State<FineFormPage> {
             ),
           ),
           const SizedBox(height: 12),
-
         ],
+      ),
+    );
+  }
+}
+
+class _MultiplierRow extends StatelessWidget {
+  final int value;
+  final VoidCallback? onMinus;
+  final VoidCallback? onPlus;
+  final String totalLabel;
+
+  const _MultiplierRow({
+    required this.value,
+    required this.onMinus,
+    required this.onPlus,
+    required this.totalLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
+          children: [
+            const Icon(Icons.close_rounded),
+            const SizedBox(width: 8),
+            Text('x$value', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: onMinus,
+              icon: const Icon(Icons.remove_circle_outline_rounded),
+              tooltip: '-',
+            ),
+            IconButton(
+              onPressed: onPlus,
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              tooltip: '+',
+            ),
+            const Spacer(),
+            Text('Gesamt: $totalLabel', style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
       ),
     );
   }

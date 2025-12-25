@@ -62,7 +62,7 @@ class OfficePage extends StatelessWidget {
           if (canUsers) const SizedBox(height: 12),
           if (canCatalog)
             _Section(
-              title: 'Feinkatalog',
+              title: 'Beihängungskatalog',
               children: [
                 ListTile(
                   leading: const Icon(Icons.rule_rounded),

@@ -81,4 +81,9 @@ class Roles {
     return roles.contains(AppRole.admin);
   }
 
+  static bool canManageFines(Set<AppRole> roles) {
+    // anpassen, falls du andere Rollen dafür zulassen willst
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
+  }
+
 }

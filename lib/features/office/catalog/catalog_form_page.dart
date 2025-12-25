@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../api/api_client.dart';
 import '../../../auth/auth_store.dart';
 import '../../../auth/roles.dart';
+import '../../../common/format.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
 
@@ -24,7 +25,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
   bool _loading = true;
 
   final _titleCtrl = TextEditingController();
-  final _defaultCentsCtrl = TextEditingController();
+  final _defaultEurCtrl = TextEditingController(); // EUR text now
   bool _active = true;
 
   bool get _isEdit => widget.itemId != null;
@@ -38,8 +39,19 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
   @override
   void dispose() {
     _titleCtrl.dispose();
-    _defaultCentsCtrl.dispose();
+    _defaultEurCtrl.dispose();
     super.dispose();
+  }
+
+  String _toEurText(int cents) {
+    final s = Format.centsToEur(cents);
+    return s.replaceAll('€', '').trim();
+  }
+
+  int? _parseOptionalEurToCents(String s) {
+    final t = s.trim();
+    if (t.isEmpty) return null;
+    return Format.eurTextToCents(t);
   }
 
   Future<void> _load() async {
@@ -55,11 +67,11 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
       if (_isEdit) {
         final it = await widget.api.getFineCatalogItem(widget.itemId!);
         _titleCtrl.text = it.title;
-        _defaultCentsCtrl.text = (it.defaultAmountCents ?? 0).toString();
+        _defaultEurCtrl.text = it.defaultAmountCents == null ? '' : _toEurText(it.defaultAmountCents!);
         _active = it.active;
       } else {
         _active = true;
-        _defaultCentsCtrl.text = '0';
+        _defaultEurCtrl.text = '';
       }
 
       if (!mounted) return;
@@ -73,19 +85,19 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
     }
   }
 
-  int _parseCents(String s) => int.tryParse(s.trim()) ?? 0;
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
     try {
+      final cents = _parseOptionalEurToCents(_defaultEurCtrl.text);
+
       if (_isEdit) {
         await widget.api.updateFineCatalogItem(
           widget.itemId!,
           UpdateFineCatalogItemRequest(
             title: _titleCtrl.text.trim(),
-            defaultAmountCents: _parseCents(_defaultCentsCtrl.text),
+            defaultAmountCents: cents, // nullable ok
             active: _active,
           ),
         );
@@ -93,7 +105,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
         await widget.api.createFineCatalogItem(
           CreateFineCatalogItemRequest(
             title: _titleCtrl.text.trim(),
-            defaultAmountCents: _parseCents(_defaultCentsCtrl.text),
+            defaultAmountCents: cents, // nullable ok
             active: _active,
           ),
         );
@@ -182,17 +194,18 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
-                      controller: _defaultCentsCtrl,
-                      keyboardType: TextInputType.number,
+                      controller: _defaultEurCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
-                        labelText: 'Default Betrag (Cent)',
-                        hintText: 'z.B. 150',
+                        labelText: 'Default Betrag (EUR)',
+                        hintText: 'z.B. 2,50',
                       ),
                       validator: (v) {
                         final s = (v ?? '').trim();
-                        if (s.isEmpty) return 'Pflichtfeld';
-                        if (int.tryParse(s) == null) return 'Zahl erwartet';
-                        if ((int.tryParse(s) ?? 0) < 0) return '>= 0';
+                        if (s.isEmpty) return null; // optional
+                        final cents = Format.eurTextToCents(s);
+                        if (cents == null) return 'Ungültiger Betrag';
+                        if (cents < 0) return '>= 0';
                         return null;
                       },
                     ),

@@ -163,7 +163,6 @@ class UpdateUserRequest {
   };
 }
 
-
 // ---------- Fine Catalog ----------
 class FineCatalogItemDto {
   final String id;
@@ -181,7 +180,9 @@ class FineCatalogItemDto {
   factory FineCatalogItemDto.fromJson(Map<String, dynamic> json) => FineCatalogItemDto(
     id: json['id'] as String,
     title: json['title'] as String,
-    defaultAmountCents: (json['defaultAmountCents'] == null) ? null : (json['defaultAmountCents'] as num).toInt(),
+    defaultAmountCents: (json['defaultAmountCents'] == null)
+        ? null
+        : (json['defaultAmountCents'] as num).toInt(),
     active: (json['active'] as bool?) ?? true,
   );
 }
@@ -218,7 +219,6 @@ class UpdateFineCatalogItemRequest {
   };
 }
 
-
 // ---------- Fines ----------
 enum FineType { catalog, custom }
 
@@ -229,7 +229,7 @@ class FineDto {
   final String periodId;
   final String creatorUserId;
   final String? catalogItemId;
-  final String? reason;
+  final String? reason; // IMPORTANT: reason is now used for BOTH catalog + custom
   final int? amountCents;
   final FineType type;
   final List<String> targetUserIds;
@@ -271,23 +271,23 @@ class CreateFineRequest {
   final String periodId;
   final List<String> targetUserIds;
   final String? catalogItemId;
-  final String? reason;
-  final int? amountCents;
+  final String reason; // REQUIRED for both catalog + custom
+  final int amountCents;
 
   CreateFineRequest({
     required this.periodId,
     required this.targetUserIds,
     this.catalogItemId,
-    this.reason,
-    this.amountCents,
+    required this.reason,
+    required this.amountCents,
   });
 
   Map<String, dynamic> toJson() => {
     'periodId': periodId,
     'targetUserIds': targetUserIds,
     if (catalogItemId != null) 'catalogItemId': catalogItemId,
-    if (reason != null) 'reason': reason,
-    if (amountCents != null) 'amountCents': amountCents,
+    'reason': reason,
+    'amountCents': amountCents,
   };
 }
 
@@ -297,7 +297,7 @@ class FineSuggestionDto {
   final String periodId;
   final String creatorUserId;
   final String? catalogItemId;
-  final String? reason;
+  final String? reason; // required by UI, backend may still store nullable
   final int? amountCents;
   final FineType type;
   final String status; // PENDING/ACCEPTED/REJECTED
@@ -335,23 +335,23 @@ class CreateFineSuggestionRequest {
   final String periodId;
   final List<String> targetUserIds;
   final String? catalogItemId;
-  final String? reason;
-  final int? amountCents;
+  final String reason; // REQUIRED for both catalog + custom
+  final int amountCents;
 
   CreateFineSuggestionRequest({
     required this.periodId,
     required this.targetUserIds,
     this.catalogItemId,
-    this.reason,
-    this.amountCents,
+    required this.reason,
+    required this.amountCents,
   });
 
   Map<String, dynamic> toJson() => {
     'periodId': periodId,
     'targetUserIds': targetUserIds,
     if (catalogItemId != null) 'catalogItemId': catalogItemId,
-    if (reason != null) 'reason': reason,
-    if (amountCents != null) 'amountCents': amountCents,
+    'reason': reason,
+    'amountCents': amountCents,
   };
 }
 
@@ -379,7 +379,6 @@ class UpdateFineRequest {
 
 // ---------- Accept Fine Suggestion Result ----------
 class FineDtoAcceptResult {
-  // Backend kann entweder "fine" oder nur "fineId" liefern – wir unterstützen beides.
   final String? fineId;
   final FineDto? fine;
 
@@ -469,6 +468,66 @@ class UpdateEventRequest {
     if (title != null) 'title': title,
     if (startsAt != null) 'startsAt': startsAt,
     if (mandatory != null) 'mandatory': mandatory,
+  };
+}
+
+// ---------- Attendance ----------
+enum AttendanceStatus { late, absent }
+
+AttendanceStatus _attendanceStatusFromJson(String s) =>
+    (s == 'ABSENT') ? AttendanceStatus.absent : AttendanceStatus.late;
+
+String _attendanceStatusToJson(AttendanceStatus s) =>
+    (s == AttendanceStatus.absent) ? 'ABSENT' : 'LATE';
+
+class AttendanceDto {
+  final String id;
+  final String eventId;
+  final String periodId;
+  final String userId;
+  final AttendanceStatus status;
+  final int? lateMinutes;
+  final String? fineId;
+  final String createdAt;
+
+  AttendanceDto({
+    required this.id,
+    required this.eventId,
+    required this.periodId,
+    required this.userId,
+    required this.status,
+    required this.lateMinutes,
+    required this.fineId,
+    required this.createdAt,
+  });
+
+  factory AttendanceDto.fromJson(Map<String, dynamic> json) => AttendanceDto(
+    id: json['id'] as String,
+    eventId: json['eventId'] as String,
+    periodId: json['periodId'] as String,
+    userId: json['userId'] as String,
+    status: _attendanceStatusFromJson(json['status'] as String),
+    lateMinutes: json['lateMinutes'] == null ? null : (json['lateMinutes'] as num).toInt(),
+    fineId: json['fineId'] as String?,
+    createdAt: json['createdAt'] as String,
+  );
+}
+
+class UpsertAttendanceRequest {
+  final String userId;
+  final AttendanceStatus status;
+  final int? lateMinutes;
+
+  UpsertAttendanceRequest({
+    required this.userId,
+    required this.status,
+    this.lateMinutes,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'userId': userId,
+    'status': _attendanceStatusToJson(status),
+    if (lateMinutes != null) 'lateMinutes': lateMinutes,
   };
 }
 

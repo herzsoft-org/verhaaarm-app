@@ -102,6 +102,7 @@ Future<GoRouter> buildRouter() async {
         path: '/fines/:id',
         builder: (context, state) => FineDetailPage(
           api: api,
+          authStore: authStore,
           fineId: state.pathParameters['id']!,
         ),
       ),
