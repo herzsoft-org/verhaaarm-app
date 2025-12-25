@@ -19,18 +19,39 @@ class _FineDetailPageState extends State<FineDetailPage> {
   bool _loading = true;
   FineDto? _fine;
 
+  Map<String, ConventPeriodDto> _periodById = const {};
+  Map<String, UserPickerDto> _userById = const {};
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  String _userLabel(String id) {
+    final u = _userById[id];
+    if (u == null) return id;
+    return '${u.displayName} (${u.username})';
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
       final fine = await widget.api.getFine(widget.fineId);
+
+      // preload period + user map for resolving
+      final periods = await widget.api.listPeriods();
+      final users = await widget.api.pickerUsers();
+
+      final periodById = {for (final p in periods) p.id: p};
+      final userById = {for (final u in users) u.id: u};
+
       if (!mounted) return;
-      setState(() => _fine = fine);
+      setState(() {
+        _fine = fine;
+        _periodById = periodById;
+        _userById = userById;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -58,66 +79,71 @@ class _FineDetailPageState extends State<FineDetailPage> {
           ? const Center(child: CircularProgressIndicator())
           : (fine == null)
           ? const Center(child: Text('Nicht gefunden'))
-          : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    fine.type == FineType.catalog ? 'Katalogstrafe' : 'Custom-Strafe',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  _kv('Betrag', Format.centsToEur(fine.amountCents ?? 0)),
-                  _kv('Datum', Format.dateTimeShort(fine.createdAt)),
-                  _kv('Periode', fine.periodId),
-                  _kv('Creator', fine.creatorUserId),
-                  if (fine.catalogItemId != null) _kv('Katalog-ID', fine.catalogItemId!),
-                  if (fine.reason != null && fine.reason!.trim().isNotEmpty)
-                    _kv('Grund', fine.reason!.trim()),
-                ],
-              ),
+          : _buildBody(context, fine),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, FineDto fine) {
+    final p = _periodById[fine.periodId];
+    final periodText = (p == null)
+        ? fine.periodId
+        : '${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
+
+    final creatorText = _userLabel(fine.creatorUserId);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fine.type == FineType.catalog ? 'Katalogbeihängung' : 'Custom-Beihängung',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 10),
+                _kv('Betrag', Format.centsToEur(fine.amountCents ?? 0)),
+                _kv('Datum', Format.dateTimeShort(fine.createdAt)),
+                _kv('Periode', periodText),
+                _kv('Creator', creatorText),
+                if (fine.catalogItemId != null) _kv('Katalog-ID', fine.catalogItemId!),
+                if (fine.reason != null && fine.reason!.trim().isNotEmpty) _kv('Grund', fine.reason!.trim()),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ziele (${fine.targetUserIds.length})',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  ...fine.targetUserIds.map(
-                        (id) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.person_outline_rounded, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(id)),
-                        ],
-                      ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ziele (${fine.targetUserIds.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 10),
+                ...fine.targetUserIds.map(
+                      (id) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.person_outline_rounded, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_userLabel(id))),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Hinweis: Namen-Resolving kommt als nächstes (User-Mapping).',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

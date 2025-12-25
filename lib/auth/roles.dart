@@ -1,6 +1,5 @@
 import 'package:jwt_decode/jwt_decode.dart';
 
-
 enum AppRole { admin, senior, housekeeping, treasurer, member }
 
 class Roles {
@@ -13,8 +12,7 @@ class Roles {
       // expecting something like: roles: ["ADMIN","SENIOR",...]
       final raw = payload['roles'];
 
-      final List<dynamic> rolesList =
-      (raw is List) ? raw : (raw is String ? [raw] : const []);
+      final List<dynamic> rolesList = (raw is List) ? raw : (raw is String ? [raw] : const []);
 
       return rolesList.map((e) => _mapRole(e.toString())).whereType<AppRole>().toSet();
     } catch (_) {
@@ -47,8 +45,40 @@ class Roles {
   }
 
   static bool canCreateOfficialFine(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
+  }
+
+  // --- Events
+  static bool canViewEvents(Set<AppRole> roles) {
+    // all authenticated users can view scheduled events
+    return roles.isNotEmpty;
+  }
+
+  static bool canCreateEvent(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
+  }
+
+  static bool canManageAnyEvent(Set<AppRole> roles) {
+    // SENIOR manages any; ADMIN manages any
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
+  }
+
+  static bool isHousekeeping(Set<AppRole> roles) {
+    return roles.contains(AppRole.housekeeping);
+  }
+
+  static bool canAccessOffice(Set<AppRole> roles) {
     return roles.contains(AppRole.admin) ||
         roles.contains(AppRole.senior) ||
         roles.contains(AppRole.housekeeping);
   }
+
+  static bool canManageUsers(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
+  }
+
+  static bool canManageCatalog(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin);
+  }
+
 }

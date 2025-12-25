@@ -12,9 +12,19 @@ import '../features/fines/fines_list_page.dart';
 import '../features/fines/fine_detail_page.dart';
 import '../features/fines/fine_form_page.dart';
 import '../features/fines/my_fines_page.dart';
+import '../features/office/office_page.dart';
+import '../features/office/users/users_page.dart';
+import '../features/office/users/user_form_page.dart';
+import '../features/office/users/user_password_page.dart';
+import '../features/office/catalog/catalog_page.dart';
+import '../features/office/catalog/catalog_form_page.dart';
+
+
 import '../features/live_events/live_events_page.dart';
 import '../features/live_events/live_event_form_page.dart';
 
+import '../features/events/events_page.dart';
+import '../features/events/event_form_page.dart';
 
 Future<GoRouter> buildRouter() async {
   final authStore = AuthStore();
@@ -53,6 +63,24 @@ Future<GoRouter> buildRouter() async {
         builder: (context, state) => ProfilePage(api: api, authStore: authStore),
       ),
 
+      // --- Events (scheduled)
+      GoRoute(
+        path: '/events',
+        builder: (context, state) => EventsPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/events/new',
+        builder: (context, state) => EventFormPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/events/:id/edit',
+        builder: (context, state) => EventFormPage(
+          api: api,
+          authStore: authStore,
+          eventId: state.pathParameters['id']!,
+        ),
+      ),
+
       GoRoute(
         path: '/my-fines',
         builder: (context, state) => MyFinesPage(api: api),
@@ -77,6 +105,7 @@ Future<GoRouter> buildRouter() async {
           fineId: state.pathParameters['id']!,
         ),
       ),
+
       GoRoute(
         path: '/live-events',
         builder: (context, state) => LiveEventsPage(api: api, authStore: authStore),
@@ -91,6 +120,55 @@ Future<GoRouter> buildRouter() async {
           api: api,
           authStore: authStore,
           liveEventId: state.pathParameters['id']!,
+        ),
+      ),
+      // --- Office
+      GoRoute(
+        path: '/office',
+        builder: (context, state) => OfficePage(api: api, authStore: authStore),
+      ),
+
+      // Users
+      GoRoute(
+        path: '/office/users',
+        builder: (context, state) => UsersPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/users/new',
+        builder: (context, state) => UserFormPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/users/:id/edit',
+        builder: (context, state) => UserFormPage(
+          api: api,
+          authStore: authStore,
+          userId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/office/users/:id/password',
+        builder: (context, state) => UserPasswordPage(
+          api: api,
+          authStore: authStore,
+          userId: state.pathParameters['id']!,
+        ),
+      ),
+
+      // Catalog
+      GoRoute(
+        path: '/office/catalog',
+        builder: (context, state) => CatalogPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/catalog/new',
+        builder: (context, state) => CatalogFormPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/catalog/:id/edit',
+        builder: (context, state) => CatalogFormPage(
+          api: api,
+          authStore: authStore,
+          itemId: state.pathParameters['id']!,
         ),
       ),
 

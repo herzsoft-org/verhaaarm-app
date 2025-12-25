@@ -29,7 +29,6 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
   final _desc = TextEditingController();
 
   bool _loading = false;
-  LiveEventDto? _existing;
 
   @override
   void initState() {
@@ -51,13 +50,15 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
       // no GET /live-events/{id}? yes it exists
       final r = await widget.api.dio.get('/live-events/${widget.liveEventId}');
       final dto = LiveEventDto.fromJson(r.data as Map<String, dynamic>);
-      _existing = dto;
+
       _title.text = dto.title;
       _place.text = dto.place;
       _desc.text = dto.description;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Laden fehlgeschlagen: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -71,11 +72,13 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
     setState(() => _loading = true);
     try {
       if (widget.liveEventId == null) {
-        await widget.api.createLiveEvent(CreateLiveEventRequest(
-          title: _title.text.trim(),
-          place: _place.text.trim(),
-          description: _desc.text.trim(),
-        ));
+        await widget.api.createLiveEvent(
+          CreateLiveEventRequest(
+            title: _title.text.trim(),
+            place: _place.text.trim(),
+            description: _desc.text.trim(),
+          ),
+        );
       } else {
         await widget.api.updateLiveEvent(
           widget.liveEventId!,
@@ -91,7 +94,9 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
       context.pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -115,13 +120,19 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                   children: [
                     TextFormField(
                       controller: _title,
-                      decoration: const InputDecoration(labelText: 'Titel', prefixIcon: Icon(Icons.title_rounded)),
+                      decoration: const InputDecoration(
+                        labelText: 'Titel',
+                        prefixIcon: Icon(Icons.title_rounded),
+                      ),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Bitte Titel eingeben.' : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _place,
-                      decoration: const InputDecoration(labelText: 'Ort', prefixIcon: Icon(Icons.place_rounded)),
+                      decoration: const InputDecoration(
+                        labelText: 'Ort',
+                        prefixIcon: Icon(Icons.place_rounded),
+                      ),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Bitte Ort eingeben.' : null,
                     ),
                     const SizedBox(height: 12),
@@ -129,7 +140,10 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                       controller: _desc,
                       minLines: 2,
                       maxLines: 4,
-                      decoration: const InputDecoration(labelText: 'Beschreibung', prefixIcon: Icon(Icons.notes_rounded)),
+                      decoration: const InputDecoration(
+                        labelText: 'Beschreibung',
+                        prefixIcon: Icon(Icons.notes_rounded),
+                      ),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Bitte Beschreibung eingeben.' : null,
                     ),
                     const SizedBox(height: 16),
@@ -138,7 +152,11 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                       child: FilledButton.icon(
                         onPressed: _loading ? null : _save,
                         icon: _loading
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                             : const Icon(Icons.save_rounded),
                         label: Text(_loading ? 'Speichern…' : 'Speichern'),
                       ),

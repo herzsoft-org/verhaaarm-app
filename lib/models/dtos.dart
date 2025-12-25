@@ -104,6 +104,66 @@ class UserPickerDto {
   );
 }
 
+class UserDto {
+  final String id;
+  final String username;
+  final String displayName;
+  final bool disabled;
+  final List<String> roles;
+
+  UserDto({
+    required this.id,
+    required this.username,
+    required this.displayName,
+    required this.disabled,
+    required this.roles,
+  });
+
+  factory UserDto.fromJson(Map<String, dynamic> json) => UserDto(
+    id: json['id'] as String,
+    username: json['username'] as String,
+    displayName: json['displayName'] as String,
+    disabled: (json['disabled'] as bool?) ?? false,
+    roles: (json['roles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+  );
+}
+
+class CreateUserRequest {
+  final String username;
+  final String displayName;
+  final String password;
+  final List<String> roles;
+
+  CreateUserRequest({
+    required this.username,
+    required this.displayName,
+    required this.password,
+    required this.roles,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'username': username,
+    'displayName': displayName,
+    'password': password,
+    'roles': roles,
+  };
+}
+
+class UpdateUserRequest {
+  final String? displayName;
+  final bool? disabled;
+  final List<String>? roles;
+
+  UpdateUserRequest({this.displayName, this.disabled, this.roles});
+
+  Map<String, dynamic> toJson() => {
+    if (displayName != null) 'displayName': displayName,
+    if (disabled != null) 'disabled': disabled,
+    if (roles != null) 'roles': roles,
+  };
+}
+
+
 // ---------- Fine Catalog ----------
 class FineCatalogItemDto {
   final String id;
@@ -121,12 +181,43 @@ class FineCatalogItemDto {
   factory FineCatalogItemDto.fromJson(Map<String, dynamic> json) => FineCatalogItemDto(
     id: json['id'] as String,
     title: json['title'] as String,
-    defaultAmountCents: (json['defaultAmountCents'] == null)
-        ? null
-        : (json['defaultAmountCents'] as num).toInt(),
+    defaultAmountCents: (json['defaultAmountCents'] == null) ? null : (json['defaultAmountCents'] as num).toInt(),
     active: (json['active'] as bool?) ?? true,
   );
 }
+
+class CreateFineCatalogItemRequest {
+  final String title;
+  final int? defaultAmountCents;
+  final bool active;
+
+  CreateFineCatalogItemRequest({
+    required this.title,
+    this.defaultAmountCents,
+    this.active = true,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (defaultAmountCents != null) 'defaultAmountCents': defaultAmountCents,
+    'active': active,
+  };
+}
+
+class UpdateFineCatalogItemRequest {
+  final String? title;
+  final int? defaultAmountCents;
+  final bool? active;
+
+  UpdateFineCatalogItemRequest({this.title, this.defaultAmountCents, this.active});
+
+  Map<String, dynamic> toJson() => {
+    if (title != null) 'title': title,
+    if (defaultAmountCents != null) 'defaultAmountCents': defaultAmountCents,
+    if (active != null) 'active': active,
+  };
+}
+
 
 // ---------- Fines ----------
 enum FineType { catalog, custom }
@@ -296,10 +387,89 @@ class FineDtoAcceptResult {
 
   factory FineDtoAcceptResult.fromJson(Map<String, dynamic> json) => FineDtoAcceptResult(
     fineId: json['fineId'] as String?,
-    fine: (json['fine'] is Map<String, dynamic>)
-        ? FineDto.fromJson(json['fine'] as Map<String, dynamic>)
-        : null,
+    fine: (json['fine'] is Map<String, dynamic>) ? FineDto.fromJson(json['fine'] as Map<String, dynamic>) : null,
   );
+}
+
+// ---------- Scheduled Events ----------
+enum EventOwnerType { senior, housekeeping }
+
+EventOwnerType _eventOwnerTypeFromJson(String s) =>
+    (s == 'SENIOR') ? EventOwnerType.senior : EventOwnerType.housekeeping;
+
+class EventDto {
+  final String id;
+  final String periodId;
+  final String creatorUserId;
+  final String title;
+  final String startsAt;
+  final bool mandatory;
+  final EventOwnerType ownerType;
+  final String createdAt;
+
+  EventDto({
+    required this.id,
+    required this.periodId,
+    required this.creatorUserId,
+    required this.title,
+    required this.startsAt,
+    required this.mandatory,
+    required this.ownerType,
+    required this.createdAt,
+  });
+
+  factory EventDto.fromJson(Map<String, dynamic> json) => EventDto(
+    id: json['id'] as String,
+    periodId: json['periodId'] as String,
+    creatorUserId: json['creatorUserId'] as String,
+    title: json['title'] as String,
+    startsAt: json['startsAt'] as String,
+    mandatory: (json['mandatory'] as bool?) ?? false,
+    ownerType: _eventOwnerTypeFromJson(json['ownerType'] as String),
+    createdAt: json['createdAt'] as String,
+  );
+}
+
+class CreateEventRequest {
+  final String periodId;
+  final String title;
+  final String startsAt; // ISO string
+  final bool mandatory;
+
+  CreateEventRequest({
+    required this.periodId,
+    required this.title,
+    required this.startsAt,
+    required this.mandatory,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'periodId': periodId,
+    'title': title,
+    'startsAt': startsAt,
+    'mandatory': mandatory,
+  };
+}
+
+class UpdateEventRequest {
+  final String? periodId;
+  final String? title;
+  final String? startsAt; // ISO string
+  final bool? mandatory;
+
+  UpdateEventRequest({
+    this.periodId,
+    this.title,
+    this.startsAt,
+    this.mandatory,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (periodId != null) 'periodId': periodId,
+    if (title != null) 'title': title,
+    if (startsAt != null) 'startsAt': startsAt,
+    if (mandatory != null) 'mandatory': mandatory,
+  };
 }
 
 // ---------- Live Events ----------
@@ -338,4 +508,3 @@ class UpdateLiveEventRequest {
     if (description != null) 'description': description,
   };
 }
-

@@ -2,28 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../auth/auth_store.dart';
+import '../../auth/roles.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 
-class MyFinesPage extends StatefulWidget {
+class EventsPage extends StatefulWidget {
   final ApiClient api;
+  final AuthStore authStore;
 
-  const MyFinesPage({super.key, required this.api});
+  const EventsPage({super.key, required this.api, required this.authStore});
 
   @override
-  State<MyFinesPage> createState() => _MyFinesPageState();
+  State<EventsPage> createState() => _EventsPageState();
 }
 
-class _MyFinesPageState extends State<MyFinesPage> {
+class _EventsPageState extends State<EventsPage> {
   bool _loading = true;
 
-  String? _myUserId;
-  ConventPeriodDto? _activePeriod;
-
-  List<FineDto> _mine = const [];
+  List<EventDto> _events = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
   Map<String, UserPickerDto> _userById = const {};
+
+  bool _showPast = false;
 
   @override
   void initState() {
@@ -45,63 +47,81 @@ class _MyFinesPageState extends State<MyFinesPage> {
     return (year: 0, term: 0);
   }
 
-  String _userLabel(String id) {
+  String _userName(String id) {
     final u = _userById[id];
     if (u == null) return id;
     return u.displayName;
   }
 
-  String _fineTitle(FineDto f) {
-    if (f.type == FineType.catalog) return 'Katalogbeihängung';
-    final r = f.reason?.trim() ?? '';
-    return r.isEmpty ? 'Beihängung' : r;
-  }
-
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final period = await widget.api.getActivePeriod();
-      final bal = await widget.api.getMyBalance(periodId: period.id);
-      final fines = await widget.api.listFines();
       final periods = await widget.api.listPeriods();
+      final events = await widget.api.listEvents();
       final users = await widget.api.pickerUsers();
 
       final periodById = {for (final p in periods) p.id: p};
       final userById = {for (final u in users) u.id: u};
 
-      // Backend may already filter for MEMBER, but we keep safe filter.
-      final mine = fines.where((f) => f.targetUserIds.contains(bal.userId)).toList();
-
       if (!mounted) return;
       setState(() {
-        _activePeriod = period;
-        _myUserId = bal.userId;
-        _mine = mine;
         _periodById = periodById;
         _userById = userById;
+        _events = events;
       });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Beihängungen laden fehlgeschlagen: $e')),
+        SnackBar(content: Text('Termine laden fehlgeschlagen: $e')),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  bool _canEditEvent(Set<AppRole> roles, EventDto e) {
+    if (Roles.canManageAnyEvent(roles)) return true;
+    // housekeeping may edit only own events (backend: creatorUserId + ownerType)
+    if (Roles.isHousekeeping(roles) && e.ownerType == EventOwnerType.housekeeping) {
+      // creator check must match logged-in user id; we don't have /users/me, so use token payload?
+      // In this app we rely on backend checks anyway. UI gate: allow edit for housekeeping events
+      // and only if creator id resolves to "me" is not possible without a /me endpoint.
+      // So we allow showing edit button only for admin/senior; housekeeping can still create.
+      return false;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final grouped = _buildGrouped();
+    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final canCreate = Roles.canCreateEvent(roles);
+
+    final grouped = _buildGrouped(_events);
 
     return AppScaffold(
-      title: 'Meine Beihängungen',
+      title: 'Termine / Kalender',
       actions: [
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
           onPressed: _loading ? null : _load,
         ),
+        IconButton(
+          tooltip: _showPast ? 'Vergangenheit ausblenden' : 'Vergangenheit anzeigen',
+          icon: Icon(_showPast ? Icons.history_toggle_off_rounded : Icons.history_rounded),
+          onPressed: _loading
+              ? null
+              : () => setState(() {
+            _showPast = !_showPast;
+          }),
+        ),
+        if (canCreate)
+          IconButton(
+            tooltip: 'Neuer Termin',
+            icon: const Icon(Icons.add_rounded),
+            onPressed: () => GoRouter.of(context).push('/events/new'),
+          ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -110,33 +130,20 @@ class _MyFinesPageState extends State<MyFinesPage> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            if (_activePeriod != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
-                child: Text(
-                  'Aktive Periode: ${_activePeriod!.semester}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            if (_myUserId == null)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text('Fehler: userId unbekannt.'),
-              ),
             if (grouped.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('Keine Beihängungen gefunden.'),
+                child: Text('Keine Termine gefunden.'),
               ),
             for (final sem in grouped)
               _SemesterSection(
                 semester: sem.semester,
                 periods: sem.periods,
                 periodById: _periodById,
-                fineTitle: _fineTitle,
-                userLabel: _userLabel,
-                myUserId: _myUserId!,
-                onTapFine: (id) => context.push('/fines/$id'),
+                userName: _userName,
+                showPast: _showPast,
+                canEdit: (e) => _canEditEvent(roles, e),
+                onEdit: (id) => GoRouter.of(context).push('/events/$id/edit'),
               ),
           ],
         ),
@@ -144,17 +151,16 @@ class _MyFinesPageState extends State<MyFinesPage> {
     );
   }
 
-  List<_SemesterGroup> _buildGrouped() {
-    if (_myUserId == null) return [];
+  List<_SemesterGroup> _buildGrouped(List<EventDto> all) {
+    // Group: Semester -> Period -> events
+    final Map<String, Map<String, List<EventDto>>> map = {};
 
-    final Map<String, Map<String, List<FineDto>>> map = {};
-
-    for (final f in _mine) {
-      final p = _periodById[f.periodId];
+    for (final e in all) {
+      final p = _periodById[e.periodId];
       final semester = p?.semester ?? 'Unbekannt';
       map.putIfAbsent(semester, () => {});
-      map[semester]!.putIfAbsent(f.periodId, () => []);
-      map[semester]![f.periodId]!.add(f);
+      map[semester]!.putIfAbsent(e.periodId, () => []);
+      map[semester]![e.periodId]!.add(e);
     }
 
     final semesters = map.keys.toList()
@@ -180,9 +186,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
       final periods = <_PeriodGroup>[];
       for (final pid in periodIds) {
-        final fines = [...periodMap[pid]!]
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        periods.add(_PeriodGroup(periodId: pid, fines: fines));
+        final events = [...periodMap[pid]!]
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt)); // chronological in a period
+        periods.add(_PeriodGroup(periodId: pid, events: events));
       }
 
       result.add(_SemesterGroup(semester: sem, periods: periods));
@@ -201,9 +207,9 @@ class _SemesterGroup {
 
 class _PeriodGroup {
   final String periodId;
-  final List<FineDto> fines;
+  final List<EventDto> events;
 
-  _PeriodGroup({required this.periodId, required this.fines});
+  _PeriodGroup({required this.periodId, required this.events});
 }
 
 class _SemesterSection extends StatelessWidget {
@@ -211,19 +217,19 @@ class _SemesterSection extends StatelessWidget {
   final List<_PeriodGroup> periods;
   final Map<String, ConventPeriodDto> periodById;
 
-  final String Function(FineDto) fineTitle;
-  final String Function(String userId) userLabel;
-  final String myUserId;
-  final void Function(String fineId) onTapFine;
+  final String Function(String userId) userName;
+  final bool showPast;
+  final bool Function(EventDto e) canEdit;
+  final void Function(String eventId) onEdit;
 
   const _SemesterSection({
     required this.semester,
     required this.periods,
     required this.periodById,
-    required this.fineTitle,
-    required this.userLabel,
-    required this.myUserId,
-    required this.onTapFine,
+    required this.userName,
+    required this.showPast,
+    required this.canEdit,
+    required this.onEdit,
   });
 
   @override
@@ -241,10 +247,10 @@ class _SemesterSection extends StatelessWidget {
               _PeriodSection(
                 pg: pg,
                 period: periodById[pg.periodId],
-                fineTitle: fineTitle,
-                userLabel: userLabel,
-                myUserId: myUserId,
-                onTapFine: onTapFine,
+                userName: userName,
+                showPast: showPast,
+                canEdit: canEdit,
+                onEdit: onEdit,
               ),
           ],
         ),
@@ -257,18 +263,18 @@ class _PeriodSection extends StatelessWidget {
   final _PeriodGroup pg;
   final ConventPeriodDto? period;
 
-  final String Function(FineDto) fineTitle;
-  final String Function(String userId) userLabel;
-  final String myUserId;
-  final void Function(String fineId) onTapFine;
+  final String Function(String userId) userName;
+  final bool showPast;
+  final bool Function(EventDto e) canEdit;
+  final void Function(String eventId) onEdit;
 
   const _PeriodSection({
     required this.pg,
     required this.period,
-    required this.fineTitle,
-    required this.userLabel,
-    required this.myUserId,
-    required this.onTapFine,
+    required this.userName,
+    required this.showPast,
+    required this.canEdit,
+    required this.onEdit,
   });
 
   @override
@@ -278,11 +284,26 @@ class _PeriodSection extends StatelessWidget {
         ? 'Periode: ${pg.periodId}'
         : 'Periode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
-    final sumCents = pg.fines.fold<int>(0, (acc, f) {
-      final amount = f.amountCents ?? 0;
-      // member cost counts if the member is targeted
-      return acc + (f.targetUserIds.contains(myUserId) ? amount : 0);
-    });
+    final now = DateTime.now();
+    final visibleEvents = pg.events.where((e) {
+      if (showPast) return true;
+      final dt = Format.parseIsoToLocal(e.startsAt);
+      return !dt.isBefore(now);
+    }).toList();
+
+    if (visibleEvents.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(header, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 6),
+            Text('Keine zukünftigen Termine.', style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      );
+    }
 
     final flags = <Widget>[];
     if (p?.active == true) flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
@@ -299,38 +320,29 @@ class _PeriodSection extends StatelessWidget {
               ...flags,
             ],
           ),
-          const SizedBox(height: 4),
-          Text('Summe: ${Format.centsToEur(sumCents)}', style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 6),
-          for (final f in pg.fines)
+          for (final e in visibleEvents)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: ListTile(
-                  leading: const Icon(Icons.gavel_rounded),
-                  title: Text(fineTitle(f)),
-                  subtitle: Text(_subtitleForFine(f)),
+                  leading: Icon(e.mandatory ? Icons.star_rounded : Icons.event_rounded),
+                  title: Text(e.title),
+                  subtitle: Text(
+                    '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}\n'
+                        'Creator: ${userName(e.creatorUserId)}',
+                  ),
                   isThreeLine: true,
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => onTapFine(f.id),
+                  trailing: canEdit(e) ? const Icon(Icons.edit_rounded) : null,
+                  onTap: canEdit(e) ? () => onEdit(e.id) : null,
                 ),
               ),
             ),
         ],
       ),
     );
-  }
-
-  String _subtitleForFine(FineDto f) {
-    final amount = f.amountCents ?? 0;
-
-    // show creator resolved if possible
-    final creator = userLabel(f.creatorUserId);
-
-    return 'Betrag: ${Format.centsToEur(amount)} · Creator: $creator\n'
-        'Datum: ${Format.dateTimeShort(f.createdAt)}';
   }
 }
 

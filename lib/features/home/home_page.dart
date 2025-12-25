@@ -23,6 +23,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
   ConventPeriodDto? _activePeriod;
   UserBalanceDto? _balance;
   List<LiveEventDto> _liveEvents = const [];
+
+  EventDto? _nextEvent;
+
   bool _loading = true;
 
   @override
@@ -48,23 +51,26 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   void didPopNext() {
-    // Wenn man zurück auf Home navigiert: automatisch neu laden
     _load();
   }
 
   Future<void> _load() async {
-    if (_loading) return;
     setState(() => _loading = true);
     try {
       final period = await widget.api.getActivePeriod();
       final balance = await widget.api.getMyBalance(periodId: period.id);
+
       final live = await widget.api.listLiveEvents();
+      final events = await widget.api.listEvents();
+
+      final next = _pickNextEvent(events);
 
       if (!mounted) return;
       setState(() {
         _activePeriod = period;
         _balance = balance;
         _liveEvents = live;
+        _nextEvent = next;
       });
     } catch (e) {
       if (!mounted) return;
@@ -74,6 +80,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  EventDto? _pickNextEvent(List<EventDto> events) {
+    final now = DateTime.now();
+
+    final upcoming = events.where((e) {
+      final dt = Format.parseIsoToLocal(e.startsAt);
+      return !dt.isBefore(now);
+    }).toList();
+
+    if (upcoming.isEmpty) return null;
+
+    upcoming.sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    return upcoming.first;
   }
 
   String _formatBalanceForHome(UserBalanceDto? balance) {
@@ -102,10 +122,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _buildBalanceCard(context),
-            const SizedBox(height: 12),
+            // 1) Wo geht was? oben
             _buildLiveEventsCard(context),
             const SizedBox(height: 12),
+
+            // 2) Saldo darunter
+            _buildBalanceCard(context),
+            const SizedBox(height: 12),
+
+            // 3) Nächster Termin Widget statt Kalender-Button
+            _buildNextEventCard(context),
+            const SizedBox(height: 12),
+
+            // 4) Quick actions inkl. Amtsausführung
             _buildQuickActions(context),
           ],
         ),
@@ -135,6 +164,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     'Aktueller Beihängungssaldo',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
+                  const Spacer(),
+                  const Icon(Icons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 10),
@@ -216,20 +247,76 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
   }
 
+  Widget _buildNextEventCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final e = _nextEvent;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => GoRouter.of(context).push('/events'),
+      child: Card(
+        color: cs.surfaceContainerLow,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.event_rounded, color: cs.primary),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Nächster Termin',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.chevron_right_rounded),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (e == null)
+                Text(
+                  'Keine zukünftigen Termine.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.title,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}'
+                          '${e.mandatory ? ' · Pflicht' : ''}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuickActions(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
-    final canSeeAll = Roles.canSeeAllFines(roles);
+
+    final canOffice = Roles.canAccessOffice(roles);
     final canOfficial = Roles.canCreateOfficialFine(roles);
 
     return Column(
       children: [
-        if (canSeeAll) ...[
+        if (canOffice) ...[
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () => GoRouter.of(context).push('/fines'),
-              icon: const Icon(Icons.list_alt_rounded),
-              label: const Text('Alle Beihängungen anzeigen'),
+              onPressed: () => GoRouter.of(context).push('/office'),
+              icon: const Icon(Icons.badge_rounded),
+              label: const Text('Amtsausführung'),
             ),
           ),
           const SizedBox(height: 12),

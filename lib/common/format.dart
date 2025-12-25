@@ -39,9 +39,23 @@ class Format {
     return euros * 100 + cents;
   }
 
+  static DateTime parseIsoToLocal(String iso) => DateTime.parse(iso).toLocal();
+
   static String dateTimeShort(String iso) {
     final dt = DateTime.parse(iso).toLocal();
     final f = DateFormat('dd.MM.yyyy HH:mm', 'de_DE');
+    return f.format(dt);
+  }
+
+  static String dateShort(String iso) {
+    final dt = DateTime.parse(iso).toLocal();
+    final f = DateFormat('dd.MM.yyyy', 'de_DE');
+    return f.format(dt);
+  }
+
+  static String timeShort(String iso) {
+    final dt = DateTime.parse(iso).toLocal();
+    final f = DateFormat('HH:mm', 'de_DE');
     return f.format(dt);
   }
 }
