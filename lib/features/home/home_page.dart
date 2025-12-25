@@ -357,9 +357,9 @@ class _LiveEventPreviewTile extends StatelessWidget {
       children: [
         Text(e.title, style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 4),
-        Text(e.place, style: Theme.of(context).textTheme.bodyMedium),
+        Text(e.place ?? '', style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: 4),
-        Text(e.description, style: Theme.of(context).textTheme.bodySmall),
+        Text(e.description ?? '', style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }

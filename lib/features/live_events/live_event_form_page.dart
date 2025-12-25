@@ -52,8 +52,8 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
       final dto = LiveEventDto.fromJson(r.data as Map<String, dynamic>);
 
       _title.text = dto.title;
-      _place.text = dto.place;
-      _desc.text = dto.description;
+      _place.text = dto.place ?? '';
+      _desc.text = dto.description ?? '';
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

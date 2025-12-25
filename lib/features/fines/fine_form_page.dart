@@ -169,8 +169,14 @@ class _FineFormPageState extends State<FineFormPage> {
         if (!mounted) return;
         context.pushReplacement('/fines/${fine.id}');
       } else {
+        final nowLocal = DateTime.now();
+        final fineDate =
+            '${nowLocal.year.toString().padLeft(4, '0')}-'
+            '${nowLocal.month.toString().padLeft(2, '0')}-'
+            '${nowLocal.day.toString().padLeft(2, '0')}';
+
         final req = CreateFineSuggestionRequest(
-          periodId: _activePeriod!.id,
+          fineDate: fineDate,
           targetUserIds: _targetUserIds.toList(),
           catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
           reason: reason,
@@ -178,6 +184,7 @@ class _FineFormPageState extends State<FineFormPage> {
         );
 
         await widget.api.createSuggestion(req);
+
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

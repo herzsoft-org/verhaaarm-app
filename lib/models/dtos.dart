@@ -1,3 +1,39 @@
+// ---- tiny JSON helpers (robust against null + wrong types) ----
+String _reqString(Map<String, dynamic> j, String k) =>
+    (j[k] ?? '').toString();
+
+String? _optString(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v == null) return null;
+  final s = v.toString();
+  return s.isEmpty ? null : s;
+}
+
+int _optInt(Map<String, dynamic> j, String k, {int fallback = 0}) {
+  final v = j[k];
+  if (v == null) return fallback;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString()) ?? fallback;
+}
+
+bool _optBool(Map<String, dynamic> j, String k, {bool fallback = false}) {
+  final v = j[k];
+  if (v is bool) return v;
+  if (v == null) return fallback;
+  final s = v.toString().toLowerCase();
+  if (s == 'true') return true;
+  if (s == 'false') return false;
+  return fallback;
+}
+
+List<String> _optStringList(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v is List) return v.map((e) => e.toString()).toList();
+  return const [];
+}
+
+// ---------------- DTOs ----------------
+
 class TokenResponse {
   final String accessToken;
   final String refreshToken;
@@ -5,8 +41,8 @@ class TokenResponse {
   TokenResponse({required this.accessToken, required this.refreshToken});
 
   factory TokenResponse.fromJson(Map<String, dynamic> json) => TokenResponse(
-    accessToken: json['accessToken'] as String,
-    refreshToken: json['refreshToken'] as String,
+    accessToken: _reqString(json, 'accessToken'),
+    refreshToken: _reqString(json, 'refreshToken'),
   );
 }
 
@@ -28,19 +64,21 @@ class ConventPeriodDto {
   });
 
   factory ConventPeriodDto.fromJson(Map<String, dynamic> json) => ConventPeriodDto(
-    id: json['id'] as String,
-    semester: json['semester'] as String,
-    startAt: json['startAt'] as String,
-    endAt: json['endAt'] as String,
-    active: (json['active'] as bool?) ?? false,
-    locked: (json['locked'] as bool?) ?? false,
+    id: _reqString(json, 'id'),
+    semester: _reqString(json, 'semester'),
+    startAt: _reqString(json, 'startAt'),
+    endAt: _reqString(json, 'endAt'),
+    active: _optBool(json, 'active', fallback: false),
+    locked: _optBool(json, 'locked', fallback: false),
   );
 }
 
 class UserBalanceDto {
   final String userId;
   final int balanceCents;
-  final String balanceFormatted;
+
+  /// Backend liefert hier oft null -> deswegen nullable
+  final String? balanceFormatted;
 
   UserBalanceDto({
     required this.userId,
@@ -49,17 +87,20 @@ class UserBalanceDto {
   });
 
   factory UserBalanceDto.fromJson(Map<String, dynamic> json) => UserBalanceDto(
-    userId: json['userId'] as String,
-    balanceCents: (json['balanceCents'] as num).toInt(),
-    balanceFormatted: json['balanceFormatted'] as String,
+    userId: _reqString(json, 'userId'),
+    balanceCents: _optInt(json, 'balanceCents', fallback: 0),
+    balanceFormatted: _optString(json, 'balanceFormatted'),
   );
 }
 
 class LiveEventDto {
   final String id;
   final String title;
-  final String place;
-  final String description;
+
+  /// place/description können realistisch null sein -> nullable machen
+  final String? place;
+  final String? description;
+
   final String createdByUserId;
   final String createdAt;
   final String expiresAt;
@@ -75,13 +116,13 @@ class LiveEventDto {
   });
 
   factory LiveEventDto.fromJson(Map<String, dynamic> json) => LiveEventDto(
-    id: json['id'] as String,
-    title: json['title'] as String,
-    place: json['place'] as String,
-    description: json['description'] as String,
-    createdByUserId: json['createdByUserId'] as String,
-    createdAt: json['createdAt'] as String,
-    expiresAt: json['expiresAt'] as String,
+    id: _reqString(json, 'id'),
+    title: _reqString(json, 'title'),
+    place: _optString(json, 'place'),
+    description: _optString(json, 'description'),
+    createdByUserId: _reqString(json, 'createdByUserId'),
+    createdAt: _reqString(json, 'createdAt'),
+    expiresAt: _reqString(json, 'expiresAt'),
   );
 }
 
@@ -98,9 +139,9 @@ class UserPickerDto {
   });
 
   factory UserPickerDto.fromJson(Map<String, dynamic> json) => UserPickerDto(
-    id: json['id'] as String,
-    username: json['username'] as String,
-    displayName: json['displayName'] as String,
+    id: _reqString(json, 'id'),
+    username: _reqString(json, 'username'),
+    displayName: _reqString(json, 'displayName'),
   );
 }
 
@@ -120,11 +161,11 @@ class UserDto {
   });
 
   factory UserDto.fromJson(Map<String, dynamic> json) => UserDto(
-    id: json['id'] as String,
-    username: json['username'] as String,
-    displayName: json['displayName'] as String,
-    disabled: (json['disabled'] as bool?) ?? false,
-    roles: (json['roles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+    id: _reqString(json, 'id'),
+    username: _reqString(json, 'username'),
+    displayName: _reqString(json, 'displayName'),
+    disabled: _optBool(json, 'disabled', fallback: false),
+    roles: _optStringList(json, 'roles'),
   );
 }
 
@@ -178,12 +219,12 @@ class FineCatalogItemDto {
   });
 
   factory FineCatalogItemDto.fromJson(Map<String, dynamic> json) => FineCatalogItemDto(
-    id: json['id'] as String,
-    title: json['title'] as String,
-    defaultAmountCents: (json['defaultAmountCents'] == null)
+    id: _reqString(json, 'id'),
+    title: _reqString(json, 'title'),
+    defaultAmountCents: json['defaultAmountCents'] == null
         ? null
-        : (json['defaultAmountCents'] as num).toInt(),
-    active: (json['active'] as bool?) ?? true,
+        : _optInt(json, 'defaultAmountCents'),
+    active: _optBool(json, 'active', fallback: true),
   );
 }
 
@@ -229,7 +270,7 @@ class FineDto {
   final String periodId;
   final String creatorUserId;
   final String? catalogItemId;
-  final String? reason; // IMPORTANT: reason is now used for BOTH catalog + custom
+  final String? reason;
   final int? amountCents;
   final FineType type;
   final List<String> targetUserIds;
@@ -253,17 +294,17 @@ class FineDto {
   });
 
   factory FineDto.fromJson(Map<String, dynamic> json) => FineDto(
-    id: json['id'] as String,
-    periodId: json['periodId'] as String,
-    creatorUserId: json['creatorUserId'] as String,
-    catalogItemId: json['catalogItemId'] as String?,
-    reason: json['reason'] as String?,
-    amountCents: json['amountCents'] == null ? null : (json['amountCents'] as num).toInt(),
-    type: _fineTypeFromJson(json['type'] as String),
-    targetUserIds: (json['targetUserIds'] as List).map((e) => e as String).toList(),
-    createdAt: json['createdAt'] as String,
-    suggesterUserId: json['suggesterUserId'] as String?,
-    acceptedFromSuggestionId: json['acceptedFromSuggestionId'] as String?,
+    id: _reqString(json, 'id'),
+    periodId: _reqString(json, 'periodId'),
+    creatorUserId: _reqString(json, 'creatorUserId'),
+    catalogItemId: _optString(json, 'catalogItemId'),
+    reason: _optString(json, 'reason'),
+    amountCents: json['amountCents'] == null ? null : _optInt(json, 'amountCents'),
+    type: _fineTypeFromJson(_reqString(json, 'type')),
+    targetUserIds: _optStringList(json, 'targetUserIds'),
+    createdAt: _reqString(json, 'createdAt'),
+    suggesterUserId: _optString(json, 'suggesterUserId'),
+    acceptedFromSuggestionId: _optString(json, 'acceptedFromSuggestionId'),
   );
 }
 
@@ -271,7 +312,7 @@ class CreateFineRequest {
   final String periodId;
   final List<String> targetUserIds;
   final String? catalogItemId;
-  final String reason; // REQUIRED for both catalog + custom
+  final String reason;
   final int amountCents;
 
   CreateFineRequest({
@@ -294,19 +335,19 @@ class CreateFineRequest {
 // ---------- Fine Suggestions ----------
 class FineSuggestionDto {
   final String id;
-  final String periodId;
+  final String fineDate;
   final String creatorUserId;
   final String? catalogItemId;
-  final String? reason; // required by UI, backend may still store nullable
+  final String? reason;
   final int? amountCents;
   final FineType type;
-  final String status; // PENDING/ACCEPTED/REJECTED
+  final String status;
   final List<String> targetUserIds;
   final String createdAt;
 
   FineSuggestionDto({
     required this.id,
-    required this.periodId,
+    required this.fineDate,
     required this.creatorUserId,
     required this.catalogItemId,
     required this.reason,
@@ -318,28 +359,28 @@ class FineSuggestionDto {
   });
 
   factory FineSuggestionDto.fromJson(Map<String, dynamic> json) => FineSuggestionDto(
-    id: json['id'] as String,
-    periodId: json['periodId'] as String,
-    creatorUserId: json['creatorUserId'] as String,
-    catalogItemId: json['catalogItemId'] as String?,
-    reason: json['reason'] as String?,
-    amountCents: json['amountCents'] == null ? null : (json['amountCents'] as num).toInt(),
-    type: _fineTypeFromJson(json['type'] as String),
-    status: json['status'] as String,
-    targetUserIds: (json['targetUserIds'] as List).map((e) => e as String).toList(),
-    createdAt: json['createdAt'] as String,
+    id: _reqString(json, 'id'),
+    fineDate: _reqString(json, 'fineDate'),
+    creatorUserId: _reqString(json, 'creatorUserId'),
+    catalogItemId: _optString(json, 'catalogItemId'),
+    reason: _optString(json, 'reason'),
+    amountCents: json['amountCents'] == null ? null : _optInt(json, 'amountCents'),
+    type: _fineTypeFromJson(_reqString(json, 'type')),
+    status: _reqString(json, 'status'),
+    targetUserIds: _optStringList(json, 'targetUserIds'),
+    createdAt: _reqString(json, 'createdAt'),
   );
 }
 
 class CreateFineSuggestionRequest {
-  final String periodId;
+  final String fineDate;
   final List<String> targetUserIds;
   final String? catalogItemId;
-  final String reason; // REQUIRED for both catalog + custom
+  final String reason;
   final int amountCents;
 
   CreateFineSuggestionRequest({
-    required this.periodId,
+    required this.fineDate,
     required this.targetUserIds,
     this.catalogItemId,
     required this.reason,
@@ -347,7 +388,7 @@ class CreateFineSuggestionRequest {
   });
 
   Map<String, dynamic> toJson() => {
-    'periodId': periodId,
+    'fineDate': fineDate,
     'targetUserIds': targetUserIds,
     if (catalogItemId != null) 'catalogItemId': catalogItemId,
     'reason': reason,
@@ -385,8 +426,10 @@ class FineDtoAcceptResult {
   FineDtoAcceptResult({this.fineId, this.fine});
 
   factory FineDtoAcceptResult.fromJson(Map<String, dynamic> json) => FineDtoAcceptResult(
-    fineId: json['fineId'] as String?,
-    fine: (json['fine'] is Map<String, dynamic>) ? FineDto.fromJson(json['fine'] as Map<String, dynamic>) : null,
+    fineId: _optString(json, 'fineId'),
+    fine: (json['fine'] is Map<String, dynamic>)
+        ? FineDto.fromJson(json['fine'] as Map<String, dynamic>)
+        : null,
   );
 }
 
@@ -418,21 +461,21 @@ class EventDto {
   });
 
   factory EventDto.fromJson(Map<String, dynamic> json) => EventDto(
-    id: json['id'] as String,
-    periodId: json['periodId'] as String,
-    creatorUserId: json['creatorUserId'] as String,
-    title: json['title'] as String,
-    startsAt: json['startsAt'] as String,
-    mandatory: (json['mandatory'] as bool?) ?? false,
-    ownerType: _eventOwnerTypeFromJson(json['ownerType'] as String),
-    createdAt: json['createdAt'] as String,
+    id: _reqString(json, 'id'),
+    periodId: _reqString(json, 'periodId'),
+    creatorUserId: _reqString(json, 'creatorUserId'),
+    title: _reqString(json, 'title'),
+    startsAt: _reqString(json, 'startsAt'),
+    mandatory: _optBool(json, 'mandatory', fallback: false),
+    ownerType: _eventOwnerTypeFromJson(_reqString(json, 'ownerType')),
+    createdAt: _reqString(json, 'createdAt'),
   );
 }
 
 class CreateEventRequest {
   final String periodId;
   final String title;
-  final String startsAt; // ISO string
+  final String startsAt;
   final bool mandatory;
 
   CreateEventRequest({
@@ -453,7 +496,7 @@ class CreateEventRequest {
 class UpdateEventRequest {
   final String? periodId;
   final String? title;
-  final String? startsAt; // ISO string
+  final String? startsAt;
   final bool? mandatory;
 
   UpdateEventRequest({
@@ -502,14 +545,14 @@ class AttendanceDto {
   });
 
   factory AttendanceDto.fromJson(Map<String, dynamic> json) => AttendanceDto(
-    id: json['id'] as String,
-    eventId: json['eventId'] as String,
-    periodId: json['periodId'] as String,
-    userId: json['userId'] as String,
-    status: _attendanceStatusFromJson(json['status'] as String),
-    lateMinutes: json['lateMinutes'] == null ? null : (json['lateMinutes'] as num).toInt(),
-    fineId: json['fineId'] as String?,
-    createdAt: json['createdAt'] as String,
+    id: _reqString(json, 'id'),
+    eventId: _reqString(json, 'eventId'),
+    periodId: _reqString(json, 'periodId'),
+    userId: _reqString(json, 'userId'),
+    status: _attendanceStatusFromJson(_reqString(json, 'status')),
+    lateMinutes: json['lateMinutes'] == null ? null : _optInt(json, 'lateMinutes'),
+    fineId: _optString(json, 'fineId'),
+    createdAt: _reqString(json, 'createdAt'),
   );
 }
 
@@ -570,8 +613,8 @@ class UpdateLiveEventRequest {
 
 class CreateConventPeriodRequest {
   final String semester;
-  final String startAt; // ISO date-time
-  final String endAt;   // ISO date-time
+  final String startAt;
+  final String endAt;
 
   CreateConventPeriodRequest({
     required this.semester,
@@ -588,8 +631,8 @@ class CreateConventPeriodRequest {
 
 class UpdateConventPeriodRequest {
   final String? semester;
-  final String? startAt; // ISO date-time
-  final String? endAt;   // ISO date-time
+  final String? startAt;
+  final String? endAt;
   final bool? active;
   final bool? locked;
 
@@ -609,4 +652,3 @@ class UpdateConventPeriodRequest {
     if (locked != null) 'locked': locked,
   };
 }
-
