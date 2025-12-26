@@ -7,6 +7,7 @@ import '../../auth/roles.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
+import 'fine_photos_dialog.dart';
 
 class FineDetailPage extends StatefulWidget {
   final ApiClient api;
@@ -44,10 +45,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
       final fine = await widget.api.getFine(widget.fineId);
       final users = await widget.api.pickerUsers();
 
-      // listPeriods() might return Set or List depending on your ApiClient impl.
-      // Using toList() makes it work for both.
       final periods = (await widget.api.listPeriods()).toList();
-
       final catalog = await widget.api.listFineCatalog(active: null);
 
       final userById = {for (final u in users) u.id: u};
@@ -86,8 +84,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
   ConventPeriodDto? _periodForFine(FineDto f) {
     final periodsSorted = [..._periods]
       ..sort(
-            (a, b) => Format.parseIsoToLocal(b.startAt)
-            .compareTo(Format.parseIsoToLocal(a.startAt)),
+            (a, b) => Format.parseIsoToLocal(b.startAt).compareTo(
+          Format.parseIsoToLocal(a.startAt),
+        ),
       );
     return Format.findPeriodForFineDate(
       fineDate: f.fineDate,
@@ -125,8 +124,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
       await widget.api.deleteFine(fine.id);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Gelöscht.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gelöscht.')),
+      );
 
       if (context.canPop()) {
         context.pop();
@@ -139,6 +139,18 @@ class _FineDetailPageState extends State<FineDetailPage> {
         SnackBar(content: Text('Löschen fehlgeschlagen: $e')),
       );
     }
+  }
+
+  Future<void> _openPhotos() async {
+    final fine = _fine;
+    if (fine == null) return;
+
+    await FinePhotosDialog.open(
+      context: context,
+      api: widget.api,
+      authStore: widget.authStore,
+      fineId: fine.id,
+    );
   }
 
   @override
@@ -202,6 +214,33 @@ class _FineDetailPageState extends State<FineDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Fotos', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Fotos sind optional. Du kannst mehrere aus der Galerie hochladen oder eins per Kamera.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _openPhotos,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Fotos ansehen / hinzufügen'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text('Meta', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
@@ -227,8 +266,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
                 children: [
                   Text('Bbr.', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  for (final id in fine.targetUserIds)
-                    Text('• ${_userLabel(id)}'),
+                  for (final id in fine.targetUserIds) Text('• ${_userLabel(id)}'),
                 ],
               ),
             ),

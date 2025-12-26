@@ -312,6 +312,34 @@ class FineDto {
   );
 }
 
+class FinePhotoDto {
+  final String id;
+  final String fineId;
+  final String originalFilename;
+  final String contentType;
+  final int sizeBytes;
+  final String createdAt;
+
+  FinePhotoDto({
+    required this.id,
+    required this.fineId,
+    required this.originalFilename,
+    required this.contentType,
+    required this.sizeBytes,
+    required this.createdAt,
+  });
+
+  factory FinePhotoDto.fromJson(Map<String, dynamic> json) => FinePhotoDto(
+    id: json['id'] as String,
+    fineId: json['fineId'] as String,
+    originalFilename: (json['originalFilename'] as String?) ?? '',
+    contentType: (json['contentType'] as String?) ?? '',
+    sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+    createdAt: (json['createdAt'] as String?) ?? '',
+  );
+}
+
+
 class CreateFineRequest {
   /// date-only: YYYY-MM-DD
   final String fineDate;

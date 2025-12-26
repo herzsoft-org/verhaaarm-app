@@ -1,8 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
-import '../auth/auth_store.dart';
 import '../auth/auth_api.dart';
 import '../auth/auth_interceptor.dart';
+import '../auth/auth_store.dart';
 import '../models/dtos.dart';
 
 class ApiClient {
@@ -19,7 +21,8 @@ class ApiClient {
       connectTimeout: const Duration(seconds: 12),
       receiveTimeout: const Duration(seconds: 20),
       sendTimeout: const Duration(seconds: 20),
-      headers: {'Content-Type': 'application/json'},
+      // no global Content-Type; Dio will set it per request
+      headers: {},
     ));
 
     auth = AuthApi(dio);
@@ -95,6 +98,51 @@ class ApiClient {
 
   Future<void> deleteFine(String id) async {
     await dio.delete('/fines/$id');
+  }
+
+  // --- FINES: PHOTOS
+  Future<List<FinePhotoDto>> listFinePhotos(String fineId) async {
+    final r = await dio.get('/fines/$fineId/photos');
+    final list = (r.data as List).cast<dynamic>();
+    return list.map((e) => FinePhotoDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<FinePhotoDto> uploadFinePhoto({
+    required String fineId,
+    required String filePath,
+    required String filename,
+  }) async {
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: filename),
+    });
+
+    final r = await dio.post(
+      '/fines/$fineId/photos',
+      data: form,
+      options: Options(
+        contentType: 'multipart/form-data',
+      ),
+    );
+
+    return FinePhotoDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+  Future<Uint8List> downloadFinePhotoBytes({
+    required String fineId,
+    required String photoId,
+  }) async {
+    final r = await dio.get(
+      '/fines/$fineId/photos/$photoId/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList((r.data as List<int>));
+  }
+
+  Future<void> deleteFinePhoto({
+    required String fineId,
+    required String photoId,
+  }) async {
+    await dio.delete('/fines/$fineId/photos/$photoId');
   }
 
   // --- Fine Catalog
@@ -273,7 +321,6 @@ class ApiClient {
     final r = await dio.patch('/periods/$id', data: {'locked': false});
     return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
   }
-
 
   // --- EXPORT CSV
   Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {
