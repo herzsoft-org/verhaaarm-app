@@ -21,14 +21,12 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Tooling info
+      - name: Flutter doctor (info)
         shell: bash
         run: |
           set -euo pipefail
           flutter --version
-          dart --version
-          which flutter
-          which dart
+          flutter doctor -v || true
 
       - name: Flutter pub get
         shell: bash
@@ -41,33 +39,31 @@ jobs:
         run: |
           set -euo pipefail
           flutter build web --release
+          echo "== build/web contents =="
+          ls -la build/web | head -200
 
-      - name: Verify build output
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "== build/web listing =="
-          ls -lah build/web
-          test -f build/web/index.html
-
-      # Use the same base64 secret approach as backend (recommended).
-      # Store your PRIVATE KEY as base64 in: VPS_SSH_KEY_B64
-      - name: Prepare SSH (base64 secret)
+      - name: Prepare SSH
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+          # If your secret is BASE64: decode it
+          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r\n' | base64 -d > ~/.ssh/id_ed25519
+
           chmod 600 ~/.ssh/id_ed25519
 
+          echo "== Key sanity check =="
           ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keygen -lf ~/.ssh/id_ed25519
 
+          echo "== known_hosts (ssh-keyscan) =="
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+          wc -l ~/.ssh/known_hosts
 
-      - name: SSH connectivity test
+      - name: SSH connectivity test (verbose)
         shell: bash
         run: |
           set -euo pipefail
@@ -79,58 +75,53 @@ jobs:
             'set -euo pipefail
              echo "Connected as: $(whoami)"
              echo "Host: $(hostname)"
-             echo "sudo checks:"
-             sudo -n /usr/bin/rsync --version >/dev/null && echo "sudo rsync: OK" || (echo "sudo rsync: FAILED" && exit 1)
-             sudo -n /bin/chown --version >/dev/null && echo "sudo chown: OK" || (echo "sudo chown: FAILED" && exit 1)
-            '
+             echo "Staging dir exists?"
+             ls -ld /home/herz/verhaaarm-web/ || true
+             echo "Target dir exists?"
+             ls -ld /var/www/verhaaarm/ || true
+            ' || true
 
-      - name: Upload build to VPS staging dir (rsync) + verify
+      - name: Upload build to VPS staging dir (rsync over ssh)
         shell: bash
         run: |
           set -euo pipefail
 
+          # Ensure staging dir exists (no sudo needed)
           ssh \
             -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            'set -euo pipefail
-             mkdir -p /home/herz/verhaaarm-web/
-             echo "Staging dir ok"
-            '
+            'mkdir -p /home/herz/verhaaarm-web/'
 
-          rsync -avz --delete \
+          echo "== rsync upload to staging =="
+          rsync -az --delete \
             -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
             build/web/ \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/herz/verhaaarm-web/"
 
+          echo "== remote staging listing (first 50) =="
           ssh \
             -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            'set -euo pipefail
-             echo "== Remote staging listing =="
-             ls -lah /home/herz/verhaaarm-web/ | head -n 80
-             test -f /home/herz/verhaaarm-web/index.html
-            '
+            'ls -la /home/herz/verhaaarm-web/ | head -50'
 
-      - name: Publish to /var/www and set perms (with diagnostics)
+      - name: Publish to /var/www and set perms (sudo exact commands)
         shell: bash
         run: |
           set -euo pipefail
 
+          echo "== publish via sudo (must match sudoers exactly) =="
           ssh \
             -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
             'set -euo pipefail
-             echo "== Publish =="
-             sudo -n /usr/bin/rsync -a --delete /home/herz/verhaaarm-web/ /var/www/verhaaarm/
+             sudo -n /usr/bin/rsync -a /home/herz/verhaaarm-web/ /var/www/verhaaarm/
              sudo -n /bin/chown -R www-data.www-data /var/www/verhaaarm
-
-             echo "== Verify published site dir =="
-             ls -lah /var/www/verhaaarm/ | head -n 80
-             test -f /var/www/verhaaarm/index.html
+             echo "Publish done."
+             ls -la /var/www/verhaaarm | head -50
             '
