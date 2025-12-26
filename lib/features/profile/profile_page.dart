@@ -26,19 +26,16 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  // Profile changes rarely; cache a bit longer.
   static const _ttlProfile = Duration(minutes: 10);
   static const _kProfile = 'profile.snapshot';
 
-  bool _loading = true; // true only when no cache exists yet
-  bool _refreshing = false; // background refresh while showing cached data
+  bool _loading = true;
+  bool _refreshing = false;
 
-  // User identity
   String _displayName = '—';
   String _username = '—';
   String _roleLabel = 'Member';
 
-  // Support info
   String _appVersion = '—';
   String _platformLabel = '—';
   String _deviceLabel = '—';
@@ -52,39 +49,50 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _load({bool force = false}) async {
-    // 1) Serve cached data immediately
-    final c = AppCache.I.entry<_ProfileSnapshot>(_kProfile);
-    final hasCache = c != null;
-
-    if (hasCache && mounted) {
-      _applySnapshot(c.value);
-      setState(() {
-        _loading = false;
-      });
-
-      if (!force && c.isFresh(_ttlProfile)) return;
-    }
-
-    // 2) Fetch fresh data
-    final showFullSpinner = !hasCache;
-    if (mounted) {
-      setState(() {
-        _loading = showFullSpinner;
-        _refreshing = !showFullSpinner;
-      });
-    }
-
     try {
-      final snap = await _buildSnapshot();
-      AppCache.I.set(_kProfile, snap);
+      final c = await AppCache.I.entryOrLoadPersisted<_ProfileSnapshot>(
+        _kProfile,
+        decode: (json) => _ProfileSnapshot.fromJson((json as Map).cast<String, dynamic>()),
+      );
+      final hasCache = c != null;
 
-      if (!mounted) return;
-      setState(() {
-        _applySnapshot(snap);
-      });
+      if (hasCache && mounted) {
+        _applySnapshot(c.value);
+        setState(() => _loading = false);
+
+        if (!force && c.isFresh(_ttlProfile)) return;
+      }
+
+      final showFullSpinner = !hasCache;
+      if (mounted) {
+        setState(() {
+          _loading = showFullSpinner;
+          _refreshing = !showFullSpinner;
+        });
+      }
+
+      try {
+        final snap = await _buildSnapshot();
+
+        await AppCache.I.setPersisted<_ProfileSnapshot>(
+          _kProfile,
+          snap,
+          encode: (s) => s.toJson(),
+        );
+
+        if (!mounted) return;
+        setState(() => _applySnapshot(snap));
+      } catch (_) {
+        // keep whatever is shown
+      } finally {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _refreshing = false;
+          });
+        }
+      }
     } catch (_) {
-      // keep whatever is shown (cached or default)
-    } finally {
       if (mounted) {
         setState(() {
           _loading = false;
@@ -109,18 +117,14 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<_ProfileSnapshot> _buildSnapshot() async {
     final token = widget.authStore.accessToken ?? '';
 
-    // roles
     final roleSet = Roles.fromAccessToken(token);
     final roleLabel = _roleLabelFromRoleSet(roleSet);
 
-    // minimal session info
     final sessionLabel = widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
 
-    // app info
     final pkg = await PackageInfo.fromPlatform();
     final appVersion = '${pkg.version} (${pkg.buildNumber})';
 
-    // device info (no extra permissions)
     final deviceInfo = DeviceInfoPlugin();
     final platformLabel = _computePlatformLabel();
 
@@ -153,7 +157,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final locale = WidgetsBinding.instance.platformDispatcher.locale;
     final localeLabel = '${locale.languageCode}_${locale.countryCode ?? ''}'.trim();
 
-    // identity: best-effort from token, otherwise try GET /users/{id}
     String displayName = '—';
     String username = '—';
 
@@ -254,8 +257,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     await widget.authStore.clearAllUserData();
 
-    // Important: clear cached profile so next login doesn't show the previous user's info.
-    AppCache.I.remove(_kProfile);
+    // Clear ALL persisted and in-memory cache on logout (prevents cross-user leakage).
+    await AppCache.I.clearPersisted();
 
     if (!mounted) return;
     context.go('/login');
@@ -433,4 +436,26 @@ class _ProfileSnapshot {
     required this.deviceLabel,
     required this.localeLabel,
   });
+
+  Map<String, dynamic> toJson() => {
+    'displayName': displayName,
+    'username': username,
+    'roleLabel': roleLabel,
+    'appVersion': appVersion,
+    'platformLabel': platformLabel,
+    'deviceLabel': deviceLabel,
+    'localeLabel': localeLabel,
+    'sessionLabel': sessionLabel,
+  };
+
+  factory _ProfileSnapshot.fromJson(Map<String, dynamic> json) => _ProfileSnapshot(
+    displayName: (json['displayName'] as String?) ?? '—',
+    username: (json['username'] as String?) ?? '—',
+    roleLabel: (json['roleLabel'] as String?) ?? 'Member',
+    sessionLabel: (json['sessionLabel'] as String?) ?? '—',
+    appVersion: (json['appVersion'] as String?) ?? '—',
+    platformLabel: (json['platformLabel'] as String?) ?? '—',
+    deviceLabel: (json['deviceLabel'] as String?) ?? '—',
+    localeLabel: (json['localeLabel'] as String?) ?? '—',
+  );
 }

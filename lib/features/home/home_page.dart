@@ -318,7 +318,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Übersicht',
+      title: 'Verhåårm',
       actions: [
         IconButton(
           tooltip: 'Neu laden',
