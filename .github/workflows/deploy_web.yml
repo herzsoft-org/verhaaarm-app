@@ -21,50 +21,116 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Tooling info
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          dart --version
+          which flutter
+          which dart
+
       - name: Flutter pub get
+        shell: bash
         run: |
           set -euo pipefail
           flutter pub get
 
       - name: Build web (release)
+        shell: bash
         run: |
           set -euo pipefail
           flutter build web --release
 
-      - name: Prepare SSH
+      - name: Verify build output
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "== build/web listing =="
+          ls -lah build/web
+          test -f build/web/index.html
+
+      # Use the same base64 secret approach as backend (recommended).
+      # Store your PRIVATE KEY as base64 in: VPS_SSH_KEY_B64
+      - name: Prepare SSH (base64 secret)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
 
-      - name: Upload build to VPS staging dir
+          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: SSH connectivity test
         shell: bash
         run: |
           set -euo pipefail
-          ssh \
+          ssh -vvv \
             -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            'mkdir -p /home/herz/verhaaarm-web/'
+            'set -euo pipefail
+             echo "Connected as: $(whoami)"
+             echo "Host: $(hostname)"
+             echo "sudo checks:"
+             sudo -n /usr/bin/rsync --version >/dev/null && echo "sudo rsync: OK" || (echo "sudo rsync: FAILED" && exit 1)
+             sudo -n /bin/chown --version >/dev/null && echo "sudo chown: OK" || (echo "sudo chown: FAILED" && exit 1)
+            '
 
-          rsync -az --delete \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-            build/web/ \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/herz/verhaaarm-web/"
-
-      - name: Publish to /var/www and set perms
+      - name: Upload build to VPS staging dir (rsync) + verify
         shell: bash
         run: |
           set -euo pipefail
+
           ssh \
             -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
             'set -euo pipefail
-             sudo rsync -a /home/herz/verhaaarm-web/ /var/www/verhaaarm/
-             sudo chown -R www-data.www-data /var/www/verhaaarm'
+             mkdir -p /home/herz/verhaaarm-web/
+             echo "Staging dir ok"
+            '
+
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            build/web/ \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/herz/verhaaarm-web/"
+
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'set -euo pipefail
+             echo "== Remote staging listing =="
+             ls -lah /home/herz/verhaaarm-web/ | head -n 80
+             test -f /home/herz/verhaaarm-web/index.html
+            '
+
+      - name: Publish to /var/www and set perms (with diagnostics)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'set -euo pipefail
+             echo "== Publish =="
+             sudo -n /usr/bin/rsync -a --delete /home/herz/verhaaarm-web/ /var/www/verhaaarm/
+             sudo -n /bin/chown -R www-data.www-data /var/www/verhaaarm
+
+             echo "== Verify published site dir =="
+             ls -lah /var/www/verhaaarm/ | head -n 80
+             test -f /var/www/verhaaarm/index.html
+            '
