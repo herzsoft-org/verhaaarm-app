@@ -71,6 +71,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
       await widget.api.activatePeriod(id);
       if (!mounted) return;
       await _load();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periode aktiviert.')));
     } catch (e) {
       if (!mounted) return;
@@ -83,10 +84,53 @@ class _PeriodsPageState extends State<PeriodsPage> {
       await widget.api.lockPeriod(id);
       if (!mounted) return;
       await _load();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periode gelockt.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lock fehlgeschlagen: $e')));
+    }
+  }
+
+  Future<void> _unlock(String id) async {
+    try {
+      await widget.api.unlockPeriod(id);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periode entsperrt.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unlock fehlgeschlagen: $e')));
+    }
+  }
+
+  Future<void> _onMenuSelected(String v, ConventPeriodDto p) async {
+    // Navigation ohne async-gap Context-Nutzung
+    if (v == 'edit') {
+      if (!mounted) return;
+      context.push('/office/periods/${p.id}/edit');
+      return;
+    }
+
+    switch (v) {
+      case 'activate':
+        await _activate(p.id);
+        return;
+      case 'lock':
+        await _lock(p.id);
+        return;
+      case 'unlock':
+        await _unlock(p.id);
+        return;
+      case 'delete':
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Löschen braucht Backend-Endpoint (DELETE /periods/{id}).'),
+          ),
+        );
+        return;
     }
   }
 
@@ -153,33 +197,18 @@ class _PeriodsPageState extends State<PeriodsPage> {
                     ].join(' · '),
                   ),
                   trailing: PopupMenuButton<String>(
-                    onSelected: (v) async {
-                      switch (v) {
-                        case 'edit':
-                          context.push('/office/periods/${p.id}/edit');
-                          break;
-                        case 'activate':
-                          await _activate(p.id);
-                          break;
-                        case 'lock':
-                          await _lock(p.id);
-                          break;
-                        case 'delete':
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Löschen braucht Backend-Endpoint (DELETE /periods/{id}).'),
-                            ),
-                          );
-                          break;
-                      }
-                    },
-                    itemBuilder: (ctx) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
-                      PopupMenuItem(value: 'activate', child: Text('Aktivieren (setzt andere inaktiv)')),
-                      PopupMenuItem(value: 'lock', child: Text('Lock')),
-                      PopupMenuDivider(),
-                      PopupMenuItem(value: 'delete', child: Text('Löschen (noch nicht)')),
+                    onSelected: (v) => _onMenuSelected(v, p),
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                      if (!p.active)
+                        const PopupMenuItem(
+                          value: 'activate',
+                          child: Text('Aktivieren (setzt andere inaktiv)'),
+                        ),
+                      if (!p.locked) const PopupMenuItem(value: 'lock', child: Text('Lock')),
+                      if (p.locked) const PopupMenuItem(value: 'unlock', child: Text('Unlock')),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(value: 'delete', child: Text('Löschen (noch nicht)')),
                     ],
                   ),
                 ),

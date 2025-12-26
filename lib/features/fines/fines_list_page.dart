@@ -1,3 +1,5 @@
+// lib/features/fines/fines_list_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -30,8 +32,6 @@ class _FinesListPageState extends State<FinesListPage> {
   }
 
   static ({int year, int term}) _semesterKey(String semester) {
-    // SS25 => year=2025 term=1
-    // WS25/26 => year=2025 term=2
     final s = semester.trim().toUpperCase();
     if (s.startsWith('SS')) {
       final yy = int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
@@ -52,16 +52,12 @@ class _FinesListPageState extends State<FinesListPage> {
   }
 
   String _fineTitle(FineDto f) {
-    // 1) Katalog-Titel
     if (f.type == FineType.catalog && f.catalogItemId != null) {
       final item = _catalogById[f.catalogItemId!];
       if (item != null && item.title.trim().isNotEmpty) return item.title.trim();
     }
-
-    // 2) Fallback: Reason wenn vorhanden (auch bei custom)
     final r = (f.reason ?? '').trim();
     if (r.isNotEmpty) return r;
-
     return 'Beihängung';
   }
 
@@ -71,10 +67,8 @@ class _FinesListPageState extends State<FinesListPage> {
       final periods = await widget.api.listPeriods();
       final fines = await widget.api.listFines();
 
-      // User cache (for resolving ids in lists). Uses picker endpoint (active users).
       final users = await widget.api.pickerUsers();
       users.sort((a, b) => a.displayName.compareTo(b.displayName));
-
       final userById = {for (final u in users) u.id: u};
 
       final catalog = await widget.api.listFineCatalog(active: null);
@@ -87,7 +81,6 @@ class _FinesListPageState extends State<FinesListPage> {
         _catalogById = catalogById;
         _fines = fines;
       });
-
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -138,22 +131,27 @@ class _FinesListPageState extends State<FinesListPage> {
   }
 
   List<_SemesterGroup> _buildGrouped() {
-    // Ziel: Semester -> Perioden (auch leere) -> Fines
-    // 1) Fines nach periodId gruppieren
+    final periodsSorted = [..._periods]
+      ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));
+
+    final periodById = {for (final p in _periods) p.id: p};
+
+    // group fines by computed period id (from fineDate)
     final Map<String, List<FineDto>> finesByPeriodId = {};
     for (final f in _fines) {
-      finesByPeriodId.putIfAbsent(f.periodId, () => <FineDto>[]); // FIX: typed empty list
-      finesByPeriodId[f.periodId]!.add(f);
+      final p = Format.findPeriodForFineDate(fineDate: f.fineDate, periods: periodsSorted);
+      final pid = p?.id ?? 'unknown';
+      finesByPeriodId.putIfAbsent(pid, () => <FineDto>[]);
+      finesByPeriodId[pid]!.add(f);
     }
 
-    // 2) Perioden nach Semester gruppieren (auch wenn keine Fines)
+    // group periods by semester (includes empty periods)
     final Map<String, List<ConventPeriodDto>> periodsBySemester = {};
     for (final p in _periods) {
-      periodsBySemester.putIfAbsent(p.semester, () => []);
+      periodsBySemester.putIfAbsent(p.semester, () => <ConventPeriodDto>[]);
       periodsBySemester[p.semester]!.add(p);
     }
 
-    // 3) Semester sortieren (neueste zuerst)
     final semesters = periodsBySemester.keys.toList()
       ..sort((a, b) {
         final ka = _semesterKey(a);
@@ -163,7 +161,6 @@ class _FinesListPageState extends State<FinesListPage> {
         return kb.term.compareTo(ka.term);
       });
 
-    // 4) Pro Semester: Perioden sortieren (neueste Periode zuerst) und Fines einsortieren
     final result = <_SemesterGroup>[];
     for (final sem in semesters) {
       final ps = [...periodsBySemester[sem]!]
@@ -175,13 +172,62 @@ class _FinesListPageState extends State<FinesListPage> {
 
       final periodGroups = <_PeriodGroup>[];
       for (final p in ps) {
-        final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])] // FIX: typed const empty list
+        final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])]
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         periodGroups.add(_PeriodGroup(period: p, fines: fines));
       }
 
+      // also show "unknown" bucket at bottom if needed (fines that do not map)
+      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
+      if (unknownFines.isNotEmpty) {
+        unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        periodGroups.add(
+          _PeriodGroup(
+            period: ConventPeriodDto(
+              id: 'unknown',
+              semester: sem,
+              startAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+              endAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+              active: false,
+              locked: false,
+            ),
+            fines: unknownFines,
+          ),
+        );
+      }
+
       result.add(_SemesterGroup(semester: sem, periods: periodGroups));
     }
+
+    // If there are only unknown fines and no periods, show a fallback semester bucket
+    if (result.isEmpty && (finesByPeriodId['unknown']?.isNotEmpty ?? false)) {
+      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])]
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      result.add(
+        _SemesterGroup(
+          semester: 'Unbekannt',
+          periods: [
+            _PeriodGroup(
+              period: ConventPeriodDto(
+                id: 'unknown',
+                semester: 'Unbekannt',
+                startAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+                endAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+                active: false,
+                locked: false,
+              ),
+              fines: unknownFines,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // remove fake periodById variable warning if unused
+    // (kept as local for easy debug)
+    // ignore: unused_local_variable
+    final _ = periodById;
 
     return result;
   }
@@ -261,15 +307,13 @@ class _PeriodSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final header = 'Periode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}';
+    final header = (period.id == 'unknown')
+        ? 'Periode: Unbekannt (Datum passt zu keiner Periode)'
+        : 'Periode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}';
 
     final flags = <Widget>[];
-    if (period.active == true) {
-      flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
-    }
-    if (period.locked == true) {
-      flags.add(_Chip(text: 'Locked', icon: Icons.lock_rounded));
-    }
+    if (period.active == true) flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
+    if (period.locked == true) flags.add(_Chip(text: 'Locked', icon: Icons.lock_rounded));
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -316,7 +360,6 @@ class _PeriodSection extends StatelessWidget {
   String _subtitleForFine(FineDto f) {
     final amount = f.amountCents ?? 0;
 
-    // show first 2 targets + +N
     final targets = f.targetUserIds;
     String targetsText;
     if (targets.isEmpty) {
@@ -329,8 +372,8 @@ class _PeriodSection extends StatelessWidget {
       targetsText = '${userLabel(targets[0])}, ${userLabel(targets[1])} (+${targets.length - 2})';
     }
 
-    return 'Betrag: ${Format.centsToEur(amount)} · Ziele: $targetsText\n'
-        'Datum: ${Format.dateTimeShort(f.createdAt)}';
+    return 'Betrag: ${Format.centsToEur(amount)} · Bbr.: $targetsText\n'
+        'Beihängungsdatum: ${Format.dateOnlyShort(f.fineDate)}';
   }
 }
 

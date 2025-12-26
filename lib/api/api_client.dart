@@ -269,6 +269,12 @@ class ApiClient {
     return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
   }
 
+  Future<ConventPeriodDto> unlockPeriod(String id) async {
+    final r = await dio.patch('/periods/$id', data: {'locked': false});
+    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
+
   // --- EXPORT CSV
   Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {
     return dio.get(

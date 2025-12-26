@@ -1,3 +1,5 @@
+// lib/features/fines/fine_form_page.dart
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +29,7 @@ class _FineFormPageState extends State<FineFormPage> {
   bool _saving = false;
 
   ConventPeriodDto? _activePeriod;
+  List<ConventPeriodDto> _periods = const [];
   List<FineCatalogItemDto> _catalog = const [];
 
   bool _useCatalog = true;
@@ -41,6 +44,16 @@ class _FineFormPageState extends State<FineFormPage> {
   final _amount = TextEditingController();
 
   Set<String> _targetUserIds = <String>{};
+
+  // fineDate (YYYY-MM-DD)
+  String _fineDate = _todayIsoDate();
+
+  static String _todayIsoDate() {
+    final now = DateTime.now();
+    return '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
@@ -59,14 +72,20 @@ class _FineFormPageState extends State<FineFormPage> {
     setState(() => _loading = true);
     try {
       final period = await widget.api.getActivePeriod();
+      final periods = await widget.api.listPeriods();
       final catalog = await widget.api.listFineCatalog(active: true);
 
       if (!mounted) return;
+
       setState(() {
         _activePeriod = period;
+        _periods = periods;
         _catalog = catalog;
         _selectedCatalogItem = null; // placeholder default
         _multiplier = 1;
+
+        // default fineDate: today (or keep if already set)
+        if (_fineDate.trim().isEmpty) _fineDate = _todayIsoDate();
       });
     } catch (e) {
       if (!mounted) return;
@@ -118,18 +137,45 @@ class _FineFormPageState extends State<FineFormPage> {
       ),
     );
 
-    if (res != null) {
+    if (res != null && mounted) {
       setState(() => _targetUserIds = res);
     }
   }
 
+  Future<void> _pickFineDate() async {
+    final now = DateTime.now();
+    final initial = DateTime.tryParse(_fineDate) ?? DateTime(now.year, now.month, now.day);
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 2),
+    );
+    if (date == null || !mounted) return;
+
+    final picked = '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+
+    setState(() => _fineDate = picked);
+  }
+
+  String _periodLabelForFineDate() {
+    final periodsSorted = [..._periods]
+      ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));
+
+    final p = Format.findPeriodForFineDate(fineDate: _fineDate, periods: periodsSorted);
+    if (p == null) return 'Unbekannt';
+    return '${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
+  }
+
   Future<void> _submit() async {
     if (_saving) return;
-    if (_activePeriod == null) return;
 
     if (_targetUserIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte mindestens 1 Ziel auswählen.')),
+        const SnackBar(content: Text('Bitte mindestens 1 Bbr. auswählen.')),
       );
       return;
     }
@@ -152,12 +198,21 @@ class _FineFormPageState extends State<FineFormPage> {
       return;
     }
 
+    // fineDate sanity
+    final fd = _fineDate.trim();
+    if (fd.isEmpty || DateTime.tryParse(fd) == null || fd.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ungültiges Datum.')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
     try {
       if (widget.mode == FineFormMode.official) {
         final req = CreateFineRequest(
-          periodId: _activePeriod!.id,
+          fineDate: fd,
           targetUserIds: _targetUserIds.toList(),
           catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
           reason: reason,
@@ -169,14 +224,8 @@ class _FineFormPageState extends State<FineFormPage> {
         if (!mounted) return;
         context.pushReplacement('/fines/${fine.id}');
       } else {
-        final nowLocal = DateTime.now();
-        final fineDate =
-            '${nowLocal.year.toString().padLeft(4, '0')}-'
-            '${nowLocal.month.toString().padLeft(2, '0')}-'
-            '${nowLocal.day.toString().padLeft(2, '0')}';
-
         final req = CreateFineSuggestionRequest(
-          fineDate: fineDate,
+          fineDate: fd,
           targetUserIds: _targetUserIds.toList(),
           catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
           reason: reason,
@@ -184,7 +233,6 @@ class _FineFormPageState extends State<FineFormPage> {
         );
 
         await widget.api.createSuggestion(req);
-
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -232,9 +280,31 @@ class _FineFormPageState extends State<FineFormPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Periode', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Datum', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  Text(_activePeriod == null ? '—' : _activePeriod!.semester),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _saving ? null : _pickFineDate,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(Format.dateOnlyShort(_fineDate))),
+                          const Icon(Icons.calendar_month_rounded),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Zuordnung (aus Datum): ${_periodLabelForFineDate()}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Aktive Periode (Info): ${_activePeriod == null ? '—' : _activePeriod!.semester}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -349,12 +419,8 @@ class _FineFormPageState extends State<FineFormPage> {
 
                         _MultiplierRow(
                           value: _multiplier,
-                          onMinus: _saving
-                              ? null
-                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier - 1)),
-                          onPlus: _saving
-                              ? null
-                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier + 1)),
+                          onMinus: _saving ? null : () => setState(() => _multiplier = _clampMultiplier(_multiplier - 1)),
+                          onPlus: _saving ? null : () => setState(() => _multiplier = _clampMultiplier(_multiplier + 1)),
                           totalLabel: _totalAmountLabel(),
                         ),
 
@@ -363,9 +429,9 @@ class _FineFormPageState extends State<FineFormPage> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.tonalIcon(
-                            onPressed: _pickMembers,
+                            onPressed: _saving ? null : _pickMembers,
                             icon: const Icon(Icons.group_add_rounded),
-                            label: Text('Ziele auswählen (${_targetUserIds.length})'),
+                            label: Text('Bbr. auswählen (${_targetUserIds.length})'),
                           ),
                         ),
                         const SizedBox(height: 16),

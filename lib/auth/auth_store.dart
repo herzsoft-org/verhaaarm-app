@@ -59,4 +59,15 @@ class AuthStore extends ChangeNotifier {
       return false;
     }
   }
+
+  Future<void> clearAllUserData() async {
+    _accessToken = null;
+    _refreshToken = null;
+
+    // Wipes everything stored by flutter_secure_storage for this app.
+    await _storage.deleteAll();
+
+    notifyListeners();
+  }
+
 }

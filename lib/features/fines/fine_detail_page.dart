@@ -13,7 +13,12 @@ class FineDetailPage extends StatefulWidget {
   final AuthStore authStore;
   final String fineId;
 
-  const FineDetailPage({super.key, required this.api, required this.authStore, required this.fineId});
+  const FineDetailPage({
+    super.key,
+    required this.api,
+    required this.authStore,
+    required this.fineId,
+  });
 
   @override
   State<FineDetailPage> createState() => _FineDetailPageState();
@@ -24,7 +29,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
   FineDto? _fine;
   Map<String, UserPickerDto> _userById = const {};
-  Map<String, ConventPeriodDto> _periodById = const {};
+  List<ConventPeriodDto> _periods = const []; // <-- was const {} (wrong type)
   Map<String, FineCatalogItemDto> _catalogById = const {};
 
   @override
@@ -38,23 +43,28 @@ class _FineDetailPageState extends State<FineDetailPage> {
     try {
       final fine = await widget.api.getFine(widget.fineId);
       final users = await widget.api.pickerUsers();
-      final periods = await widget.api.listPeriods();
+
+      // listPeriods() might return Set or List depending on your ApiClient impl.
+      // Using toList() makes it work for both.
+      final periods = (await widget.api.listPeriods()).toList();
+
       final catalog = await widget.api.listFineCatalog(active: null);
 
       final userById = {for (final u in users) u.id: u};
-      final periodById = {for (final p in periods) p.id: p};
       final catalogById = {for (final c in catalog) c.id: c};
 
       if (!mounted) return;
       setState(() {
         _fine = fine;
         _userById = userById;
-        _periodById = periodById;
+        _periods = periods;
         _catalogById = catalogById;
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Laden fehlgeschlagen: $e')),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -65,11 +75,25 @@ class _FineDetailPageState extends State<FineDetailPage> {
   String _titleForFine(FineDto f) {
     if (f.type == FineType.catalog && f.catalogItemId != null) {
       final item = _catalogById[f.catalogItemId!];
-      return item?.title ?? 'Beihängung';
+      final t = (item?.title ?? '').trim();
+      if (t.isNotEmpty) return t;
     }
+    final r = (f.reason ?? '').trim();
+    if (r.isNotEmpty) return r;
     return 'Beihängung';
   }
 
+  ConventPeriodDto? _periodForFine(FineDto f) {
+    final periodsSorted = [..._periods]
+      ..sort(
+            (a, b) => Format.parseIsoToLocal(b.startAt)
+            .compareTo(Format.parseIsoToLocal(a.startAt)),
+      );
+    return Format.findPeriodForFineDate(
+      fineDate: f.fineDate,
+      periods: periodsSorted,
+    );
+  }
 
   Future<void> _deleteFine() async {
     final fine = _fine;
@@ -101,12 +125,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
       await widget.api.deleteFine(fine.id);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gelöscht.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Gelöscht.')));
 
-      // Wichtig: wenn wir via push aus Liste kamen -> pop,
-      // sonst (direkt per URL) hart zur Liste gehen
       if (context.canPop()) {
         context.pop();
       } else {
@@ -120,11 +141,13 @@ class _FineDetailPageState extends State<FineDetailPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     final canDelete = Roles.canManageFines(roles);
+
+    final fine = _fine;
+    final p = (fine == null) ? null : _periodForFine(fine);
 
     return AppScaffold(
       title: 'Beihängung',
@@ -143,7 +166,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : (_fine == null)
+          : (fine == null)
           ? const Center(child: Text('Nicht gefunden.'))
           : ListView(
         padding: const EdgeInsets.all(16),
@@ -154,13 +177,20 @@ class _FineDetailPageState extends State<FineDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_titleForFine(_fine!), style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    _titleForFine(fine),
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 8),
-                  Text('Betrag: ${Format.centsToEur(_fine!.amountCents ?? 0)}'),
+                  Text('Betrag: ${Format.centsToEur(fine.amountCents ?? 0)}'),
                   const SizedBox(height: 8),
-                  Text('Grund: ${(_fine!.reason ?? '').trim().isEmpty ? '—' : _fine!.reason!}'),
+                  Text(
+                    'Grund: ${(fine.reason ?? '').trim().isEmpty ? '—' : fine.reason!.trim()}',
+                  ),
                   const SizedBox(height: 8),
-                  Text('Erstellt: ${Format.dateTimeShort(_fine!.createdAt)}'),
+                  Text('Beihängungsdatum: ${Format.dateOnlyShort(fine.fineDate)}'),
+                  const SizedBox(height: 8),
+                  Text('Erstellt: ${Format.dateTimeShort(fine.createdAt)}'),
                 ],
               ),
             ),
@@ -174,12 +204,16 @@ class _FineDetailPageState extends State<FineDetailPage> {
                 children: [
                   Text('Meta', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  Text('Periode: ${_periodById[_fine!.periodId]?.semester ?? _fine!.periodId}'),
+                  Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
                   const SizedBox(height: 8),
-                  Text('Ersteller: ${_userLabel(_fine!.creatorUserId)}'),
+                  Text(
+                    'Periode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
+                  ),
                   const SizedBox(height: 8),
-                  if (_fine!.type == FineType.catalog && _fine!.catalogItemId != null)
-                    Text('Katalog-ID: ${_fine!.catalogItemId}'),
+                  Text('Ersteller: ${_userLabel(fine.creatorUserId)}'),
+                  const SizedBox(height: 8),
+                  if (fine.type == FineType.catalog && fine.catalogItemId != null)
+                    Text('Katalog-ID: ${fine.catalogItemId}'),
                 ],
               ),
             ),
@@ -191,9 +225,10 @@ class _FineDetailPageState extends State<FineDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Ziele', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Bbr.', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  for (final id in _fine!.targetUserIds) Text('• ${_userLabel(id)}'),
+                  for (final id in fine.targetUserIds)
+                    Text('• ${_userLabel(id)}'),
                 ],
               ),
             ),

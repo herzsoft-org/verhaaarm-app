@@ -29,8 +29,8 @@ class _EventFormPageState extends State<EventFormPage> {
   bool _loading = true;
   bool _saving = false;
 
+  // periods are still useful to DISPLAY the derived period for a given date
   List<ConventPeriodDto> _periods = const [];
-  String? _periodId;
 
   final _title = TextEditingController();
   DateTime? _startsAtLocal;
@@ -76,17 +76,15 @@ class _EventFormPageState extends State<EventFormPage> {
       if (widget.eventId != null) {
         existing = await widget.api.getEvent(widget.eventId!);
         attendance = await widget.api.listAttendance(existing.id);
-      } else {
-        final active = await widget.api.getActivePeriod();
-        _periodId = active.id;
-      }
 
-      if (existing != null) {
         _existing = existing;
-        _periodId = existing.periodId;
         _title.text = existing.title;
         _mandatory = existing.mandatory;
         _startsAtLocal = DateTime.parse(existing.startsAt).toLocal();
+      } else {
+        // default start time for new events (optional convenience)
+        final now = DateTime.now();
+        _startsAtLocal ??= now.add(const Duration(hours: 2));
       }
 
       if (!mounted) return;
@@ -117,7 +115,6 @@ class _EventFormPageState extends State<EventFormPage> {
     );
     if (date == null) return;
 
-    // FIX: mounted check before using context again
     if (!mounted) return;
 
     final time = await showTimePicker(
@@ -133,10 +130,22 @@ class _EventFormPageState extends State<EventFormPage> {
   }
 
   String? _validate() {
-    if (_periodId == null || _periodId!.isEmpty) return 'Bitte Conventsperiode wählen.';
     if (_title.text.trim().isEmpty) return 'Bitte Titel eingeben.';
     if (_startsAtLocal == null) return 'Bitte Datum/Uhrzeit wählen.';
     if (_startsAtLocal!.isBefore(DateTime.now())) return 'Termin darf nicht in der Vergangenheit liegen.';
+    return null;
+  }
+
+  ConventPeriodDto? _derivedPeriodForLocal(DateTime? local) {
+    if (local == null) return null;
+    // periods in DTO are ISO strings; compare in local time
+    final dt = local;
+    for (final p in _periods) {
+      final start = Format.parseIsoToLocal(p.startAt);
+      final end = Format.parseIsoToLocal(p.endAt);
+      // inclusive start, inclusive end (adjust if your backend uses exclusive end)
+      if (!dt.isBefore(start) && !dt.isAfter(end)) return p;
+    }
     return null;
   }
 
@@ -154,7 +163,6 @@ class _EventFormPageState extends State<EventFormPage> {
       if (_existing == null) {
         await widget.api.createEvent(
           CreateEventRequest(
-            periodId: _periodId!,
             title: _title.text.trim(),
             startsAt: isoUtc,
             mandatory: _mandatory,
@@ -164,7 +172,6 @@ class _EventFormPageState extends State<EventFormPage> {
         await widget.api.updateEvent(
           _existing!.id,
           UpdateEventRequest(
-            periodId: _periodId,
             title: _title.text.trim(),
             startsAt: isoUtc,
             mandatory: _mandatory,
@@ -243,7 +250,6 @@ class _EventFormPageState extends State<EventFormPage> {
       ),
     );
     if (res == null || res.isEmpty) return null;
-    // take first
     return res.first;
   }
 
@@ -336,11 +342,16 @@ class _EventFormPageState extends State<EventFormPage> {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     final allowed = Roles.canCreateEvent(roles);
 
-    final pSelected = _periods.where((p) => p.id == _periodId).cast<ConventPeriodDto?>().firstOrNull;
-
     final startsAtText = (_startsAtLocal == null)
         ? 'Nicht gesetzt'
         : Format.dateTimeShort(_startsAtLocal!.toUtc().toIso8601String());
+
+    final derived = _derivedPeriodForLocal(_startsAtLocal);
+    final derivedText = (derived == null)
+        ? 'Unbekannt'
+        : '${derived.semester} · ${Format.dateShort(derived.startAt)} – ${Format.dateShort(derived.endAt)}'
+        '${derived.locked ? ' · locked' : ''}'
+        '${derived.active ? ' · aktiv' : ''}';
 
     return AppScaffold(
       title: widget.eventId == null ? 'Neuer Termin' : 'Termin bearbeiten',
@@ -371,23 +382,15 @@ class _EventFormPageState extends State<EventFormPage> {
                 children: [
                   Text('Details', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _periodId,
-                    decoration: const InputDecoration(
-                      labelText: 'Conventsperiode',
-                      prefixIcon: Icon(Icons.calendar_month_rounded),
-                    ),
-                    items: _periods
-                        .map(
-                          (p) => DropdownMenuItem<String>(
-                        value: p.id,
-                        child: Text(
-                            '${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'),
-                      ),
-                    )
-                        .toList(),
-                    onChanged: _saving ? null : (v) => setState(() => _periodId = v),
+
+                  // derived period display (read-only)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_month_rounded),
+                    title: const Text('Periode (automatisch)'),
+                    subtitle: Text(derivedText),
                   ),
+
                   const SizedBox(height: 12),
                   TextField(
                     controller: _title,
@@ -414,8 +417,7 @@ class _EventFormPageState extends State<EventFormPage> {
                     onChanged: _saving ? null : (v) => setState(() => _mandatory = v),
                     title: const Text('Pflichttermin'),
                     subtitle: Text(
-                      'Owner: ${Roles.isHousekeeping(roles) ? 'HOUSEKEEPING' : 'SENIOR'}'
-                          '${pSelected?.locked == true ? ' · Hinweis: Periode locked' : ''}',
+                      'Owner: ${Roles.isHousekeeping(roles) ? 'HOUSEKEEPING' : 'SENIOR'}',
                     ),
                   ),
                 ],
@@ -451,8 +453,10 @@ class _EventFormPageState extends State<EventFormPage> {
                     ),
                     const SizedBox(height: 12),
                     if (_attendance.isEmpty)
-                      Text('Keine Einträge (Default: alle anwesend).',
-                          style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        'Keine Einträge (Default: alle anwesend).',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     for (final a in _attendance)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -512,6 +516,6 @@ class _EventFormPageState extends State<EventFormPage> {
   }
 }
 
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
+//extension<T> on Iterable<T> {
+//  T? get firstOrNull => isEmpty ? null : first;
+//}

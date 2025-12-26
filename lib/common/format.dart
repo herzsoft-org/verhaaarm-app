@@ -1,4 +1,8 @@
+// lib/common/format.dart
+
 import 'package:intl/intl.dart';
+
+import '../models/dtos.dart';
 
 class Format {
   static final _eur = NumberFormat.currency(locale: 'de_DE', symbol: '€');
@@ -57,5 +61,44 @@ class Format {
     final dt = DateTime.parse(iso).toLocal();
     final f = DateFormat('HH:mm', 'de_DE');
     return f.format(dt);
+  }
+
+  // ---- fineDate mapping helpers ----
+
+  /// Parses date-only "YYYY-MM-DD" and returns local DateTime (00:00 local).
+  static DateTime parseIsoDate(String yyyymmdd) {
+    final dt = DateTime.parse(yyyymmdd).toLocal();
+    return DateTime(dt.year, dt.month, dt.day);
+  }
+
+  /// Parses ISO date-time and returns the local day part as DateTime (00:00 local).
+  static DateTime dateOnlyFromIsoDateTimeLocal(String iso) {
+    final dt = DateTime.parse(iso).toLocal();
+    return DateTime(dt.year, dt.month, dt.day);
+  }
+
+  static String dateOnlyShort(String yyyymmdd) {
+    final dt = parseIsoDate(yyyymmdd);
+    final f = DateFormat('dd.MM.yyyy', 'de_DE');
+    return f.format(dt);
+  }
+
+  /// Find the ConventPeriod that contains the fineDate (inclusive bounds).
+  static ConventPeriodDto? findPeriodForFineDate({
+    required String fineDate, // YYYY-MM-DD
+    required List<ConventPeriodDto> periods,
+  }) {
+    final d = parseIsoDate(fineDate);
+
+    for (final p in periods) {
+      final start = dateOnlyFromIsoDateTimeLocal(p.startAt);
+      final end = dateOnlyFromIsoDateTimeLocal(p.endAt);
+
+      final inRange = (d.isAtSameMomentAs(start) || d.isAfter(start)) &&
+          (d.isAtSameMomentAs(end) || d.isBefore(end));
+
+      if (inRange) return p;
+    }
+    return null;
   }
 }

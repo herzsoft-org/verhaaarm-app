@@ -1,6 +1,6 @@
 {
-    "name": "verhaaarm",
-    "short_name": "verhaaarm",
+    "name": "Verhåårm Web App",
+    "short_name": "Verhåårm",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

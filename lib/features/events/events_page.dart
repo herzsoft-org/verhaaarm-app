@@ -23,6 +23,7 @@ class _EventsPageState extends State<EventsPage> {
 
   List<EventDto> _events = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
+  List<ConventPeriodDto> _periodsSorted = const [];
   Map<String, UserPickerDto> _userById = const {};
 
   bool _showPast = false;
@@ -60,12 +61,16 @@ class _EventsPageState extends State<EventsPage> {
       final events = await widget.api.listEvents();
       final users = await widget.api.pickerUsers();
 
+      // sort periods by startAt ascending for deterministic range matching
+      periods.sort((a, b) => a.startAt.compareTo(b.startAt));
+
       final periodById = {for (final p in periods) p.id: p};
       final userById = {for (final u in users) u.id: u};
 
       if (!mounted) return;
       setState(() {
         _periodById = periodById;
+        _periodsSorted = periods;
         _userById = userById;
         _events = events;
       });
@@ -81,15 +86,24 @@ class _EventsPageState extends State<EventsPage> {
 
   bool _canEditEvent(Set<AppRole> roles, EventDto e) {
     if (Roles.canManageAnyEvent(roles)) return true;
-    // housekeeping may edit only own events (backend: creatorUserId + ownerType)
     if (Roles.isHousekeeping(roles) && e.ownerType == EventOwnerType.housekeeping) {
-      // creator check must match logged-in user id; we don't have /users/me, so use token payload?
-      // In this app we rely on backend checks anyway. UI gate: allow edit for housekeeping events
-      // and only if creator id resolves to "me" is not possible without a /me endpoint.
-      // So we allow showing edit button only for admin/senior; housekeeping can still create.
       return false;
     }
     return false;
+  }
+
+  ConventPeriodDto? _periodForEvent(EventDto e) {
+    // event time is ISO UTC; compare in local time consistently
+    final dt = Format.parseIsoToLocal(e.startsAt);
+
+    for (final p in _periodsSorted) {
+      final start = Format.parseIsoToLocal(p.startAt);
+      final end = Format.parseIsoToLocal(p.endAt);
+
+      // inclusive start + inclusive end
+      if (!dt.isBefore(start) && !dt.isAfter(end)) return p;
+    }
+    return null;
   }
 
   @override
@@ -156,11 +170,15 @@ class _EventsPageState extends State<EventsPage> {
     final Map<String, Map<String, List<EventDto>>> map = {};
 
     for (final e in all) {
-      final p = _periodById[e.periodId];
+      final p = _periodForEvent(e);
       final semester = p?.semester ?? 'Unbekannt';
+
+      // if unknown, group by a stable pseudo id to avoid mixing with real ids
+      final pid = p?.id ?? 'unknown';
+
       map.putIfAbsent(semester, () => {});
-      map[semester]!.putIfAbsent(e.periodId, () => []);
-      map[semester]![e.periodId]!.add(e);
+      map[semester]!.putIfAbsent(pid, () => []);
+      map[semester]![pid]!.add(e);
     }
 
     final semesters = map.keys.toList()
@@ -177,11 +195,15 @@ class _EventsPageState extends State<EventsPage> {
       final periodMap = map[sem]!;
       final periodIds = periodMap.keys.toList()
         ..sort((a, b) {
+          // unknown goes last
+          if (a == 'unknown' && b != 'unknown') return 1;
+          if (b == 'unknown' && a != 'unknown') return -1;
+
           final pa = _periodById[a];
           final pb = _periodById[b];
           final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pa.startAt);
           final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pb.startAt);
-          return db.compareTo(da);
+          return db.compareTo(da); // newest period first within semester
         });
 
       final periods = <_PeriodGroup>[];
@@ -206,7 +228,7 @@ class _SemesterGroup {
 }
 
 class _PeriodGroup {
-  final String periodId;
+  final String periodId; // real id or 'unknown'
   final List<EventDto> events;
 
   _PeriodGroup({required this.periodId, required this.events});
@@ -280,8 +302,9 @@ class _PeriodSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = period;
+
     final header = (p == null)
-        ? 'Periode: ${pg.periodId}'
+        ? (pg.periodId == 'unknown' ? 'Periode: Unbekannt' : 'Periode: ${pg.periodId}')
         : 'Periode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
     final now = DateTime.now();

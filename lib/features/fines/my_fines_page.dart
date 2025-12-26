@@ -1,3 +1,5 @@
+// lib/features/fines/my_fines_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -22,6 +24,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
   ConventPeriodDto? _activePeriod;
 
   List<FineDto> _mine = const [];
+  List<ConventPeriodDto> _periods = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
   Map<String, UserPickerDto> _userById = const {};
 
@@ -51,9 +54,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
     return u.displayName;
   }
 
-  String _fineTitle(FineDto f) {
-    return 'Beihängung';
-  }
+  String _fineTitle(FineDto f) => 'Beihängung';
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -67,7 +68,6 @@ class _MyFinesPageState extends State<MyFinesPage> {
       final periodById = {for (final p in periods) p.id: p};
       final userById = {for (final u in users) u.id: u};
 
-      // Backend may already filter for MEMBER, but we keep safe filter.
       final mine = fines.where((f) => f.targetUserIds.contains(bal.userId)).toList();
 
       if (!mounted) return;
@@ -75,6 +75,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
         _activePeriod = period;
         _myUserId = bal.userId;
         _mine = mine;
+        _periods = periods;
         _periodById = periodById;
         _userById = userById;
       });
@@ -145,14 +146,19 @@ class _MyFinesPageState extends State<MyFinesPage> {
   List<_SemesterGroup> _buildGrouped() {
     if (_myUserId == null) return [];
 
+    final periodsSorted = [..._periods]
+      ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));
+
     final Map<String, Map<String, List<FineDto>>> map = {};
 
     for (final f in _mine) {
-      final p = _periodById[f.periodId];
+      final p = Format.findPeriodForFineDate(fineDate: f.fineDate, periods: periodsSorted);
       final semester = p?.semester ?? 'Unbekannt';
-      map.putIfAbsent(semester, () => {});
-      map[semester]!.putIfAbsent(f.periodId, () => []);
-      map[semester]![f.periodId]!.add(f);
+      final pid = p?.id ?? 'unknown';
+
+      map.putIfAbsent(semester, () => <String, List<FineDto>>{});
+      map[semester]!.putIfAbsent(pid, () => <FineDto>[]);
+      map[semester]![pid]!.add(f);
     }
 
     final semesters = map.keys.toList()
@@ -169,6 +175,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
       final periodMap = map[sem]!;
       final periodIds = periodMap.keys.toList()
         ..sort((a, b) {
+          if (a == 'unknown') return 1;
+          if (b == 'unknown') return -1;
           final pa = _periodById[a];
           final pb = _periodById[b];
           final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pa.startAt);
@@ -178,8 +186,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
       final periods = <_PeriodGroup>[];
       for (final pid in periodIds) {
-        final fines = [...periodMap[pid]!]
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final fines = [...periodMap[pid]!]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         periods.add(_PeriodGroup(periodId: pid, fines: fines));
       }
 
@@ -273,12 +280,11 @@ class _PeriodSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = period;
     final header = (p == null)
-        ? 'Periode: ${pg.periodId}'
+        ? 'Periode: Unbekannt'
         : 'Periode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
     final sumCents = pg.fines.fold<int>(0, (acc, f) {
       final amount = f.amountCents ?? 0;
-      // member cost counts if the member is targeted
       return acc + (f.targetUserIds.contains(myUserId) ? amount : 0);
     });
 
@@ -323,12 +329,10 @@ class _PeriodSection extends StatelessWidget {
 
   String _subtitleForFine(FineDto f) {
     final amount = f.amountCents ?? 0;
-
-    // show creator resolved if possible
     final creator = userLabel(f.creatorUserId);
 
     return 'Betrag: ${Format.centsToEur(amount)} · Creator: $creator\n'
-        'Datum: ${Format.dateTimeShort(f.createdAt)}';
+        'Beihängungsdatum: ${Format.dateOnlyShort(f.fineDate)}';
   }
 }
 
