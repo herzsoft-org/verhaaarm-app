@@ -44,6 +44,12 @@ class Roles {
         roles.contains(AppRole.treasurer);
   }
 
+  static bool canAcceptFineSuggestions(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
+  }
+
   static bool canCreateOfficialFine(Set<AppRole> roles) {
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
   }

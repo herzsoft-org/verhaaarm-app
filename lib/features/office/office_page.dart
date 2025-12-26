@@ -25,6 +25,11 @@ class OfficePage extends StatelessWidget {
     final canCatalog = Roles.canManageCatalog(roles);
     final canPeriods = Roles.canManagePeriods(roles);
 
+    // Annahme: Vorschläge akzeptieren dürfen Senior/Housekeeping/Admin.
+    // Falls du eine explizite Helper-Funktion hast (z.B. Roles.canAcceptFineSuggestions),
+    // ersetze diese Zeile entsprechend.
+    final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
+
     return AppScaffold(
       title: 'Amtsausführung',
       body: ListView(
@@ -39,6 +44,13 @@ class OfficePage extends StatelessWidget {
                 subtitle: const Text('Alle Nutzer, alle Perioden (nach Backend-Rechten)'),
                 onTap: () => context.push('/fines'),
               ),
+              if (canAcceptSuggestions)
+                ListTile(
+                  leading: const Icon(Icons.inbox_rounded),
+                  title: const Text('Vorgeschlagene Beihängungen'),
+                  subtitle: const Text('Ansehen, akzeptieren oder ablehnen'),
+                  onTap: () => context.push('/office/fine-suggestions'),
+                ),
               ListTile(
                 leading: const Icon(Icons.download_rounded),
                 title: const Text('CSV Export'),
@@ -94,7 +106,6 @@ class OfficePage extends StatelessWidget {
     );
   }
 
-
   Future<void> _exportCsv(BuildContext context) async {
     try {
       final r = await api.exportFinesCsv();
@@ -125,7 +136,6 @@ class OfficePage extends StatelessWidget {
       final f = File(path);
       await f.writeAsBytes(data, flush: true);
 
-      // SharePlus.instance.share(...) (nicht deprecated Share.shareXFiles)
       await SharePlus.instance.share(
         ShareParams(
           text: 'Verhåårm – Beihängungen Export',

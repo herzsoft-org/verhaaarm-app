@@ -20,6 +20,7 @@ import '../features/office/catalog/catalog_page.dart';
 import '../features/office/catalog/catalog_form_page.dart';
 import '../features/office/periods/periods_page.dart';
 import '../features/office/periods/period_form_page.dart';
+import '../features/office/fine_suggestions/office_fine_suggestions_page.dart';
 
 import '../features/live_events/live_events_page.dart';
 import '../features/live_events/live_event_form_page.dart';
@@ -105,6 +106,13 @@ Future<GoRouter> buildRouter() async {
           api: api,
           authStore: authStore,
           fineId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/office/fine-suggestions',
+        builder: (context, state) => OfficeFineSuggestionsPage(
+          api: api,
+          authStore: authStore,
         ),
       ),
 
