@@ -26,12 +26,18 @@ class FineDetailPage extends StatefulWidget {
 }
 
 class _FineDetailPageState extends State<FineDetailPage> {
+  static const int _maxPhotos = 5;
+
   bool _loading = true;
 
   FineDto? _fine;
   Map<String, UserPickerDto> _userById = const {};
-  List<ConventPeriodDto> _periods = const []; // <-- was const {} (wrong type)
+  List<ConventPeriodDto> _periods = const [];
   Map<String, FineCatalogItemDto> _catalogById = const {};
+
+  // Photos meta for UI (count + enable/disable buttons)
+  bool _photosMetaLoading = false;
+  int? _photoCount; // null while not loaded yet
 
   @override
   void initState() {
@@ -58,6 +64,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
         _periods = periods;
         _catalogById = catalogById;
       });
+
+      // load photo count in background after the main card content is ready
+      await _loadPhotoCount();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -65,6 +74,24 @@ class _FineDetailPageState extends State<FineDetailPage> {
       );
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadPhotoCount() async {
+    final fine = _fine;
+    if (fine == null) return;
+
+    if (mounted) setState(() => _photosMetaLoading = true);
+    try {
+      final list = await widget.api.listFinePhotos(fine.id);
+      if (!mounted) return;
+      setState(() => _photoCount = list.length);
+    } catch (_) {
+      // keep UI usable even if this fails
+      if (!mounted) return;
+      setState(() => _photoCount = _photoCount ?? 0);
+    } finally {
+      if (mounted) setState(() => _photosMetaLoading = false);
     }
   }
 
@@ -141,16 +168,36 @@ class _FineDetailPageState extends State<FineDetailPage> {
     }
   }
 
-  Future<void> _openPhotos() async {
+  Future<void> _openGallery() async {
     final fine = _fine;
     if (fine == null) return;
 
-    await FinePhotosDialog.open(
+    await FinePhotosDialog.openGallery(
       context: context,
       api: widget.api,
       authStore: widget.authStore,
       fineId: fine.id,
     );
+
+    // refresh count after closing
+    await _loadPhotoCount();
+  }
+
+  Future<void> _openAdd() async {
+    final fine = _fine;
+    if (fine == null) return;
+
+    await FinePhotosDialog.openAdd(
+      context: context,
+      api: widget.api,
+      authStore: widget.authStore,
+      fineId: fine.id,
+      maxPhotos: _maxPhotos,
+      currentCount: _photoCount ?? 0,
+    );
+
+    // refresh count after closing
+    await _loadPhotoCount();
   }
 
   @override
@@ -160,6 +207,10 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
     final fine = _fine;
     final p = (fine == null) ? null : _periodForFine(fine);
+
+    final count = _photoCount ?? 0;
+    final canView = !_photosMetaLoading && count > 0;
+    final canAdd = !_photosMetaLoading && count < _maxPhotos;
 
     return AppScaffold(
       title: 'Beihängung',
@@ -208,32 +259,69 @@ class _FineDetailPageState extends State<FineDetailPage> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // Photos card with two separate buttons + counter
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Fotos', style: Theme.of(context).textTheme.titleMedium),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text('Fotos', style: Theme.of(context).textTheme.titleMedium),
+                      ),
+                      if (_photosMetaLoading)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Chip(label: Text('$count/$_maxPhotos')),
+                    ],
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     'Fotos sind optional. Du kannst mehrere aus der Galerie hochladen oder eins per Kamera.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
+
                   Row(
                     children: [
-                      FilledButton.icon(
-                        onPressed: _openPhotos,
-                        icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Fotos ansehen / hinzufügen'),
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: canView ? _openGallery : null,
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: Text(count > 0 ? 'Fotos ansehen ($count)' : 'Fotos ansehen'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: canAdd ? _openAdd : null,
+                          icon: const Icon(Icons.add_a_photo_outlined),
+                          label: Text(canAdd ? 'Fotos hinzufügen' : 'Limit erreicht'),
+                        ),
                       ),
                     ],
                   ),
+
+                  if (!canAdd)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Upload-Limit erreicht (max. $_maxPhotos Fotos).',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
+
           const SizedBox(height: 12),
           Card(
             child: Padding(
