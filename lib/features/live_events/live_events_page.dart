@@ -23,12 +23,25 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
   static const _ttlLive = Duration(minutes: 1);
   static const _kLiveEvents = 'liveevents.items';
 
-  bool _loading = true; // true only when no cache exists yet
-  bool _refreshing = false; // background refresh while showing cached data
+  bool _loading = true;
+  bool _refreshing = false;
 
   List<LiveEventDto> _items = const [];
   String? _myUserId;
   bool _myUserIdLoading = false;
+
+  Map<String, dynamic> _encodeLive(LiveEventDto e) => {
+    'id': e.id,
+    'title': e.title,
+    'place': e.place,
+    'description': e.description,
+    'createdAt': e.createdAt,
+    'expiresAt': e.expiresAt,
+    'createdByUserId': e.createdByUserId,
+  };
+
+  LiveEventDto _decodeLive(Object json) =>
+      LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
 
   @override
   void initState() {
@@ -54,7 +67,10 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      final c = AppCache.I.entry<List<LiveEventDto>>(_kLiveEvents);
+      final c = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
+        _kLiveEvents,
+        decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+      );
       final hasCache = c != null;
 
       if (hasCache && mounted) {
@@ -80,7 +96,12 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
         list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         final frozen = List<LiveEventDto>.unmodifiable(list);
-        AppCache.I.set(_kLiveEvents, frozen);
+
+        await AppCache.I.setPersisted<List<LiveEventDto>>(
+          _kLiveEvents,
+          frozen,
+          encode: (v) => v.map(_encodeLive).toList(growable: false),
+        );
 
         if (!mounted) return;
         setState(() => _items = frozen);
@@ -197,6 +218,9 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
                           if (!ok) return;
 
                           await widget.api.deleteLiveEvent(e.id);
+
+                          await AppCache.I.removePersisted(_kLiveEvents);
+
                           if (!mounted) return;
                           await _load(force: true);
                         }

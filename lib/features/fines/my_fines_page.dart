@@ -25,8 +25,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
   static const _kMyFinesPeriods = 'myfines.periods';
   static const _kMyFinesUsers = 'myfines.users';
 
-  bool _loading = true; // true only when there is no cache yet
-  bool _refreshing = false; // background refresh while showing cached data
+  bool _loading = true;
+  bool _refreshing = false;
 
   String? _myUserId;
   ConventPeriodDto? _activePeriod;
@@ -35,6 +35,47 @@ class _MyFinesPageState extends State<MyFinesPage> {
   List<ConventPeriodDto> _periods = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
   Map<String, UserPickerDto> _userById = const {};
+
+  Map<String, dynamic> _encodePeriod(ConventPeriodDto p) => {
+    'id': p.id,
+    'semester': p.semester,
+    'startAt': p.startAt,
+    'endAt': p.endAt,
+    'active': p.active,
+    'locked': p.locked,
+  };
+
+  ConventPeriodDto _decodePeriod(Object json) =>
+      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
+    'userId': b.userId,
+    'balanceCents': b.balanceCents,
+  };
+
+  UserBalanceDto _decodeBalance(Object json) =>
+      UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeUser(UserPickerDto u) => {
+    'id': u.id,
+    'displayName': u.displayName,
+  };
+
+  UserPickerDto _decodeUser(Object json) =>
+      UserPickerDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeFine(FineDto f) => {
+    'id': f.id,
+    'creatorUserId': f.creatorUserId,
+    'targetUserIds': f.targetUserIds,
+    'amountCents': f.amountCents,
+    'reason': f.reason,
+    'catalogItemId': f.catalogItemId,
+    'fineDate': f.fineDate,
+    'createdAt': f.createdAt,
+  };
+
+  FineDto _decodeFine(Object json) => FineDto.fromJson((json as Map).cast<String, dynamic>());
 
   @override
   void initState() {
@@ -62,18 +103,30 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      // 1) Serve cached data immediately (even if partial)
-      final cPeriod = AppCache.I.entry<ConventPeriodDto>(_kMyFinesActivePeriod);
-      final cBal = AppCache.I.entry<UserBalanceDto>(_kMyFinesBalance);
-      final cFines = AppCache.I.entry<List<FineDto>>(_kMyFinesFines);
-      final cPeriods = AppCache.I.entry<List<ConventPeriodDto>>(_kMyFinesPeriods);
-      final cUsers = AppCache.I.entry<List<UserPickerDto>>(_kMyFinesUsers);
+      final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
+        _kMyFinesActivePeriod,
+        decode: _decodePeriod,
+      );
+      final cBal = await AppCache.I.entryOrLoadPersisted<UserBalanceDto>(
+        _kMyFinesBalance,
+        decode: _decodeBalance,
+      );
+      final cFines = await AppCache.I.entryOrLoadPersisted<List<FineDto>>(
+        _kMyFinesFines,
+        decode: (json) => (json as List).map((e) => _decodeFine(e as Object)).toList(growable: false),
+      );
+      final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
+        _kMyFinesPeriods,
+        decode: (json) =>
+            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
+      );
+      final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
+        _kMyFinesUsers,
+        decode: (json) => (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
+      );
 
-      final hasAnyCache = (cPeriod != null) ||
-          (cBal != null) ||
-          (cFines != null) ||
-          (cPeriods != null) ||
-          (cUsers != null);
+      final hasAnyCache =
+          (cPeriod != null) || (cBal != null) || (cFines != null) || (cPeriods != null) || (cUsers != null);
 
       if (hasAnyCache && mounted) {
         final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[]);
@@ -85,9 +138,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
         final myUserId = cBal?.value.userId;
         final mine = (myUserId == null)
             ? const <FineDto>[]
-            : (cFines?.value ?? const <FineDto>[])
-            .where((f) => f.targetUserIds.contains(myUserId))
-            .toList();
+            : (cFines?.value ?? const <FineDto>[]).where((f) => f.targetUserIds.contains(myUserId)).toList();
 
         setState(() {
           _activePeriod = cPeriod?.value;
@@ -108,7 +159,6 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
       if (!force && cacheFresh) return;
 
-      // 2) Fetch fresh data
       final showFullSpinner = !hasAnyCache;
       if (mounted) {
         setState(() {
@@ -124,11 +174,31 @@ class _MyFinesPageState extends State<MyFinesPage> {
         final periods = await widget.api.listPeriods();
         final users = await widget.api.pickerUsers();
 
-        AppCache.I.set(_kMyFinesActivePeriod, period);
-        AppCache.I.set(_kMyFinesBalance, bal);
-        AppCache.I.set(_kMyFinesFines, List<FineDto>.unmodifiable(fines));
-        AppCache.I.set(_kMyFinesPeriods, List<ConventPeriodDto>.unmodifiable(periods));
-        AppCache.I.set(_kMyFinesUsers, List<UserPickerDto>.unmodifiable(users));
+        await AppCache.I.setPersisted<ConventPeriodDto>(
+          _kMyFinesActivePeriod,
+          period,
+          encode: _encodePeriod,
+        );
+        await AppCache.I.setPersisted<UserBalanceDto>(
+          _kMyFinesBalance,
+          bal,
+          encode: _encodeBalance,
+        );
+        await AppCache.I.setPersisted<List<FineDto>>(
+          _kMyFinesFines,
+          List<FineDto>.unmodifiable(fines),
+          encode: (v) => v.map(_encodeFine).toList(growable: false),
+        );
+        await AppCache.I.setPersisted<List<ConventPeriodDto>>(
+          _kMyFinesPeriods,
+          List<ConventPeriodDto>.unmodifiable(periods),
+          encode: (v) => v.map(_encodePeriod).toList(growable: false),
+        );
+        await AppCache.I.setPersisted<List<UserPickerDto>>(
+          _kMyFinesUsers,
+          List<UserPickerDto>.unmodifiable(users),
+          encode: (v) => v.map(_encodeUser).toList(growable: false),
+        );
 
         final periodById = {for (final p in periods) p.id: p};
         final userById = {for (final u in users) u.id: u};

@@ -3,9 +3,11 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
+import 'common/cache/app_cache.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppCache.I.init();
   await initializeDateFormatting('de_DE', null);
 
   final router = await buildRouter();

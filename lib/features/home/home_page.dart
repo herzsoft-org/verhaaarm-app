@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../app/route_observer.dart';
 import '../../auth/auth_store.dart';
+import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
-import '../../auth/roles.dart';
-import '../../app/route_observer.dart';
 
 class HomePage extends StatefulWidget {
   final ApiClient api;
@@ -37,8 +37,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
   List<LiveEventDto> _liveEvents = const [];
   EventDto? _nextEvent;
 
-  bool _loading = true; // true only when there is no cache yet
-  bool _refreshing = false; // background refresh while showing cached data
+  bool _loading = true;
+  bool _refreshing = false;
 
   Timer? _liveTimer;
   bool _liveRefreshInFlight = false;
@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void initState() {
     super.initState();
-    _load(); // initial load: serve cache then refresh if needed
+    _load();
     _startLiveTimer();
   }
 
@@ -77,6 +77,51 @@ class _HomePageState extends State<HomePage> with RouteAware {
     _stopLiveTimer();
   }
 
+  Map<String, dynamic> _encodePeriod(ConventPeriodDto p) => {
+    'id': p.id,
+    'semester': p.semester,
+    'startAt': p.startAt,
+    'endAt': p.endAt,
+    'active': p.active,
+    'locked': p.locked,
+  };
+
+  ConventPeriodDto _decodePeriod(Object json) =>
+      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
+    'userId': b.userId,
+    'balanceCents': b.balanceCents,
+  };
+
+  UserBalanceDto _decodeBalance(Object json) =>
+      UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeLive(LiveEventDto e) => {
+    'id': e.id,
+    'title': e.title,
+    'place': e.place,
+    'description': e.description,
+    'createdAt': e.createdAt,
+    'expiresAt': e.expiresAt,
+    'createdByUserId': e.createdByUserId,
+  };
+
+  LiveEventDto _decodeLive(Object json) =>
+      LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeEvent(EventDto e) => {
+    'id': e.id,
+    'title': e.title,
+    'startsAt': e.startsAt,
+    'mandatory': e.mandatory,
+    'creatorUserId': e.creatorUserId,
+    'ownerType': e.ownerType.name,
+  };
+
+  EventDto _decodeEvent(Object json) =>
+      EventDto.fromJson((json as Map).cast<String, dynamic>());
+
   void _startLiveTimer() {
     _liveTimer?.cancel();
     _liveTimer = Timer.periodic(_livePollInterval, (_) async {
@@ -93,17 +138,25 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Future<void> _refreshLiveEventsIfNeeded() async {
     if (_liveRefreshInFlight) return;
 
-    final cLive = AppCache.I.entry<List<LiveEventDto>>(_kHomeLiveEvents);
+    final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
+      _kHomeLiveEvents,
+      decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+    );
     if (cLive != null && cLive.isFresh(_ttlHomeLive)) return;
 
     _liveRefreshInFlight = true;
     try {
       final live = await widget.api.listLiveEvents();
-      AppCache.I.set(_kHomeLiveEvents, List<LiveEventDto>.unmodifiable(live));
+      final frozen = List<LiveEventDto>.unmodifiable(live);
+
+      await AppCache.I.setPersisted<List<LiveEventDto>>(
+        _kHomeLiveEvents,
+        frozen,
+        encode: (v) => v.map(_encodeLive).toList(growable: false),
+      );
+
       if (!mounted) return;
-      setState(() {
-        _liveEvents = List<LiveEventDto>.unmodifiable(live);
-      });
+      setState(() => _liveEvents = frozen);
     } catch (_) {
       // silent
     } finally {
@@ -112,12 +165,25 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Future<void> _load({bool force = false}) async {
-    // 1) Serve cached data immediately (partial cache allowed)
     try {
-      final cPeriod = AppCache.I.entry<ConventPeriodDto>(_kHomeActivePeriod);
-      final cBalance = AppCache.I.entry<UserBalanceDto>(_kHomeBalance);
-      final cLive = AppCache.I.entry<List<LiveEventDto>>(_kHomeLiveEvents);
-      final cEvents = AppCache.I.entry<List<EventDto>>(_kHomeEvents);
+      final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
+        _kHomeActivePeriod,
+        decode: _decodePeriod,
+      );
+      final cBalance = await AppCache.I.entryOrLoadPersisted<UserBalanceDto>(
+        _kHomeBalance,
+        decode: _decodeBalance,
+      );
+      final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
+        _kHomeLiveEvents,
+        decode: (json) =>
+            (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+      );
+      final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
+        _kHomeEvents,
+        decode: (json) =>
+            (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+      );
 
       final hasAnyCache =
           (cPeriod != null) || (cBalance != null) || (cLive != null) || (cEvents != null);
@@ -155,12 +221,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
         if (!force && baseFresh && !liveFresh) {
           final live = await widget.api.listLiveEvents();
           final frozenLive = List<LiveEventDto>.unmodifiable(live);
-          AppCache.I.set(_kHomeLiveEvents, frozenLive);
+
+          await AppCache.I.setPersisted<List<LiveEventDto>>(
+            _kHomeLiveEvents,
+            frozenLive,
+            encode: (v) => v.map(_encodeLive).toList(growable: false),
+          );
 
           if (!mounted) return;
-          setState(() {
-            _liveEvents = frozenLive;
-          });
+          setState(() => _liveEvents = frozenLive);
           return;
         }
 
@@ -174,10 +243,26 @@ class _HomePageState extends State<HomePage> with RouteAware {
         final frozenLive = List<LiveEventDto>.unmodifiable(live);
         final frozenEvents = List<EventDto>.unmodifiable(events);
 
-        AppCache.I.set(_kHomeActivePeriod, period);
-        AppCache.I.set(_kHomeBalance, balance);
-        AppCache.I.set(_kHomeLiveEvents, frozenLive);
-        AppCache.I.set(_kHomeEvents, frozenEvents);
+        await AppCache.I.setPersisted<ConventPeriodDto>(
+          _kHomeActivePeriod,
+          period,
+          encode: _encodePeriod,
+        );
+        await AppCache.I.setPersisted<UserBalanceDto>(
+          _kHomeBalance,
+          balance,
+          encode: _encodeBalance,
+        );
+        await AppCache.I.setPersisted<List<LiveEventDto>>(
+          _kHomeLiveEvents,
+          frozenLive,
+          encode: (v) => v.map(_encodeLive).toList(growable: false),
+        );
+        await AppCache.I.setPersisted<List<EventDto>>(
+          _kHomeEvents,
+          frozenEvents,
+          encode: (v) => v.map(_encodeEvent).toList(growable: false),
+        );
 
         if (!mounted) return;
         setState(() {
@@ -200,7 +285,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
         }
       }
     } catch (_) {
-      // If something goes wrong while applying cache, do not get stuck in a spinner.
       if (mounted) {
         setState(() {
           _loading = false;

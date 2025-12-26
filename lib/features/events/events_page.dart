@@ -26,8 +26,8 @@ class _EventsPageState extends State<EventsPage> {
   static const _kEventsEvents = 'events.events';
   static const _kEventsUsers = 'events.users';
 
-  bool _loading = true; // true only when there is no cache yet
-  bool _refreshing = false; // background refresh while showing cached data
+  bool _loading = true;
+  bool _refreshing = false;
 
   List<EventDto> _events = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
@@ -35,6 +35,38 @@ class _EventsPageState extends State<EventsPage> {
   Map<String, UserPickerDto> _userById = const {};
 
   bool _showPast = false;
+
+  Map<String, dynamic> _encodePeriod(ConventPeriodDto p) => {
+    'id': p.id,
+    'semester': p.semester,
+    'startAt': p.startAt,
+    'endAt': p.endAt,
+    'active': p.active,
+    'locked': p.locked,
+  };
+
+  ConventPeriodDto _decodePeriod(Object json) =>
+      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeUser(UserPickerDto u) => {
+    'id': u.id,
+    'displayName': u.displayName,
+  };
+
+  UserPickerDto _decodeUser(Object json) =>
+      UserPickerDto.fromJson((json as Map).cast<String, dynamic>());
+
+  Map<String, dynamic> _encodeEvent(EventDto e) => {
+    'id': e.id,
+    'title': e.title,
+    'startsAt': e.startsAt,
+    'mandatory': e.mandatory,
+    'creatorUserId': e.creatorUserId,
+    'ownerType': e.ownerType.name,
+  };
+
+  EventDto _decodeEvent(Object json) =>
+      EventDto.fromJson((json as Map).cast<String, dynamic>());
 
   @override
   void initState() {
@@ -62,11 +94,21 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   Future<void> _load({bool force = false}) async {
-    // 1) Serve cached data immediately (even if partial)
     try {
-      final cPeriods = AppCache.I.entry<List<ConventPeriodDto>>(_kEventsPeriods);
-      final cEvents = AppCache.I.entry<List<EventDto>>(_kEventsEvents);
-      final cUsers = AppCache.I.entry<List<UserPickerDto>>(_kEventsUsers);
+      final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
+        _kEventsPeriods,
+        decode: (json) =>
+            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
+      );
+      final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
+        _kEventsEvents,
+        decode: (json) =>
+            (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+      );
+      final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
+        _kEventsUsers,
+        decode: (json) => (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
+      );
 
       final hasPeriods = cPeriods != null;
       final hasEvents = cEvents != null;
@@ -96,7 +138,6 @@ class _EventsPageState extends State<EventsPage> {
 
       if (!force && cacheFresh) return;
 
-      // 2) Fetch fresh data
       final showFullSpinner = !hasAnyCache;
       if (mounted) {
         setState(() {
@@ -114,12 +155,23 @@ class _EventsPageState extends State<EventsPage> {
         final frozenEvents = List<EventDto>.unmodifiable(events);
         final frozenUsers = List<UserPickerDto>.unmodifiable(users);
 
-        AppCache.I.set(_kEventsPeriods, frozenPeriods);
-        AppCache.I.set(_kEventsEvents, frozenEvents);
-        AppCache.I.set(_kEventsUsers, frozenUsers);
+        await AppCache.I.setPersisted<List<ConventPeriodDto>>(
+          _kEventsPeriods,
+          frozenPeriods,
+          encode: (v) => v.map(_encodePeriod).toList(growable: false),
+        );
+        await AppCache.I.setPersisted<List<EventDto>>(
+          _kEventsEvents,
+          frozenEvents,
+          encode: (v) => v.map(_encodeEvent).toList(growable: false),
+        );
+        await AppCache.I.setPersisted<List<UserPickerDto>>(
+          _kEventsUsers,
+          frozenUsers,
+          encode: (v) => v.map(_encodeUser).toList(growable: false),
+        );
 
-        final periodsSorted = List<ConventPeriodDto>.from(periods)
-          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodsSorted = List<ConventPeriodDto>.from(periods)..sort((a, b) => a.startAt.compareTo(b.startAt));
         final periodById = {for (final p in periodsSorted) p.id: p};
         final userById = {for (final u in users) u.id: u};
 
@@ -291,7 +343,7 @@ class _SemesterGroup {
 }
 
 class _PeriodGroup {
-  final String periodId; // real id or 'unknown'
+  final String periodId;
   final List<EventDto> events;
 
   _PeriodGroup({required this.periodId, required this.events});
