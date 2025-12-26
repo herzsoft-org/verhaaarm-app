@@ -254,9 +254,21 @@ class ApiClient {
 
   // --- USERS (admin/senior)
   Future<List<UserDto>> listUsersFull({required bool active}) async {
+    // /users returns only {id, username, displayName}
     final r = await dio.get('/users', queryParameters: {'active': active});
     final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => UserDto.fromJson(e as Map<String, dynamic>)).toList();
+
+    // Extract ids from the lightweight list
+    final ids = list
+        .map((e) => (e as Map).cast<String, dynamic>())
+        .map((m) => (m['id'] as String?)?.trim())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toList();
+
+    // Fetch full user objects in parallel via /users/{id}
+    final full = await Future.wait(ids.map(getUser));
+    return full;
   }
 
   Future<UserDto> createUser(CreateUserRequest req) async {
