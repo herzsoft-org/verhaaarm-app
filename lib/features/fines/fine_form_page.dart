@@ -9,18 +9,27 @@ import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 import 'member_picker_sheet.dart';
+import 'fine_photos_dialog.dart';
+import '../../auth/auth_store.dart';
 
 enum FineFormMode { official, suggestion }
 
 class FineFormPage extends StatefulWidget {
   final ApiClient api;
+  final AuthStore authStore;
   final FineFormMode mode;
 
-  const FineFormPage({super.key, required this.api, required this.mode});
+  const FineFormPage({
+    super.key,
+    required this.api,
+    required this.authStore,
+    required this.mode,
+  });
 
   @override
   State<FineFormPage> createState() => _FineFormPageState();
 }
+
 
 class _FineFormPageState extends State<FineFormPage> {
   final _formKey = GlobalKey<FormState>();
@@ -96,6 +105,32 @@ class _FineFormPageState extends State<FineFormPage> {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  Future<void> _askAddImagesAfterCreate(String fineId) async {
+    final add = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Fotos hinzufügen?'),
+        content: const Text('Möchtest du jetzt Fotos zu dieser Beihängung hochladen?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Nein')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Ja')),
+        ],
+      ),
+    );
+
+    if (add == true && mounted) {
+      await FinePhotosDialog.openAdd(
+        context: context,
+        api: widget.api,
+        authStore: widget.authStore,
+        fineId: fineId,
+        maxPhotos: 5,
+        currentCount: 0,
+      );
+    }
+  }
+
 
   String _toEurText(int cents) {
     final s = Format.centsToEur(cents);
@@ -222,7 +257,13 @@ class _FineFormPageState extends State<FineFormPage> {
         final fine = await widget.api.createFine(req);
 
         if (!mounted) return;
+
+        // Ask before navigating away
+        await _askAddImagesAfterCreate(fine.id);
+        if (!mounted) return;
+
         context.pushReplacement('/fines/${fine.id}');
+
       } else {
         final req = CreateFineSuggestionRequest(
           fineDate: fd,
@@ -236,7 +277,7 @@ class _FineFormPageState extends State<FineFormPage> {
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vorschlag erstellt.')),
+          const SnackBar(content: Text('Vorschlag erstellt. Fotos können erst nach Annahme hinzugefügt werden.')),
         );
         context.go('/home');
       }

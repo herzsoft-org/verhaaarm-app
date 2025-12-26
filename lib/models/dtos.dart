@@ -320,6 +320,9 @@ class FinePhotoDto {
   final int sizeBytes;
   final String createdAt;
 
+  // optional (backend can add this later)
+  final String? uploaderUserId;
+
   FinePhotoDto({
     required this.id,
     required this.fineId,
@@ -327,17 +330,21 @@ class FinePhotoDto {
     required this.contentType,
     required this.sizeBytes,
     required this.createdAt,
+    required this.uploaderUserId,
   });
 
   factory FinePhotoDto.fromJson(Map<String, dynamic> json) => FinePhotoDto(
-    id: json['id'] as String,
-    fineId: json['fineId'] as String,
+    id: (json['id'] as String?) ?? '',
+    fineId: (json['fineId'] as String?) ?? '',
     originalFilename: (json['originalFilename'] as String?) ?? '',
     contentType: (json['contentType'] as String?) ?? '',
     sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
     createdAt: (json['createdAt'] as String?) ?? '',
+    uploaderUserId: (json['uploaderUserId'] as String?),
   );
 }
+
+
 
 
 class CreateFineRequest {

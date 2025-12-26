@@ -132,7 +132,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Beihängung löschen?'),
-        content: const Text('Wird soft-deleted.'),
+        content: const Text('Dies kann nicht rückgängig gemacht werden.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),

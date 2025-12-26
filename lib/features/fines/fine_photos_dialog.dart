@@ -221,15 +221,37 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
   int _index = 0;
   late final PageController _page = PageController();
 
-  bool get _canDelete {
+  String? _meId;
+
+  bool get _isAdminOrSenior {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
-    return Roles.canManageFines(roles);
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
+  }
+
+  bool _canDeletePhoto(FinePhotoDto p) {
+    if (_isAdminOrSenior) return true;
+
+    // self-delete requires backend to provide uploaderUserId
+    final up = p.uploaderUserId;
+    if (_meId == null || up == null || up.isEmpty) return false;
+
+    return up == _meId;
   }
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final me = await widget.api.getMe();
+      if (mounted) setState(() => _meId = me.id);
+    } catch (_) {
+      // ignore; self-delete won't be enabled without _meId
+    }
+    await _load();
   }
 
   Future<void> _load() async {
@@ -268,9 +290,10 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
   }
 
   Future<void> _deleteCurrent() async {
-    if (!_canDelete || _busy || _photos.isEmpty) return;
+    if (_busy || _photos.isEmpty) return;
 
     final p = _photos[_index];
+    if (!_canDeletePhoto(p)) return;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -309,6 +332,7 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
   @override
   Widget build(BuildContext context) {
     final count = _photos.length;
+    final canDeleteCurrent = (!_loading && _photos.isNotEmpty && _canDeletePhoto(_photos[_index]));
 
     return Scaffold(
       appBar: AppBar(
@@ -324,7 +348,7 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
             onPressed: _busy ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
-          if (_canDelete)
+          if (canDeleteCurrent)
             IconButton(
               tooltip: 'Löschen',
               onPressed: (_busy || _loading || _photos.isEmpty) ? null : _deleteCurrent,
@@ -366,9 +390,7 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    (_photos[_index].originalFilename.isEmpty)
-                        ? 'Foto'
-                        : _photos[_index].originalFilename,
+                    (_photos[_index].originalFilename.isEmpty) ? 'Foto' : _photos[_index].originalFilename,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall,

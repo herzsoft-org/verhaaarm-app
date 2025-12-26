@@ -94,12 +94,21 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/fines/new',
-        builder: (context, state) => FineFormPage(api: api, mode: FineFormMode.official),
+        builder: (context, state) => FineFormPage(
+          api: api,
+          authStore: authStore,
+          mode: FineFormMode.official,
+        ),
       ),
       GoRoute(
         path: '/suggestions/new',
-        builder: (context, state) => FineFormPage(api: api, mode: FineFormMode.suggestion),
+        builder: (context, state) => FineFormPage(
+          api: api,
+          authStore: authStore,
+          mode: FineFormMode.suggestion,
+        ),
       ),
+
       GoRoute(
         path: '/fines/:id',
         builder: (context, state) => FineDetailPage(

@@ -160,14 +160,15 @@ class _ProfilePageState extends State<ProfilePage> {
     String displayName = '—';
     String username = '—';
 
+    String? pickString(dynamic v) {
+      final s = v?.toString().trim();
+      return (s != null && s.isNotEmpty) ? s : null;
+    }
+
+    // 1) Best-effort from JWT (may be minimal for members)
     if (token.isNotEmpty) {
       try {
         final payload = Jwt.parseJwt(token);
-
-        String? pickString(dynamic v) {
-          final s = v?.toString().trim();
-          return (s != null && s.isNotEmpty) ? s : null;
-        }
 
         final dn = pickString(payload['displayName']) ??
             pickString(payload['display_name']) ??
@@ -180,25 +181,29 @@ class _ProfilePageState extends State<ProfilePage> {
         if (dn != null) displayName = dn;
         if (un != null) username = un;
 
-        final idCandidate = pickString(payload['userId']) ??
-            pickString(payload['user_id']) ??
-            pickString(payload['id']) ??
-            pickString(payload['uid']) ??
-            pickString(payload['sub']);
-
-        final userId = (idCandidate != null && _looksLikeUuid(idCandidate)) ? idCandidate : null;
-
-        if (userId != null && (displayName == '—' || username == '—')) {
-          try {
-            final u = await widget.api.getUser(userId);
-            final dn2 = u.displayName.trim();
-            final un2 = u.username.trim();
-            if (dn2.isNotEmpty) displayName = dn2;
-            if (un2.isNotEmpty) username = un2;
-          } catch (_) {
-            // ignore
-          }
+        // Your backend sets subject=username. If the JWT doesn't contain a username claim,
+        // fall back to 'sub' as the username (common pattern).
+        final sub = pickString(payload['sub']);
+        if (username == '—' && sub != null) {
+          username = sub;
         }
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    // 2) Authoritative fallback: GET /users/me (works for all authenticated users)
+    if (token.isNotEmpty && (displayName == '—' || username == '—')) {
+      try {
+        // Expect ApiClient to have a method for this endpoint.
+        // If your ApiClient doesn't yet, add: getMe() -> GET /users/me
+        final me = await widget.api.getMe();
+
+        final dn2 = me.displayName.trim();
+        final un2 = me.username.trim();
+
+        if (displayName == '—' && dn2.isNotEmpty) displayName = dn2;
+        if (username == '—' && un2.isNotEmpty) username = un2;
       } catch (_) {
         // ignore
       }
@@ -214,13 +219,6 @@ class _ProfilePageState extends State<ProfilePage> {
       deviceLabel: deviceLabel,
       localeLabel: localeLabel,
     );
-  }
-
-  static bool _looksLikeUuid(String s) {
-    final re = RegExp(
-      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-    );
-    return re.hasMatch(s);
   }
 
   static String _computePlatformLabel() {
@@ -329,7 +327,10 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         Text(_displayName, style: Theme.of(context).textTheme.titleLarge),
                         const SizedBox(height: 2),
-                        Text('@$_username', style: Theme.of(context).textTheme.bodyMedium),
+                        Text(
+                          _username == '—' ? '—' : '@$_username',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                         const SizedBox(height: 6),
                         Row(
                           children: [

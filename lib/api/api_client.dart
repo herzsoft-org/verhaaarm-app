@@ -41,6 +41,12 @@ class ApiClient {
     return auth.login(username: username, password: password);
   }
 
+  Future<UserDto> getMe() async {
+    final res = await dio.get('/users/me');
+    return UserDto.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+
   Future<void> logoutOnServer(String refreshToken) async {
     await auth.logout(refreshToken: refreshToken);
   }
