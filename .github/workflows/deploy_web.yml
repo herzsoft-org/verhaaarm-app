@@ -1,0 +1,127 @@
+name: Build & Deploy Flutter Web
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: verhaaarm-web-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter doctor (info)
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          flutter doctor -v || true
+
+      - name: Flutter pub get
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+
+      - name: Build web (release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build web --release
+          echo "== build/web contents =="
+          ls -la build/web | head -200
+
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # If your secret is BASE64: decode it
+          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r\n' | base64 -d > ~/.ssh/id_ed25519
+
+          chmod 600 ~/.ssh/id_ed25519
+
+          echo "== Key sanity check =="
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          ssh-keygen -lf ~/.ssh/id_ed25519
+
+          echo "== known_hosts (ssh-keyscan) =="
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          wc -l ~/.ssh/known_hosts
+
+      - name: SSH connectivity test (verbose)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -vvv \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'set -euo pipefail
+             echo "Connected as: $(whoami)"
+             echo "Host: $(hostname)"
+             echo "Staging dir exists?"
+             ls -ld /home/herz/verhaaarm-web/ || true
+             echo "Target dir exists?"
+             ls -ld /var/www/verhaaarm/ || true
+            ' || true
+
+      - name: Upload build to VPS staging dir (rsync over ssh)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Ensure staging dir exists (no sudo needed)
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'mkdir -p /home/herz/verhaaarm-web/'
+
+          echo "== rsync upload to staging =="
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            build/web/ \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/herz/verhaaarm-web/"
+
+          echo "== remote staging listing (first 50) =="
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'ls -la /home/herz/verhaaarm-web/ | head -50'
+
+      - name: Publish to /var/www and set perms (sudo exact commands)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "== publish via sudo (must match sudoers exactly) =="
+          ssh \
+            -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'set -euo pipefail
+             sudo -n /usr/bin/rsync -a /home/herz/verhaaarm-web/ /var/www/verhaaarm/
+             sudo -n /bin/chown -R www-data.www-data /var/www/verhaaarm
+             echo "Publish done."
+             ls -la /var/www/verhaaarm | head -50
+            '
