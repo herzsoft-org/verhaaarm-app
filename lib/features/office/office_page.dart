@@ -1,15 +1,11 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/csv_export/csv_export.dart';
 
 class OfficePage extends StatelessWidget {
   final ApiClient api;
@@ -25,9 +21,6 @@ class OfficePage extends StatelessWidget {
     final canCatalog = Roles.canManageCatalog(roles);
     final canPeriods = Roles.canManagePeriods(roles);
 
-    // Annahme: Vorschläge akzeptieren dürfen Senior/Housekeeping/Admin.
-    // Falls du eine explizite Helper-Funktion hast (z.B. Roles.canAcceptFineSuggestions),
-    // ersetze diese Zeile entsprechend.
     final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
 
     return AppScaffold(
@@ -120,32 +113,18 @@ class OfficePage extends StatelessWidget {
         return;
       }
 
-      if (kIsWeb) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('CSV Export Teilen/Speichern ist im Web UI noch nicht implementiert.')),
-          );
-        }
-        return;
-      }
-
-      final dir = await getTemporaryDirectory();
       final ts = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final path = '${dir.path}/verhaarm-fines-$ts.csv';
+      final filename = 'verhaarm-fines-$ts.csv';
 
-      final f = File(path);
-      await f.writeAsBytes(data, flush: true);
-
-      await SharePlus.instance.share(
-        ShareParams(
-          text: 'Verhåårm – Beihängungen Export',
-          files: [XFile(path, mimeType: 'text/csv')],
-        ),
+      await saveCsvBytes(
+        bytes: data,
+        filename: filename,
+        shareText: 'Verhåårm – Beihängungen Export',
       );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('CSV Export bereit zum Teilen.')),
+          const SnackBar(content: Text('CSV Export bereit.')),
         );
       }
     } catch (e) {

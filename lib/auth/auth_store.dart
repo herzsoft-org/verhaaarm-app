@@ -2,17 +2,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
+import 'token_storage.dart';
 
 class AuthStore extends ChangeNotifier {
   static const _kAccessToken = 'auth_access_token';
   static const _kRefreshToken = 'auth_refresh_token';
 
-  final FlutterSecureStorage _storage;
+  final TokenStorage _storage;
 
   String? _accessToken;
   String? _refreshToken;
 
-  AuthStore({FlutterSecureStorage? storage}) : _storage = storage ?? const FlutterSecureStorage();
+  AuthStore({FlutterSecureStorage? secureStorage})
+      : _storage = createTokenStorage(secureStorage: secureStorage);
 
   String? get accessToken => _accessToken;
   String? get refreshToken => _refreshToken;
@@ -20,8 +22,8 @@ class AuthStore extends ChangeNotifier {
   bool get isLoggedIn => (_accessToken != null && _accessToken!.isNotEmpty);
 
   Future<void> init() async {
-    _accessToken = await _storage.read(key: _kAccessToken);
-    _refreshToken = await _storage.read(key: _kRefreshToken);
+    _accessToken = await _storage.read(_kAccessToken);
+    _refreshToken = await _storage.read(_kRefreshToken);
     notifyListeners();
   }
 
@@ -29,8 +31,8 @@ class AuthStore extends ChangeNotifier {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
 
-    await _storage.write(key: _kAccessToken, value: accessToken);
-    await _storage.write(key: _kRefreshToken, value: refreshToken);
+    await _storage.write(_kAccessToken, accessToken);
+    await _storage.write(_kRefreshToken, refreshToken);
 
     notifyListeners();
   }
@@ -39,15 +41,14 @@ class AuthStore extends ChangeNotifier {
     _accessToken = null;
     _refreshToken = null;
 
-    await _storage.delete(key: _kAccessToken);
-    await _storage.delete(key: _kRefreshToken);
+    await _storage.delete(_kAccessToken);
+    await _storage.delete(_kRefreshToken);
 
     notifyListeners();
   }
 
-  /// Try to refresh at app start (or on demand)
   Future<bool> tryRefresh(ApiClient api) async {
-    final rt = _refreshToken ?? await _storage.read(key: _kRefreshToken);
+    final rt = _refreshToken ?? await _storage.read(_kRefreshToken);
     if (rt == null || rt.isEmpty) return false;
 
     try {
@@ -64,10 +65,7 @@ class AuthStore extends ChangeNotifier {
     _accessToken = null;
     _refreshToken = null;
 
-    // Wipes everything stored by flutter_secure_storage for this app.
     await _storage.deleteAll();
-
     notifyListeners();
   }
-
 }
