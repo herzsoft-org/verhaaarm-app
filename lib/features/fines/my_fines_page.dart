@@ -1,9 +1,8 @@
-// lib/features/fines/my_fines_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
@@ -18,7 +17,16 @@ class MyFinesPage extends StatefulWidget {
 }
 
 class _MyFinesPageState extends State<MyFinesPage> {
-  bool _loading = true;
+  static const _ttlMyFines = Duration(minutes: 3);
+
+  static const _kMyFinesActivePeriod = 'myfines.activePeriod';
+  static const _kMyFinesBalance = 'myfines.balance';
+  static const _kMyFinesFines = 'myfines.fines';
+  static const _kMyFinesPeriods = 'myfines.periods';
+  static const _kMyFinesUsers = 'myfines.users';
+
+  bool _loading = true; // true only when there is no cache yet
+  bool _refreshing = false; // background refresh while showing cached data
 
   String? _myUserId;
   ConventPeriodDto? _activePeriod;
@@ -42,55 +50,126 @@ class _MyFinesPageState extends State<MyFinesPage> {
     }
     if (s.startsWith('WS')) {
       final m = RegExp(r'^WS(\d{2})').firstMatch(s);
-      final yy = (m == null) ? 0 : int.tryParse(m.group(1)!) ?? 0;
+      final yy = int.tryParse(m?.group(1) ?? '') ?? 0;
       return (year: 2000 + yy, term: 2);
     }
     return (year: 0, term: 0);
   }
 
-  String _userLabel(String id) {
-    final u = _userById[id];
-    if (u == null) return id;
-    return u.displayName;
-  }
+  String _userLabel(String id) => _userById[id]?.displayName ?? id;
 
   String _fineTitle(FineDto f) => 'Beihängung';
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool force = false}) async {
     try {
-      final period = await widget.api.getActivePeriod();
-      final bal = await widget.api.getMyBalance(periodId: period.id);
-      final fines = await widget.api.listFines();
-      final periods = await widget.api.listPeriods();
-      final users = await widget.api.pickerUsers();
+      // 1) Serve cached data immediately (even if partial)
+      final cPeriod = AppCache.I.entry<ConventPeriodDto>(_kMyFinesActivePeriod);
+      final cBal = AppCache.I.entry<UserBalanceDto>(_kMyFinesBalance);
+      final cFines = AppCache.I.entry<List<FineDto>>(_kMyFinesFines);
+      final cPeriods = AppCache.I.entry<List<ConventPeriodDto>>(_kMyFinesPeriods);
+      final cUsers = AppCache.I.entry<List<UserPickerDto>>(_kMyFinesUsers);
 
-      final periodById = {for (final p in periods) p.id: p};
-      final userById = {for (final u in users) u.id: u};
+      final hasAnyCache = (cPeriod != null) ||
+          (cBal != null) ||
+          (cFines != null) ||
+          (cPeriods != null) ||
+          (cUsers != null);
 
-      final mine = fines.where((f) => f.targetUserIds.contains(bal.userId)).toList();
+      if (hasAnyCache && mounted) {
+        final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[]);
+        final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
 
-      if (!mounted) return;
-      setState(() {
-        _activePeriod = period;
-        _myUserId = bal.userId;
-        _mine = mine;
-        _periods = periods;
-        _periodById = periodById;
-        _userById = userById;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Beihängungen laden fehlgeschlagen: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _loading = false);
+        final periodById = {for (final p in periods) p.id: p};
+        final userById = {for (final u in users) u.id: u};
+
+        final myUserId = cBal?.value.userId;
+        final mine = (myUserId == null)
+            ? const <FineDto>[]
+            : (cFines?.value ?? const <FineDto>[])
+            .where((f) => f.targetUserIds.contains(myUserId))
+            .toList();
+
+        setState(() {
+          _activePeriod = cPeriod?.value;
+          _myUserId = myUserId;
+          _mine = mine;
+          _periods = periods;
+          _periodById = periodById;
+          _userById = userById;
+          _loading = false;
+        });
+      }
+
+      final cacheFresh = (cPeriod != null && cPeriod.isFresh(_ttlMyFines)) &&
+          (cBal != null && cBal.isFresh(_ttlMyFines)) &&
+          (cFines != null && cFines.isFresh(_ttlMyFines)) &&
+          (cPeriods != null && cPeriods.isFresh(_ttlMyFines)) &&
+          (cUsers != null && cUsers.isFresh(_ttlMyFines));
+
+      if (!force && cacheFresh) return;
+
+      // 2) Fetch fresh data
+      final showFullSpinner = !hasAnyCache;
+      if (mounted) {
+        setState(() {
+          _loading = showFullSpinner;
+          _refreshing = !showFullSpinner;
+        });
+      }
+
+      try {
+        final period = await widget.api.getActivePeriod();
+        final bal = await widget.api.getMyBalance(periodId: period.id);
+        final fines = await widget.api.listFines();
+        final periods = await widget.api.listPeriods();
+        final users = await widget.api.pickerUsers();
+
+        AppCache.I.set(_kMyFinesActivePeriod, period);
+        AppCache.I.set(_kMyFinesBalance, bal);
+        AppCache.I.set(_kMyFinesFines, List<FineDto>.unmodifiable(fines));
+        AppCache.I.set(_kMyFinesPeriods, List<ConventPeriodDto>.unmodifiable(periods));
+        AppCache.I.set(_kMyFinesUsers, List<UserPickerDto>.unmodifiable(users));
+
+        final periodById = {for (final p in periods) p.id: p};
+        final userById = {for (final u in users) u.id: u};
+
+        final mine = fines.where((f) => f.targetUserIds.contains(bal.userId)).toList();
+
+        if (!mounted) return;
+        setState(() {
+          _activePeriod = period;
+          _myUserId = bal.userId;
+          _mine = mine;
+          _periods = periods;
+          _periodById = periodById;
+          _userById = userById;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Beihängungen laden fehlgeschlagen: $e')),
+        );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _refreshing = false;
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final myId = _myUserId;
     final grouped = _buildGrouped();
 
     return AppScaffold(
@@ -99,16 +178,21 @@ class _MyFinesPageState extends State<MyFinesPage> {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(force: true),
         ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => _load(force: true),
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (_refreshing)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: LinearProgressIndicator(),
+              ),
             if (_activePeriod != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
@@ -117,7 +201,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-            if (_myUserId == null)
+            if (myId == null)
               const Padding(
                 padding: EdgeInsets.all(8),
                 child: Text('Fehler: userId unbekannt.'),
@@ -127,16 +211,17 @@ class _MyFinesPageState extends State<MyFinesPage> {
                 padding: EdgeInsets.all(8),
                 child: Text('Keine Beihängungen gefunden.'),
               ),
-            for (final sem in grouped)
-              _SemesterSection(
-                semester: sem.semester,
-                periods: sem.periods,
-                periodById: _periodById,
-                fineTitle: _fineTitle,
-                userLabel: _userLabel,
-                myUserId: _myUserId!,
-                onTapFine: (id) => context.push('/fines/$id'),
-              ),
+            if (myId != null)
+              for (final sem in grouped)
+                _SemesterSection(
+                  semester: sem.semester,
+                  periods: sem.periods,
+                  periodById: _periodById,
+                  fineTitle: _fineTitle,
+                  userLabel: _userLabel,
+                  myUserId: myId,
+                  onTapFine: (id) => context.push('/fines/$id'),
+                ),
           ],
         ),
       ),
@@ -144,7 +229,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
   }
 
   List<_SemesterGroup> _buildGrouped() {
-    if (_myUserId == null) return [];
+    final myId = _myUserId;
+    if (myId == null) return const [];
 
     final periodsSorted = [..._periods]
       ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));

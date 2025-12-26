@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
+import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
@@ -20,18 +23,31 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with RouteAware {
+  static const _ttlHomeBase = Duration(minutes: 2);
+  static const _ttlHomeLive = Duration(seconds: 20);
+  static const _livePollInterval = Duration(seconds: 20);
+
+  static const _kHomeActivePeriod = 'home.activePeriod';
+  static const _kHomeBalance = 'home.balance';
+  static const _kHomeLiveEvents = 'home.liveEvents';
+  static const _kHomeEvents = 'home.events';
+
   ConventPeriodDto? _activePeriod;
   UserBalanceDto? _balance;
   List<LiveEventDto> _liveEvents = const [];
-
   EventDto? _nextEvent;
 
-  bool _loading = true;
+  bool _loading = true; // true only when there is no cache yet
+  bool _refreshing = false; // background refresh while showing cached data
+
+  Timer? _liveTimer;
+  bool _liveRefreshInFlight = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(); // initial load: serve cache then refresh if needed
+    _startLiveTimer();
   }
 
   @override
@@ -45,6 +61,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   void dispose() {
+    _stopLiveTimer();
     routeObserver.unsubscribe(this);
     super.dispose();
   }
@@ -52,33 +69,144 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void didPopNext() {
     _load();
+    _startLiveTimer();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void didPushNext() {
+    _stopLiveTimer();
+  }
+
+  void _startLiveTimer() {
+    _liveTimer?.cancel();
+    _liveTimer = Timer.periodic(_livePollInterval, (_) async {
+      if (!mounted) return;
+      await _refreshLiveEventsIfNeeded();
+    });
+  }
+
+  void _stopLiveTimer() {
+    _liveTimer?.cancel();
+    _liveTimer = null;
+  }
+
+  Future<void> _refreshLiveEventsIfNeeded() async {
+    if (_liveRefreshInFlight) return;
+
+    final cLive = AppCache.I.entry<List<LiveEventDto>>(_kHomeLiveEvents);
+    if (cLive != null && cLive.isFresh(_ttlHomeLive)) return;
+
+    _liveRefreshInFlight = true;
     try {
-      final period = await widget.api.getActivePeriod();
-      final balance = await widget.api.getMyBalance(periodId: period.id);
-
       final live = await widget.api.listLiveEvents();
-      final events = await widget.api.listEvents();
-
-      final next = _pickNextEvent(events);
-
+      AppCache.I.set(_kHomeLiveEvents, List<LiveEventDto>.unmodifiable(live));
       if (!mounted) return;
       setState(() {
-        _activePeriod = period;
-        _balance = balance;
-        _liveEvents = live;
-        _nextEvent = next;
+        _liveEvents = List<LiveEventDto>.unmodifiable(live);
       });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Laden fehlgeschlagen: $e')),
-      );
+    } catch (_) {
+      // silent
     } finally {
-      if (mounted) setState(() => _loading = false);
+      _liveRefreshInFlight = false;
+    }
+  }
+
+  Future<void> _load({bool force = false}) async {
+    // 1) Serve cached data immediately (partial cache allowed)
+    try {
+      final cPeriod = AppCache.I.entry<ConventPeriodDto>(_kHomeActivePeriod);
+      final cBalance = AppCache.I.entry<UserBalanceDto>(_kHomeBalance);
+      final cLive = AppCache.I.entry<List<LiveEventDto>>(_kHomeLiveEvents);
+      final cEvents = AppCache.I.entry<List<EventDto>>(_kHomeEvents);
+
+      final hasAnyCache =
+          (cPeriod != null) || (cBalance != null) || (cLive != null) || (cEvents != null);
+
+      if (hasAnyCache && mounted) {
+        final events = List<EventDto>.from(cEvents?.value ?? const <EventDto>[]);
+        final next = _pickNextEvent(events);
+
+        setState(() {
+          _activePeriod = cPeriod?.value;
+          _balance = cBalance?.value;
+          _liveEvents = List<LiveEventDto>.unmodifiable(cLive?.value ?? const <LiveEventDto>[]);
+          _nextEvent = next;
+          _loading = false;
+        });
+      }
+
+      final baseFresh = (cPeriod != null && cPeriod.isFresh(_ttlHomeBase)) &&
+          (cBalance != null && cBalance.isFresh(_ttlHomeBase)) &&
+          (cEvents != null && cEvents.isFresh(_ttlHomeBase));
+
+      final liveFresh = (cLive != null && cLive.isFresh(_ttlHomeLive));
+
+      if (!force && baseFresh && liveFresh) return;
+
+      final showFullSpinner = !hasAnyCache;
+      if (mounted) {
+        setState(() {
+          _loading = showFullSpinner;
+          _refreshing = !showFullSpinner;
+        });
+      }
+
+      try {
+        if (!force && baseFresh && !liveFresh) {
+          final live = await widget.api.listLiveEvents();
+          final frozenLive = List<LiveEventDto>.unmodifiable(live);
+          AppCache.I.set(_kHomeLiveEvents, frozenLive);
+
+          if (!mounted) return;
+          setState(() {
+            _liveEvents = frozenLive;
+          });
+          return;
+        }
+
+        final period = await widget.api.getActivePeriod();
+        final balance = await widget.api.getMyBalance(periodId: period.id);
+
+        final live = await widget.api.listLiveEvents();
+        final events = await widget.api.listEvents();
+        final next = _pickNextEvent(events);
+
+        final frozenLive = List<LiveEventDto>.unmodifiable(live);
+        final frozenEvents = List<EventDto>.unmodifiable(events);
+
+        AppCache.I.set(_kHomeActivePeriod, period);
+        AppCache.I.set(_kHomeBalance, balance);
+        AppCache.I.set(_kHomeLiveEvents, frozenLive);
+        AppCache.I.set(_kHomeEvents, frozenEvents);
+
+        if (!mounted) return;
+        setState(() {
+          _activePeriod = period;
+          _balance = balance;
+          _liveEvents = frozenLive;
+          _nextEvent = next;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Laden fehlgeschlagen: $e')),
+        );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _refreshing = false;
+          });
+        }
+      }
+    } catch (_) {
+      // If something goes wrong while applying cache, do not get stuck in a spinner.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
   }
 
@@ -99,7 +227,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
   String _formatBalanceForHome(UserBalanceDto? balance) {
     final cents = balance?.balanceCents ?? 0;
     if (cents == 0) return Format.centsToEur(0);
-
     final absText = Format.centsToEur(cents.abs());
     return '-$absText';
   }
@@ -112,29 +239,27 @@ class _HomePageState extends State<HomePage> with RouteAware {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(force: true),
         ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => _load(force: true),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // 1) Wo geht was? oben
+            if (_refreshing)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: LinearProgressIndicator(),
+              ),
             _buildLiveEventsCard(context),
             const SizedBox(height: 12),
-
-            // 2) Saldo darunter
             _buildBalanceCard(context),
             const SizedBox(height: 12),
-
-            // 3) Nächster Termin Widget statt Kalender-Button
             _buildNextEventCard(context),
             const SizedBox(height: 12),
-
-            // 4) Quick actions inkl. Amtsausführung
             _buildQuickActions(context),
           ],
         ),
@@ -283,10 +408,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      e.title,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
+                    Text(e.title, style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 6),
                     Text(
                       '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}'

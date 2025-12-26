@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
+import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
@@ -19,7 +20,14 @@ class EventsPage extends StatefulWidget {
 }
 
 class _EventsPageState extends State<EventsPage> {
-  bool _loading = true;
+  static const _ttlEvents = Duration(minutes: 3);
+
+  static const _kEventsPeriods = 'events.periods';
+  static const _kEventsEvents = 'events.events';
+  static const _kEventsUsers = 'events.users';
+
+  bool _loading = true; // true only when there is no cache yet
+  bool _refreshing = false; // background refresh while showing cached data
 
   List<EventDto> _events = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
@@ -42,7 +50,7 @@ class _EventsPageState extends State<EventsPage> {
     }
     if (s.startsWith('WS')) {
       final m = RegExp(r'^WS(\d{2})').firstMatch(s);
-      final yy = (m == null) ? 0 : int.tryParse(m.group(1)!) ?? 0;
+      final yy = int.tryParse(m?.group(1) ?? '') ?? 0;
       return (year: 2000 + yy, term: 2);
     }
     return (year: 0, term: 0);
@@ -50,57 +58,112 @@ class _EventsPageState extends State<EventsPage> {
 
   String _userName(String id) {
     final u = _userById[id];
-    if (u == null) return id;
-    return u.displayName;
+    return u?.displayName ?? id;
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool force = false}) async {
+    // 1) Serve cached data immediately (even if partial)
     try {
-      final periods = await widget.api.listPeriods();
-      final events = await widget.api.listEvents();
-      final users = await widget.api.pickerUsers();
+      final cPeriods = AppCache.I.entry<List<ConventPeriodDto>>(_kEventsPeriods);
+      final cEvents = AppCache.I.entry<List<EventDto>>(_kEventsEvents);
+      final cUsers = AppCache.I.entry<List<UserPickerDto>>(_kEventsUsers);
 
-      // sort periods by startAt ascending for deterministic range matching
-      periods.sort((a, b) => a.startAt.compareTo(b.startAt));
+      final hasPeriods = cPeriods != null;
+      final hasEvents = cEvents != null;
+      final hasUsers = cUsers != null;
+      final hasAnyCache = hasPeriods || hasEvents || hasUsers;
 
-      final periodById = {for (final p in periods) p.id: p};
-      final userById = {for (final u in users) u.id: u};
+      if (hasAnyCache && mounted) {
+        final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodById = {for (final p in periods) p.id: p};
 
-      if (!mounted) return;
-      setState(() {
-        _periodById = periodById;
-        _periodsSorted = periods;
-        _userById = userById;
-        _events = events;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Termine laden fehlgeschlagen: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _loading = false);
+        final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
+        final userById = {for (final u in users) u.id: u};
+
+        setState(() {
+          _periodsSorted = periods;
+          _periodById = periodById;
+          _userById = userById;
+          _events = List<EventDto>.from(cEvents?.value ?? const <EventDto>[]);
+          _loading = false;
+        });
+      }
+
+      final cacheFresh = (cPeriods != null && cPeriods.isFresh(_ttlEvents)) &&
+          (cEvents != null && cEvents.isFresh(_ttlEvents)) &&
+          (cUsers != null && cUsers.isFresh(_ttlEvents));
+
+      if (!force && cacheFresh) return;
+
+      // 2) Fetch fresh data
+      final showFullSpinner = !hasAnyCache;
+      if (mounted) {
+        setState(() {
+          _loading = showFullSpinner;
+          _refreshing = !showFullSpinner;
+        });
+      }
+
+      try {
+        final periods = await widget.api.listPeriods();
+        final events = await widget.api.listEvents();
+        final users = await widget.api.pickerUsers();
+
+        final frozenPeriods = List<ConventPeriodDto>.unmodifiable(periods);
+        final frozenEvents = List<EventDto>.unmodifiable(events);
+        final frozenUsers = List<UserPickerDto>.unmodifiable(users);
+
+        AppCache.I.set(_kEventsPeriods, frozenPeriods);
+        AppCache.I.set(_kEventsEvents, frozenEvents);
+        AppCache.I.set(_kEventsUsers, frozenUsers);
+
+        final periodsSorted = List<ConventPeriodDto>.from(periods)
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodById = {for (final p in periodsSorted) p.id: p};
+        final userById = {for (final u in users) u.id: u};
+
+        if (!mounted) return;
+        setState(() {
+          _periodById = periodById;
+          _periodsSorted = periodsSorted;
+          _userById = userById;
+          _events = events;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Termine laden fehlgeschlagen: $e')),
+        );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _refreshing = false;
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
   }
 
   bool _canEditEvent(Set<AppRole> roles, EventDto e) {
     if (Roles.canManageAnyEvent(roles)) return true;
-    if (Roles.isHousekeeping(roles) && e.ownerType == EventOwnerType.housekeeping) {
-      return false;
-    }
+    if (Roles.isHousekeeping(roles) && e.ownerType == EventOwnerType.housekeeping) return true;
     return false;
   }
 
   ConventPeriodDto? _periodForEvent(EventDto e) {
-    // event time is ISO UTC; compare in local time consistently
     final dt = Format.parseIsoToLocal(e.startsAt);
-
     for (final p in _periodsSorted) {
       final start = Format.parseIsoToLocal(p.startAt);
       final end = Format.parseIsoToLocal(p.endAt);
-
-      // inclusive start + inclusive end
       if (!dt.isBefore(start) && !dt.isAfter(end)) return p;
     }
     return null;
@@ -119,7 +182,7 @@ class _EventsPageState extends State<EventsPage> {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(force: true),
         ),
         IconButton(
           tooltip: _showPast ? 'Vergangenheit ausblenden' : 'Vergangenheit anzeigen',
@@ -140,10 +203,15 @@ class _EventsPageState extends State<EventsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => _load(force: true),
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (_refreshing)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: LinearProgressIndicator(),
+              ),
             if (grouped.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(8),
@@ -166,14 +234,11 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   List<_SemesterGroup> _buildGrouped(List<EventDto> all) {
-    // Group: Semester -> Period -> events
     final Map<String, Map<String, List<EventDto>>> map = {};
 
     for (final e in all) {
       final p = _periodForEvent(e);
       final semester = p?.semester ?? 'Unbekannt';
-
-      // if unknown, group by a stable pseudo id to avoid mixing with real ids
       final pid = p?.id ?? 'unknown';
 
       map.putIfAbsent(semester, () => {});
@@ -195,7 +260,6 @@ class _EventsPageState extends State<EventsPage> {
       final periodMap = map[sem]!;
       final periodIds = periodMap.keys.toList()
         ..sort((a, b) {
-          // unknown goes last
           if (a == 'unknown' && b != 'unknown') return 1;
           if (b == 'unknown' && a != 'unknown') return -1;
 
@@ -203,13 +267,12 @@ class _EventsPageState extends State<EventsPage> {
           final pb = _periodById[b];
           final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pa.startAt);
           final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pb.startAt);
-          return db.compareTo(da); // newest period first within semester
+          return db.compareTo(da);
         });
 
       final periods = <_PeriodGroup>[];
       for (final pid in periodIds) {
-        final events = [...periodMap[pid]!]
-          ..sort((a, b) => a.startsAt.compareTo(b.startsAt)); // chronological in a period
+        final events = [...periodMap[pid]!]..sort((a, b) => a.startsAt.compareTo(b.startsAt));
         periods.add(_PeriodGroup(periodId: pid, events: events));
       }
 
