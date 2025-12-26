@@ -1,18 +1,18 @@
-// lib/features/profile/profile_page.dart
 import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jwt_decode/jwt_decode.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
+import '../../common/cache/app_cache.dart';
 import '../../common/widgets/app_scaffold.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -26,7 +26,12 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  bool _loading = true;
+  // Profile changes rarely; cache a bit longer.
+  static const _ttlProfile = Duration(minutes: 10);
+  static const _kProfile = 'profile.snapshot';
+
+  bool _loading = true; // true only when no cache exists yet
+  bool _refreshing = false; // background refresh while showing cached data
 
   // User identity
   String _displayName = '—';
@@ -46,113 +51,166 @@ class _ProfilePageState extends State<ProfilePage> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool force = false}) async {
+    // 1) Serve cached data immediately
+    final c = AppCache.I.entry<_ProfileSnapshot>(_kProfile);
+    final hasCache = c != null;
+
+    if (hasCache && mounted) {
+      _applySnapshot(c.value);
+      setState(() {
+        _loading = false;
+      });
+
+      if (!force && c.isFresh(_ttlProfile)) return;
+    }
+
+    // 2) Fetch fresh data
+    final showFullSpinner = !hasCache;
+    if (mounted) {
+      setState(() {
+        _loading = showFullSpinner;
+        _refreshing = !showFullSpinner;
+      });
+    }
 
     try {
-      final token = widget.authStore.accessToken;
-
-      // --- roles (your implementation returns Set<AppRole>)
-      final roleSet = Roles.fromAccessToken(token);
-      _roleLabel = _roleLabelFromRoleSet(roleSet);
-
-      // --- minimal session info
-      _sessionLabel = widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
-
-      // --- app info
-      final pkg = await PackageInfo.fromPlatform();
-      _appVersion = '${pkg.version} (${pkg.buildNumber})';
-
-      // --- device info (no extra permissions)
-      final deviceInfo = DeviceInfoPlugin();
-      _platformLabel = _computePlatformLabel();
-
-      if (kIsWeb) {
-        final web = await deviceInfo.webBrowserInfo;
-        final ua = (web.userAgent ?? '').trim();
-        _deviceLabel = [
-          if (web.browserName.name.isNotEmpty) web.browserName.name,
-          if (ua.isNotEmpty) 'UA: $ua',
-        ].join(' • ');
-        if (_deviceLabel.isEmpty) _deviceLabel = '—';
-      } else if (Platform.isAndroid) {
-        final a = await deviceInfo.androidInfo;
-        _deviceLabel = '${a.manufacturer} ${a.model} (SDK ${a.version.sdkInt})';
-      } else if (Platform.isIOS) {
-        final i = await deviceInfo.iosInfo;
-        _deviceLabel = '${i.name} ${i.model} (${i.systemName} ${i.systemVersion})';
-      } else if (Platform.isLinux) {
-        final l = await deviceInfo.linuxInfo;
-        _deviceLabel = '${l.name} ${l.version}';
-      } else if (Platform.isMacOS) {
-        final m = await deviceInfo.macOsInfo;
-        _deviceLabel = '${m.computerName} (${m.osRelease})';
-      } else if (Platform.isWindows) {
-        final w = await deviceInfo.windowsInfo;
-        _deviceLabel = 'Windows (build ${w.buildNumber})';
-      } else {
-        _deviceLabel = '—';
-      }
-
-      final locale = WidgetsBinding.instance.platformDispatcher.locale;
-      _localeLabel = '${locale.languageCode}_${locale.countryCode ?? ''}'.trim();
-
-      // --- identity: best-effort from token, otherwise try GET /users/{id}
-      if (token != null && token.isNotEmpty) {
-        try {
-          final payload = Jwt.parseJwt(token);
-
-          if (kDebugMode) {
-            // ignore: avoid_print
-            print('JWT payload: $payload');
-          }
-
-          // Try common claim names (adjust after you see payload)
-          String? pickString(dynamic v) {
-            final s = v?.toString().trim();
-            return (s != null && s.isNotEmpty) ? s : null;
-          }
-
-          final dn = pickString(payload['displayName']) ??
-              pickString(payload['display_name']) ??
-              pickString(payload['name']);
-
-          final un = pickString(payload['username']) ??
-              pickString(payload['preferred_username']) ??
-              pickString(payload['login']);
-
-          if (dn != null) _displayName = dn;
-          if (un != null) _username = un;
-
-          // Try to find a UUID user id from several keys
-          final idCandidate = pickString(payload['userId']) ??
-              pickString(payload['user_id']) ??
-              pickString(payload['id']) ??
-              pickString(payload['uid']) ??
-              pickString(payload['sub']);
-
-          final userId = (idCandidate != null && _looksLikeUuid(idCandidate)) ? idCandidate : null;
-
-          if (userId != null && (_displayName == '—' || _username == '—')) {
-            try {
-              final u = await widget.api.getUser(userId);
-              if (u.displayName.trim().isNotEmpty) _displayName = u.displayName.trim();
-              if (u.username.trim().isNotEmpty) _username = u.username.trim();
-            } catch (_) {
-              // ignore
-            }
-          }
-        } catch (_) {
-          // ignore
-        }
-      }
+      final snap = await _buildSnapshot();
+      AppCache.I.set(_kProfile, snap);
 
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _applySnapshot(snap);
+      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      // keep whatever is shown (cached or default)
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
+  }
+
+  void _applySnapshot(_ProfileSnapshot s) {
+    _displayName = s.displayName;
+    _username = s.username;
+    _roleLabel = s.roleLabel;
+
+    _appVersion = s.appVersion;
+    _platformLabel = s.platformLabel;
+    _deviceLabel = s.deviceLabel;
+    _localeLabel = s.localeLabel;
+    _sessionLabel = s.sessionLabel;
+  }
+
+  Future<_ProfileSnapshot> _buildSnapshot() async {
+    final token = widget.authStore.accessToken ?? '';
+
+    // roles
+    final roleSet = Roles.fromAccessToken(token);
+    final roleLabel = _roleLabelFromRoleSet(roleSet);
+
+    // minimal session info
+    final sessionLabel = widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
+
+    // app info
+    final pkg = await PackageInfo.fromPlatform();
+    final appVersion = '${pkg.version} (${pkg.buildNumber})';
+
+    // device info (no extra permissions)
+    final deviceInfo = DeviceInfoPlugin();
+    final platformLabel = _computePlatformLabel();
+
+    String deviceLabel = '—';
+    if (kIsWeb) {
+      final web = await deviceInfo.webBrowserInfo;
+      final ua = (web.userAgent ?? '').trim();
+      final parts = <String>[
+        if (web.browserName.name.isNotEmpty) web.browserName.name,
+        if (ua.isNotEmpty) 'UA: $ua',
+      ];
+      deviceLabel = parts.isEmpty ? '—' : parts.join(' • ');
+    } else if (Platform.isAndroid) {
+      final a = await deviceInfo.androidInfo;
+      deviceLabel = '${a.manufacturer} ${a.model} (SDK ${a.version.sdkInt})';
+    } else if (Platform.isIOS) {
+      final i = await deviceInfo.iosInfo;
+      deviceLabel = '${i.name} ${i.model} (${i.systemName} ${i.systemVersion})';
+    } else if (Platform.isLinux) {
+      final l = await deviceInfo.linuxInfo;
+      deviceLabel = '${l.name} ${l.version}';
+    } else if (Platform.isMacOS) {
+      final m = await deviceInfo.macOsInfo;
+      deviceLabel = '${m.computerName} (${m.osRelease})';
+    } else if (Platform.isWindows) {
+      final w = await deviceInfo.windowsInfo;
+      deviceLabel = 'Windows (build ${w.buildNumber})';
+    }
+
+    final locale = WidgetsBinding.instance.platformDispatcher.locale;
+    final localeLabel = '${locale.languageCode}_${locale.countryCode ?? ''}'.trim();
+
+    // identity: best-effort from token, otherwise try GET /users/{id}
+    String displayName = '—';
+    String username = '—';
+
+    if (token.isNotEmpty) {
+      try {
+        final payload = Jwt.parseJwt(token);
+
+        String? pickString(dynamic v) {
+          final s = v?.toString().trim();
+          return (s != null && s.isNotEmpty) ? s : null;
+        }
+
+        final dn = pickString(payload['displayName']) ??
+            pickString(payload['display_name']) ??
+            pickString(payload['name']);
+
+        final un = pickString(payload['username']) ??
+            pickString(payload['preferred_username']) ??
+            pickString(payload['login']);
+
+        if (dn != null) displayName = dn;
+        if (un != null) username = un;
+
+        final idCandidate = pickString(payload['userId']) ??
+            pickString(payload['user_id']) ??
+            pickString(payload['id']) ??
+            pickString(payload['uid']) ??
+            pickString(payload['sub']);
+
+        final userId = (idCandidate != null && _looksLikeUuid(idCandidate)) ? idCandidate : null;
+
+        if (userId != null && (displayName == '—' || username == '—')) {
+          try {
+            final u = await widget.api.getUser(userId);
+            final dn2 = u.displayName.trim();
+            final un2 = u.username.trim();
+            if (dn2.isNotEmpty) displayName = dn2;
+            if (un2.isNotEmpty) username = un2;
+          } catch (_) {
+            // ignore
+          }
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    return _ProfileSnapshot(
+      displayName: displayName,
+      username: username,
+      roleLabel: roleLabel,
+      sessionLabel: sessionLabel,
+      appVersion: appVersion,
+      platformLabel: platformLabel,
+      deviceLabel: deviceLabel,
+      localeLabel: localeLabel,
+    );
   }
 
   static bool _looksLikeUuid(String s) {
@@ -177,7 +235,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   static String _roleLabelFromRoleSet(Set<AppRole> roles) {
-    // Adjust ordering to your desired “level” display
     if (roles.contains(AppRole.admin)) return 'Admin';
     if (roles.contains(AppRole.senior)) return 'Senior';
     if (roles.contains(AppRole.treasurer)) return 'Treasurer';
@@ -196,6 +253,9 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     await widget.authStore.clearAllUserData();
+
+    // Important: clear cached profile so next login doesn't show the previous user's info.
+    AppCache.I.remove(_kProfile);
 
     if (!mounted) return;
     context.go('/login');
@@ -223,9 +283,21 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Profil',
+      actions: [
+        IconButton(
+          tooltip: 'Neu laden',
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: _loading ? null : () => _load(force: true),
+        ),
+      ],
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_refreshing)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(),
+            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -258,7 +330,11 @@ class _ProfilePageState extends State<ProfilePage> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            Icon(Icons.verified_user_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
+                            Icon(
+                              Icons.verified_user_rounded,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                             const SizedBox(width: 6),
                             Text(_roleLabel, style: Theme.of(context).textTheme.bodyMedium),
                           ],
@@ -330,9 +406,31 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             textAlign: TextAlign.center,
           ),
-
         ],
       ),
     );
   }
+}
+
+class _ProfileSnapshot {
+  final String displayName;
+  final String username;
+  final String roleLabel;
+
+  final String appVersion;
+  final String platformLabel;
+  final String deviceLabel;
+  final String localeLabel;
+  final String sessionLabel;
+
+  const _ProfileSnapshot({
+    required this.displayName,
+    required this.username,
+    required this.roleLabel,
+    required this.sessionLabel,
+    required this.appVersion,
+    required this.platformLabel,
+    required this.deviceLabel,
+    required this.localeLabel,
+  });
 }

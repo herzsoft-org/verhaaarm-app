@@ -58,7 +58,7 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
       final hasCache = c != null;
 
       if (hasCache && mounted) {
-        final cachedList = List<LiveEventDto>.from(c!.value);
+        final cachedList = List<LiveEventDto>.from(c.value);
         setState(() {
           _items = List<LiveEventDto>.unmodifiable(cachedList);
           _loading = false;
