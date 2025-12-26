@@ -7,7 +7,7 @@
 .buildlog/
 .history
 
-
+/.idea/workspace.xml
 
 # Flutter repo-specific
 /bin/cache/
