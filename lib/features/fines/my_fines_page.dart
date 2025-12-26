@@ -469,6 +469,7 @@ class _PeriodSection extends StatelessWidget {
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: ListTile(
+                  titleAlignment: ListTileTitleAlignment.center,
                   leading: const Icon(Icons.gavel_rounded),
                   title: Text(fineTitle(f)),
                   subtitle: Text(_subtitleForFine(f)),

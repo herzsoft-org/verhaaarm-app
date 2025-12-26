@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../auth/auth_api.dart';
 import '../auth/auth_interceptor.dart';
@@ -115,19 +116,33 @@ class ApiClient {
 
   Future<FinePhotoDto> uploadFinePhoto({
     required String fineId,
-    required String filePath,
+    String? filePath,            // native
+    Uint8List? bytes,            // web
     required String filename,
+    String? contentType,         // optional
   }) async {
-    final form = FormData.fromMap({
-      'file': await MultipartFile.fromFile(filePath, filename: filename),
-    });
+    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+      throw ArgumentError('Provide exactly one of filePath or bytes.');
+    }
+
+    final MultipartFile mf = (bytes != null)
+        ? MultipartFile.fromBytes(
+      bytes,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    )
+        : await MultipartFile.fromFile(
+      filePath!,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    );
+
+    final form = FormData.fromMap({'file': mf});
 
     final r = await dio.post(
       '/fines/$fineId/photos',
       data: form,
-      options: Options(
-        contentType: 'multipart/form-data',
-      ),
+      options: Options(contentType: 'multipart/form-data'),
     );
 
     return FinePhotoDto.fromJson(r.data as Map<String, dynamic>);

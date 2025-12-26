@@ -182,6 +182,7 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Card(
                   child: ListTile(
+                    titleAlignment: ListTileTitleAlignment.center,
                     leading: const Icon(Icons.group_rounded),
                     title: Text(e.title),
                     subtitle: Text(

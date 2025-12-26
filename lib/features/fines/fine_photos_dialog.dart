@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -95,10 +98,54 @@ class _FinePhotosAddSheetState extends State<_FinePhotosAddSheet> {
     if (_busy) return;
     if (!widget.canAdd) return;
 
-    final picker = ImagePicker();
-
     try {
       setState(() => _busy = true);
+
+      final allowedSlots = widget.remainingSlots;
+      if (allowedSlots <= 0) return;
+
+      // --- WEB: use FilePicker -> bytes (best compatibility incl. iOS Safari)
+      if (kIsWeb) {
+        final res = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          allowMultiple: true,
+          withData: true, // IMPORTANT: bytes are needed for upload on web
+        );
+
+        if (res == null || res.files.isEmpty) return;
+
+        final picked = res.files;
+        final allowed = picked.take(allowedSlots).toList();
+        final rejectedCount = picked.length - allowed.length;
+
+        if (allowed.isEmpty) return;
+
+        for (final pf in allowed) {
+          final bytes = pf.bytes;
+          if (bytes == null) {
+            throw Exception('No bytes returned for "${pf.name}".');
+          }
+
+          await widget.api.uploadFinePhoto(
+            fineId: widget.fineId,
+            bytes: bytes,
+            filename: pf.name,
+            // contentType: null, // optional (ApiClient can infer / you can set if needed)
+          );
+        }
+
+        if (!mounted) return;
+        final msg = rejectedCount > 0
+            ? '${allowed.length} Foto(s) hochgeladen. ($rejectedCount ignoriert, Limit: ${widget.maxPhotos})'
+            : '${allowed.length} Foto(s) hochgeladen.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+        Navigator.of(context).pop();
+        return;
+      }
+
+      // --- NATIVE (Android/iOS): use image_picker -> file paths
+      final picker = ImagePicker();
 
       final List<XFile> files;
       if (fromCamera) {
@@ -114,10 +161,8 @@ class _FinePhotosAddSheetState extends State<_FinePhotosAddSheet> {
 
       if (files.isEmpty) return;
 
-      final allowed = files.take(widget.remainingSlots).toList();
+      final allowed = files.take(allowedSlots).toList();
       final rejectedCount = files.length - allowed.length;
-
-      if (allowed.isEmpty) return;
 
       for (final f in allowed) {
         await widget.api.uploadFinePhoto(
@@ -178,7 +223,7 @@ class _FinePhotosAddSheetState extends State<_FinePhotosAddSheet> {
         FilledButton.tonalIcon(
           onPressed: canAdd ? () => _pickAndUpload(fromCamera: false) : null,
           icon: const Icon(Icons.photo_library_outlined),
-          label: const Text('Aus Galerie auswählen'),
+          label: Text(isWeb ? 'Bilder auswählen' : 'Aus Galerie auswählen'),
         ),
         const SizedBox(height: 10),
         FilledButton.icon(
@@ -390,7 +435,9 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    (_photos[_index].originalFilename.isEmpty) ? 'Foto' : _photos[_index].originalFilename,
+                    (_photos[_index].originalFilename.isEmpty)
+                        ? 'Foto'
+                        : _photos[_index].originalFilename,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall,
