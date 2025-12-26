@@ -125,14 +125,17 @@ class _EventFormPageState extends State<EventFormPage> {
 
     if (!mounted) return;
     setState(() {
-      _startsAtLocal = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _startsAtLocal =
+          DateTime(date.year, date.month, date.day, time.hour, time.minute);
     });
   }
 
   String? _validate() {
     if (_title.text.trim().isEmpty) return 'Bitte Titel eingeben.';
     if (_startsAtLocal == null) return 'Bitte Datum/Uhrzeit wählen.';
-    if (_startsAtLocal!.isBefore(DateTime.now())) return 'Termin darf nicht in der Vergangenheit liegen.';
+    if (_startsAtLocal!.isBefore(DateTime.now())) {
+      return 'Termin darf nicht in der Vergangenheit liegen.';
+    }
     return null;
   }
 
@@ -268,8 +271,14 @@ class _EventFormPageState extends State<EventFormPage> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('OK')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );
@@ -368,7 +377,8 @@ class _EventFormPageState extends State<EventFormPage> {
           ? const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('Keine Berechtigung (nur Senior/Housekeeping/Admin).'),
+          child: Text(
+              'Keine Berechtigung (nur Senior/Housekeeping/Admin).'),
         ),
       )
           : ListView(
@@ -380,13 +390,15 @@ class _EventFormPageState extends State<EventFormPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Details', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Details',
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
 
                   // derived period display (read-only)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.calendar_month_rounded),
+                    leading:
+                    const Icon(Icons.calendar_month_rounded),
                     title: const Text('Periode (automatisch)'),
                     subtitle: Text(derivedText),
                   ),
@@ -414,11 +426,10 @@ class _EventFormPageState extends State<EventFormPage> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _mandatory,
-                    onChanged: _saving ? null : (v) => setState(() => _mandatory = v),
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _mandatory = v),
                     title: const Text('Pflichttermin'),
-                    subtitle: Text(
-                      'Owner: ${Roles.isHousekeeping(roles) ? 'HOUSEKEEPING' : 'SENIOR'}',
-                    ),
                   ),
                 ],
               ),
@@ -434,35 +445,54 @@ class _EventFormPageState extends State<EventFormPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    // Header + actions (clean on phones, buttons wrap nicely)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Anwesenheit', style: Theme.of(context).textTheme.titleMedium),
-                        const Spacer(),
-                        FilledButton.tonalIcon(
-                          onPressed: _saving ? null : () => _addAttendance(AttendanceStatus.absent),
-                          icon: const Icon(Icons.person_off_rounded),
-                          label: const Text('Abwesend'),
+                        Text(
+                          'Anwesenheit',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                          onPressed: _saving ? null : () => _addAttendance(AttendanceStatus.late),
-                          icon: const Icon(Icons.timer_rounded),
-                          label: const Text('Zu spät'),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.tonalIcon(
+                              onPressed: _saving
+                                  ? null
+                                  : () => _addAttendance(AttendanceStatus.absent),
+                              icon: const Icon(Icons.person_off_rounded),
+                              label: const Text('Bbr. abwesend?'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: _saving
+                                  ? null
+                                  : () => _addAttendance(AttendanceStatus.late),
+                              icon: const Icon(Icons.timer_rounded),
+                              label: const Text('Bbr. zu spät?'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 12),
+
                     if (_attendance.isEmpty)
                       Text(
-                        'Keine Einträge (Default: alle anwesend).',
+                        'Keine Bbr. abwesend oder zu spät :)',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+
                     for (final a in _attendance)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Card(
                           elevation: 0,
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                           child: ListTile(
                             leading: Icon(
                               a.status == AttendanceStatus.absent
@@ -477,7 +507,9 @@ class _EventFormPageState extends State<EventFormPage> {
                             ),
                             trailing: IconButton(
                               tooltip: 'Entfernen',
-                              onPressed: _saving ? null : () => _removeAttendance(a.userId),
+                              onPressed: _saving
+                                  ? null
+                                  : () => _removeAttendance(a.userId),
                               icon: const Icon(Icons.delete_outline_rounded),
                             ),
                           ),
@@ -489,6 +521,7 @@ class _EventFormPageState extends State<EventFormPage> {
             ),
           ],
 
+
           const SizedBox(height: 12),
           Row(
             children: [
@@ -496,7 +529,9 @@ class _EventFormPageState extends State<EventFormPage> {
                 child: FilledButton.icon(
                   onPressed: _saving ? null : _save,
                   icon: const Icon(Icons.save_rounded),
-                  label: Text(_existing == null ? 'Erstellen' : 'Speichern'),
+                  label: Text(_existing == null
+                      ? 'Erstellen'
+                      : 'Speichern'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -515,7 +550,3 @@ class _EventFormPageState extends State<EventFormPage> {
     );
   }
 }
-
-//extension<T> on Iterable<T> {
-//  T? get firstOrNull => isEmpty ? null : first;
-//}
