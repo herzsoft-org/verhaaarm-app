@@ -4,7 +4,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'common/cache/app_cache.dart';
-import 'common/widgets/mobile_web_keyboard_fix.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,17 +28,16 @@ class VerhaaarmApp extends StatelessWidget {
       darkTheme: buildAppTheme(),
       themeMode: ThemeMode.dark,
       routerConfig: router,
+
+      // Keep your global bottom safe-area protection.
       builder: (context, child) {
         if (child == null) return const SizedBox.shrink();
-
-        return MobileWebKeyboardFix(
-          child: SafeArea(
-            top: false,
-            bottom: true,
-            left: false,
-            right: false,
-            child: child,
-          ),
+        return SafeArea(
+          top: false,
+          bottom: true,
+          left: false,
+          right: false,
+          child: child,
         );
       },
     );
