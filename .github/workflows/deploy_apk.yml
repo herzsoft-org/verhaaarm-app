@@ -40,26 +40,34 @@ jobs:
       #   ANDROID_KEYSTORE_PASSWORD
       #   ANDROID_KEY_PASSWORD
       #   ANDROID_KEY_ALIAS
-      - name: Prepare Android keystore + key.properties
+      - name: Prepare Android keystore + key.properties (trim)
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p android/app
 
-          printf '%s' "${{ secrets.ANDROID_KEYSTORE_B64 }}" | tr -d '\r\n' | base64 -d > android/app/release.jks
+          # decode keystore (strip whitespace just in case)
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_B64 }}" | tr -d '\r\n ' | base64 -d > android/app/release.jks
           chmod 600 android/app/release.jks
+          ls -la android/app/release.jks
+
+          # trim secrets (CR/LF are the usual culprits)
+          STORE_PW="$(printf '%s' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | tr -d '\r\n')"
+          KEY_PW="$(printf '%s' "${{ secrets.ANDROID_KEY_PASSWORD }}" | tr -d '\r\n')"
+          ALIAS="$(printf '%s' "${{ secrets.ANDROID_KEY_ALIAS }}" | tr -d '\r\n')"
 
           cat > android/key.properties <<EOF
           storeFile=release.jks
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storePassword=$STORE_PW
+          keyPassword=$KEY_PW
+          keyAlias=$ALIAS
           EOF
 
           echo "== key.properties created =="
           sed -e 's/storePassword=.*/storePassword=*** /' \
-              -e 's/keyPassword=.*/keyPassword=*** /' android/key.properties
+              -e 's/keyPassword=.*/keyPassword=*** /' \
+              -e 's/keyAlias=.*/keyAlias=*** /' android/key.properties
 
       - name: Keystore sanity check (verbose)
         shell: bash
