@@ -2,7 +2,7 @@ name: verhaaarm
 description: "Verhåårm App"
 publish_to: 'none'
 
-version: 1.0.2+1
+version: 1.0.2+3
 
 environment:
   sdk: ^3.10.4
@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
 
   jwt_decode: ^0.3.1
+
+  web: any
 
   cupertino_icons: ^1.0.8
 

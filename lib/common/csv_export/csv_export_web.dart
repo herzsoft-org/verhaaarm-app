@@ -1,20 +1,34 @@
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'dart:typed_data';
+
+import 'package:web/web.dart' as web;
 
 Future<void> saveCsvBytes({
   required List<int> bytes,
   required String filename,
   String? shareText,
 }) async {
-  final blob = html.Blob(<dynamic>[bytes], 'text/csv;charset=utf-8');
-  final url = html.Url.createObjectUrlFromBlob(blob);
+  // Dart bytes -> JS typed array
+  final jsBytes = Uint8List.fromList(bytes).toJS; // JSUint8Array :contentReference[oaicite:1]{index=1}
 
-  final a = html.AnchorElement(href: url)
+  // JSArray<BlobPart> bauen (package:web erwartet das)
+  final blobParts = ([jsBytes] as dynamic) as JSArray<web.BlobPart>; // :contentReference[oaicite:2]{index=2}
+
+  final blob = web.Blob(
+    blobParts,
+    web.BlobPropertyBag(type: 'text/csv;charset=utf-8'),
+  );
+
+  final url = web.URL.createObjectURL(blob);
+
+  final a = web.HTMLAnchorElement()
+    ..href = url
     ..download = filename
     ..style.display = 'none';
 
-  html.document.body?.children.add(a);
+  web.document.body?.append(a);
   a.click();
   a.remove();
 
-  html.Url.revokeObjectUrl(url);
+  web.URL.revokeObjectURL(url);
 }
