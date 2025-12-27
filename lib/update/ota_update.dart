@@ -260,10 +260,10 @@ class OtaUpdateController extends ChangeNotifier {
       final current = '${pkg.version}+${pkg.buildNumber}';
 
       // First: cleanup old APKs and detect cached newer one (for "Install" after restart)
-      final bestCached = await _cleanupAndFindBestCachedApk(current);
+      var bestCached = await _cleanupAndFindBestCachedApk(current);
 
       // Default latest (in case network fails): use cached as "latest" so banner can still appear
-      OtaLatest latestFallback = OtaLatest(
+      final latestFallback = OtaLatest(
         version: bestCached?.version ?? current,
         sha1: '',
       );
@@ -278,6 +278,13 @@ class OtaUpdateController extends ChangeNotifier {
         latest = OtaLatest.fromJson(map);
       } catch (_) {
         latest = latestFallback;
+      }
+
+      // If we have a cached APK but the network-latest is newer, the cached APK should NOT offer "Install".
+      // Delete it and force the banner back to "Download".
+      if (bestCached != null && compareAppVersions(bestCached.version, latest.version) < 0) {
+        await _deleteFileQuietly(bestCached.path);
+        bestCached = null;
       }
 
       final newState = OtaUpdateState(
@@ -305,7 +312,6 @@ class OtaUpdateController extends ChangeNotifier {
     if (kIsWeb || !Platform.isAndroid) return;
 
     // We download the network-latest version, not "effective".
-    // (If you want to download "effective", you must also host it.)
     final targetVersion = st.latest.version;
 
     // If there is no update available, no need to download.

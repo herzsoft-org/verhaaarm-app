@@ -18,7 +18,13 @@ class OtaUpdateBanner extends StatelessWidget {
         final cs = Theme.of(context).colorScheme;
 
         final effective = st.effectiveAvailableVersion;
-        final hasCachedInstall = st.downloadedPath != null;
+
+        // Only show "Install" if the cached APK is for the current network-latest (or newer fallback),
+        // and it's actually newer than what's installed.
+        final canInstallCached = st.downloadedPath != null &&
+            st.cachedApkVersion != null &&
+            compareAppVersions(st.cachedApkVersion!, st.currentVersion) > 0 &&
+            compareAppVersions(st.cachedApkVersion!, st.latest.version) >= 0;
 
         return Card(
           color: cs.surfaceContainerLow,
@@ -44,7 +50,7 @@ class OtaUpdateBanner extends StatelessWidget {
                   'Installed: ${st.currentVersion}  •  Available: $effective',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (hasCachedInstall && st.cachedApkVersion != null) ...[
+                if (canInstallCached && st.cachedApkVersion != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     'Cached update ready to install.',
@@ -72,28 +78,24 @@ class OtaUpdateBanner extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    FilledButton.icon(
-                      onPressed: st.downloading ? null : () => controller.downloadLatest(),
-                      icon: const Icon(Icons.download_rounded),
-                      label: Text(hasCachedInstall ? 'Re-download' : 'Download'),
-                    ),
+                    // Only one of these is shown at a time:
+                    if (!canInstallCached)
+                      FilledButton.icon(
+                        onPressed: st.downloading ? null : () => controller.downloadLatest(),
+                        icon: const Icon(Icons.download_rounded),
+                        label: const Text('Download'),
+                      )
+                    else
+                      FilledButton.icon(
+                        onPressed: st.downloading ? null : () => controller.installDownloaded(),
+                        icon: const Icon(Icons.install_mobile_rounded),
+                        label: const Text('Install'),
+                      ),
+
                     FilledButton.tonalIcon(
                       onPressed: st.downloading ? null : () => controller.checkNow(),
                       icon: const Icon(Icons.refresh_rounded),
                       label: const Text('Retry'),
-                    ),
-                    if (st.downloadedPath != null)
-                      FilledButton.icon(
-                        onPressed: () => controller.installDownloaded(),
-                        icon: const Icon(Icons.install_mobile_rounded),
-                        label: const Text('Install'),
-                      ),
-                    TextButton(
-                      onPressed: () {
-                        // “Later”: do nothing. Banner stays until next check or app restart.
-                        // If you want it to disappear for this session, add a dismissed flag in persisted storage.
-                      },
-                      child: const Text('Later'),
                     ),
                   ],
                 ),
