@@ -396,7 +396,7 @@ class _ProfilePageState extends State<ProfilePage> {
               style: Theme.of(context).textTheme.bodySmall,
               children: [
                 TextSpan(
-                  text: 'Valentin Schecklein 1',
+                  text: 'Valentin Schecklein',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     decoration: TextDecoration.underline,
                   ),
