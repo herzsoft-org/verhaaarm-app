@@ -94,6 +94,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
 
   Future<void> _unlock(String id) async {
     try {
+      // Backend has no POST /unlock in your Swagger list -> use PATCH locked=false
       await widget.api.unlockPeriod(id);
       if (!mounted) return;
       await _load();
@@ -105,8 +106,49 @@ class _PeriodsPageState extends State<PeriodsPage> {
     }
   }
 
+  Future<void> _delete(ConventPeriodDto p) async {
+    final nav = Navigator.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Conventsperiode löschen?'),
+          content: Text(
+            'Willst du diese Conventsperiode wirklich löschen?\n\n'
+                '${p.semester}\n'
+                '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => nav.pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => nav.pop(true),
+              child: const Text('Löschen'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || confirmed != true) return;
+
+    try {
+      await widget.api.deletePeriod(p.id);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode gelöscht.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
+    }
+  }
+
   Future<void> _onMenuSelected(String v, ConventPeriodDto p) async {
-    // Navigation ohne async-gap Context-Nutzung
+    // Navigation without async-gap context usage
     if (v == 'edit') {
       if (!mounted) return;
       context.push('/office/periods/${p.id}/edit');
@@ -125,11 +167,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
         return;
       case 'delete':
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Löschen braucht Backend-Endpoint (DELETE /periods/{id}).'),
-          ),
-        );
+        await _delete(p);
         return;
     }
   }
@@ -208,7 +246,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
                       if (!p.locked) const PopupMenuItem(value: 'lock', child: Text('Lock')),
                       if (p.locked) const PopupMenuItem(value: 'unlock', child: Text('Unlock')),
                       const PopupMenuDivider(),
-                      const PopupMenuItem(value: 'delete', child: Text('Löschen (noch nicht)')),
+                      const PopupMenuItem(value: 'delete', child: Text('Löschen')),
                     ],
                   ),
                 ),

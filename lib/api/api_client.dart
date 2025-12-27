@@ -47,7 +47,6 @@ class ApiClient {
     return UserDto.fromJson((res.data as Map).cast<String, dynamic>());
   }
 
-
   Future<void> logoutOnServer(String refreshToken) async {
     await auth.logout(refreshToken: refreshToken);
   }
@@ -69,6 +68,45 @@ class ApiClient {
     final r = await dio.get('/periods');
     final list = (r.data as List).cast<dynamic>();
     return list.map((e) => ConventPeriodDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<ConventPeriodDto> getPeriod(String id) async {
+    final res = await dio.get('/periods/$id');
+    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<ConventPeriodDto> createPeriod(CreateConventPeriodRequest req) async {
+    final res = await dio.post('/periods', data: req.toJson());
+    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Backend: PATCH /periods/{id}
+  Future<ConventPeriodDto> updatePeriod(String id, UpdateConventPeriodRequest req) async {
+    final res = await dio.patch('/periods/$id', data: req.toJson());
+    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Backend: POST /periods/{id}/activate
+  Future<ConventPeriodDto> activatePeriod(String id) async {
+    final res = await dio.post('/periods/$id/activate');
+    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Backend: POST /periods/{id}/lock
+  Future<ConventPeriodDto> lockPeriod(String id) async {
+    final res = await dio.post('/periods/$id/lock');
+    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Backend (per your Swagger list): no /unlock endpoint -> PATCH locked=false
+  Future<ConventPeriodDto> unlockPeriod(String id) async {
+    final res = await dio.patch('/periods/$id', data: {'locked': false});
+    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// Backend: DELETE /periods/{id} (Swagger: 200 OK, no body)
+  Future<void> deletePeriod(String id) async {
+    await dio.delete('/periods/$id');
   }
 
   // --- USERS (picker)
@@ -116,10 +154,10 @@ class ApiClient {
 
   Future<FinePhotoDto> uploadFinePhoto({
     required String fineId,
-    String? filePath,            // native
-    Uint8List? bytes,            // web
+    String? filePath, // native
+    Uint8List? bytes, // web
     required String filename,
-    String? contentType,         // optional
+    String? contentType, // optional
   }) async {
     if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
       throw ArgumentError('Provide exactly one of filePath or bytes.');
@@ -323,36 +361,6 @@ class ApiClient {
 
   Future<void> deleteFineCatalogItem(String id) async {
     await dio.delete('/fine-catalog/$id');
-  }
-
-  Future<ConventPeriodDto> getPeriod(String id) async {
-    final r = await dio.get('/periods/$id');
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<ConventPeriodDto> createPeriod(CreateConventPeriodRequest req) async {
-    final r = await dio.post('/periods', data: req.toJson());
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<ConventPeriodDto> updatePeriod(String id, UpdateConventPeriodRequest req) async {
-    final r = await dio.patch('/periods/$id', data: req.toJson());
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<ConventPeriodDto> activatePeriod(String id) async {
-    final r = await dio.post('/periods/$id/activate');
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<ConventPeriodDto> lockPeriod(String id) async {
-    final r = await dio.post('/periods/$id/lock');
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<ConventPeriodDto> unlockPeriod(String id) async {
-    final r = await dio.patch('/periods/$id', data: {'locked': false});
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
   }
 
   // --- EXPORT CSV
