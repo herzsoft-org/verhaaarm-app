@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -459,6 +457,7 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               scrollDirection: Axis.horizontal,
               itemCount: _photos.length,
+              // ignore: unnecessary_underscores
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (ctx, i) {
                 final p = _photos[i];
