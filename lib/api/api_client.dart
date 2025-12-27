@@ -374,7 +374,7 @@ class ApiClient {
       options: Options(
         responseType: ResponseType.bytes,
         headers: {
-          'Accept': 'text/csv a',
+          'Accept': 'text/csv',
         },
       ),
     );
