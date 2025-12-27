@@ -1,0 +1,96 @@
+import 'package:flutter/material.dart';
+import 'ota_update.dart';
+
+class OtaUpdateBanner extends StatelessWidget {
+  final OtaUpdateController controller;
+
+  const OtaUpdateBanner({super.key, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final st = controller.state;
+        if (st == null) return const SizedBox.shrink();
+        if (!st.updateAvailable) return const SizedBox.shrink();
+
+        final cs = Theme.of(context).colorScheme;
+
+        return Card(
+          color: cs.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.system_update_rounded, color: cs.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Your app has a new update!',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Installed: ${st.currentVersion}  •  Latest: ${st.latest.version}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (st.error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Download failed: ${st.error}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.error),
+                  ),
+                ],
+                if (st.downloading) ...[
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(value: st.progress.clamp(0, 1)),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${(st.progress * 100).toStringAsFixed(0)}%',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: st.downloading ? null : () => controller.downloadLatest(),
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text('Download'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: st.downloading ? null : () => controller.checkNow(),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry'),
+                    ),
+                    if (st.downloadedPath != null) FilledButton.icon(
+                      onPressed: () => controller.installDownloaded(),
+                      icon: const Icon(Icons.install_mobile_rounded),
+                      label: const Text('Install'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        // “Later”: do nothing. Banner stays until next check or app restart.
+                        // If you want it to disappear for this session, tell me and I’ll add a "dismissedUntil" cache.
+                      },
+                      child: const Text('Later'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

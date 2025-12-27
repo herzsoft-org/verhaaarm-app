@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +12,10 @@ import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
+
+// OTA update (android)
+import '../../update/ota_update.dart';
+import '../../update/ota_update_banner.dart';
 
 class HomePage extends StatefulWidget {
   final ApiClient api;
@@ -43,11 +48,29 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Timer? _liveTimer;
   bool _liveRefreshInFlight = false;
 
+  // OTA
+  late final OtaUpdateController _ota;
+
+  bool get _isAndroidApp => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   @override
   void initState() {
     super.initState();
     _load();
     _startLiveTimer();
+
+    _ota = OtaUpdateController();
+
+    if (_isAndroidApp) {
+      // one quick check after landing on Home
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        _ota.checkNow();
+      });
+
+      // periodic checks (daily is usually enough for APK updates)
+      _ota.startPeriodicChecks(interval: const Duration(hours: 24));
+    }
   }
 
   @override
@@ -61,6 +84,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   @override
   void dispose() {
+    _ota.stop();
     _stopLiveTimer();
     routeObserver.unsubscribe(this);
     super.dispose();
@@ -70,6 +94,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
   void didPopNext() {
     _load();
     _startLiveTimer();
+
+    if (_isAndroidApp) {
+      _ota.checkNow();
+    }
   }
 
   @override
@@ -140,7 +168,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
       _kHomeLiveEvents,
-      decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+      decode: (json) =>
+          (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
     );
     if (cLive != null && cLive.isFresh(_ttlHomeLive)) return;
 
@@ -338,6 +367,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 padding: EdgeInsets.only(bottom: 12),
                 child: LinearProgressIndicator(),
               ),
+
+            // OTA banner (Android app only, never on web)
+            if (_isAndroidApp) ...[
+              OtaUpdateBanner(controller: _ota),
+              const SizedBox(height: 12),
+            ],
+
             _buildLiveEventsCard(context),
             const SizedBox(height: 12),
             _buildBalanceCard(context),

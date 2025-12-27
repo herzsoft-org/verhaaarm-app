@@ -1,0 +1,165 @@
+name: Build & Deploy Flutter APK (Android)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: verhaaarm-apk-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter doctor (info)
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          flutter doctor -v || true
+
+      - name: Flutter pub get
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+
+      # --- ANDROID SIGNING SETUP ---
+      # Secrets needed:
+      #   ANDROID_KEYSTORE_B64          (base64 of your .jks)
+      #   ANDROID_KEYSTORE_PASSWORD
+      #   ANDROID_KEY_PASSWORD
+      #   ANDROID_KEY_ALIAS
+      - name: Prepare Android keystore + key.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p android/app
+
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_B64 }}" | tr -d '\r\n' | base64 -d > android/app/release.jks
+          chmod 600 android/app/release.jks
+
+          cat > android/key.properties <<EOF
+          storeFile=release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          EOF
+
+          echo "== key.properties created =="
+          sed -e 's/storePassword=.*/storePassword=*** /' \
+              -e 's/keyPassword=.*/keyPassword=*** /' android/key.properties
+
+      - name: Build APK (release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk --release
+          echo "== build/app/outputs/flutter-apk =="
+          ls -la build/app/outputs/flutter-apk/ | head -200
+
+      # Uses YOUR renamed files from build.gradle.kts:
+      #   build/app/outputs/flutter-apk/verhaarm-release-<versionName>+<versionCode>.apk
+      #   build/app/outputs/flutter-apk/verhaarm-release-<versionName>+<versionCode>.apk.sha1
+      - name: Generate latest.json from renamed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DIR="build/app/outputs/flutter-apk"
+
+          APK="$(ls -1 "$DIR"/verhaarm-release-*.apk | head -n1 || true)"
+          if [ -z "${APK:-}" ] || [ ! -f "$APK" ]; then
+            echo "Could not find renamed release APK in $DIR (expected verhaarm-release-*.apk)."
+            echo "Directory listing:"
+            ls -la "$DIR" || true
+            exit 1
+          fi
+
+          SHA1_FILE="${APK}.sha1"
+          if [ ! -f "$SHA1_FILE" ]; then
+            echo "Missing sha1 file next to APK: $SHA1_FILE"
+            echo "Directory listing:"
+            ls -la "$DIR" || true
+            exit 1
+          fi
+
+          # Extract version from filename: verhaarm-release-<VERSION>.apk
+          APK_BASENAME="$(basename "$APK")"
+          VERSION="$(echo "$APK_BASENAME" | sed -E 's/^verhaarm-release-//' | sed -E 's/\.apk$//')"
+
+          SHA1="$(cat "$SHA1_FILE" | tr -d '\r\n')"
+
+          cat > latest.json <<EOF
+          {
+            "version": "$VERSION",
+            "sha1": "$SHA1"
+          }
+          EOF
+
+          echo "== latest.json =="
+          cat latest.json
+
+      # --- SSH DEPLOY ---
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r\n' | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Upload renamed APK + sha1 + latest.json to VPS staging dir
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DIR="build/app/outputs/flutter-apk"
+          APK="$(ls -1 "$DIR"/verhaarm-release-*.apk | head -n1)"
+          SHA1_FILE="${APK}.sha1"
+
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'mkdir -p /home/herz/verhaaarm-apk/'
+
+          echo "== rsync upload to staging =="
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            ./latest.json "$APK" "$SHA1_FILE" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/herz/verhaaarm-apk/"
+
+          echo "== remote staging listing (first 50) =="
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'ls -la /home/herz/verhaaarm-apk/ | head -50'
+
+      - name: Publish to /var/www/html/verhaarm (sudo exact commands)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'set -euo pipefail
+             sudo -n /bin/mkdir -p /var/www/html/verhaarm
+             sudo -n /usr/bin/rsync -a --delete /home/herz/verhaaarm-apk/ /var/www/html/verhaarm/
+             sudo -n /bin/chown -R www-data.www-data /var/www/html/verhaarm
+             echo "Publish done."
+             ls -la /var/www/html/verhaarm | head -50
+            '
