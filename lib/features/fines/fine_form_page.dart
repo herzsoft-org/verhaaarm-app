@@ -343,7 +343,7 @@ class _FineFormPageState extends State<FineFormPage> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Aktive Periode (Info): ${_activePeriod == null ? '—' : _activePeriod!.semester}',
+                    'Aktive Conventsperiode (Info): ${_activePeriod == null ? '—' : _activePeriod!.semester}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

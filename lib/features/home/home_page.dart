@@ -386,7 +386,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
               ),
               const SizedBox(height: 6),
               Text(
-                period == null ? 'Keine aktive Conventsperiode' : 'Periode: ${period.semester}',
+                period == null
+                    ? 'Keine aktive Conventsperiode'
+                    : 'Conventsperiode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

@@ -34,7 +34,7 @@ class OfficePage extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.list_alt_rounded),
                 title: const Text('Alle Beihängungen'),
-                subtitle: const Text('Alle Nutzer, alle Perioden (nach Backend-Rechten)'),
+                subtitle: const Text('Alle Nutzer, alle Conventsperioden (nach Backend-Rechten)'),
                 onTap: () => context.push('/fines'),
               ),
               if (canAcceptSuggestions)
@@ -56,7 +56,7 @@ class OfficePage extends StatelessWidget {
 
           if (canPeriods)
             _Section(
-              title: 'Semester & Perioden',
+              title: 'Semester & Conventsperioden',
               children: [
                 ListTile(
                   leading: const Icon(Icons.date_range_rounded),

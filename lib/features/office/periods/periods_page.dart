@@ -72,7 +72,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periode aktiviert.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode aktiviert.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Aktivieren fehlgeschlagen: $e')));
@@ -85,7 +85,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periode gelockt.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode gelockt.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lock fehlgeschlagen: $e')));
@@ -98,7 +98,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Periode entsperrt.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode entsperrt.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unlock fehlgeschlagen: $e')));
@@ -152,7 +152,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
       });
 
     return AppScaffold(
-      title: 'Semester / Perioden',
+      title: 'Semester / Conventsperioden',
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -173,7 +173,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
           if (semesters.isEmpty)
             const Padding(
               padding: EdgeInsets.all(8),
-              child: Text('Keine Perioden gefunden.'),
+              child: Text('Keine Conventsperioden gefunden.'),
             ),
           for (final sem in semesters) ...[
             Padding(

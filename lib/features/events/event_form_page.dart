@@ -399,7 +399,7 @@ class _EventFormPageState extends State<EventFormPage> {
                     contentPadding: EdgeInsets.zero,
                     leading:
                     const Icon(Icons.calendar_month_rounded),
-                    title: const Text('Periode (automatisch)'),
+                    title: const Text('Conventsperiode (automatisch)'),
                     subtitle: Text(derivedText),
                   ),
 

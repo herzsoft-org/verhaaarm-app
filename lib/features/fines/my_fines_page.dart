@@ -267,7 +267,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
                 child: Text(
-                  'Aktive Periode: ${_activePeriod!.semester}',
+                  'Aktive Conventsperiode: ${_activePeriod!.semester}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -436,8 +436,8 @@ class _PeriodSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = period;
     final header = (p == null)
-        ? 'Periode: Unbekannt'
-        : 'Periode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
+        ? 'Conventsperiode: Unbekannt'
+        : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
     final sumCents = pg.fines.fold<int>(0, (acc, f) {
       final amount = f.amountCents ?? 0;

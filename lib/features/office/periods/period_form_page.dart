@@ -315,7 +315,7 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
     final semesterMissing = _semesterValue == null || _semesterValue!.trim().isEmpty;
 
     return AppScaffold(
-      title: isEdit ? 'Periode bearbeiten' : 'Periode erstellen',
+      title: isEdit ? 'Conventsperiode bearbeiten' : 'Conventsperiode erstellen',
       actions: [
         IconButton(
           tooltip: 'Speichern',

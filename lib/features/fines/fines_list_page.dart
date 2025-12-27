@@ -114,7 +114,7 @@ class _FinesListPageState extends State<FinesListPage> {
             if (grouped.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('Keine Perioden gefunden.'),
+                child: Text('Keine Prioden gefunden.'),
               ),
             for (final sem in grouped)
               _SemesterSection(
@@ -308,8 +308,8 @@ class _PeriodSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final header = (period.id == 'unknown')
-        ? 'Periode: Unbekannt (Datum passt zu keiner Periode)'
-        : 'Periode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}';
+        ? 'Conventsperiode: Unbekannt (Datum passt zu keiner Conventsperiode)'
+        : 'Conventsperiode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}';
 
     final flags = <Widget>[];
     if (period.active == true) flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
@@ -331,7 +331,7 @@ class _PeriodSection extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                'Keine Beihängungen in dieser Periode.',
+                'Keine Beihängungen in dieser Conventsperiode.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

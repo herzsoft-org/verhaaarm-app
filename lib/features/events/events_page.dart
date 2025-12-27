@@ -419,8 +419,8 @@ class _PeriodSection extends StatelessWidget {
     final p = period;
 
     final header = (p == null)
-        ? (pg.periodId == 'unknown' ? 'Periode: Unbekannt' : 'Periode: ${pg.periodId}')
-        : 'Periode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
+        ? (pg.periodId == 'unknown' ? 'Conventsperiode: Unbekannt' : 'Conventsperiode: ${pg.periodId}')
+        : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
     final now = DateTime.now();
     final visibleEvents = pg.events.where((e) {

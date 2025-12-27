@@ -334,7 +334,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
                   Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
                   const SizedBox(height: 8),
                   Text(
-                    'Periode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
+                    'Conventsperiode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
                   ),
                   const SizedBox(height: 8),
                   Text('Ersteller: ${_userLabel(fine.creatorUserId)}'),
