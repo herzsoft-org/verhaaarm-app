@@ -61,18 +61,33 @@ jobs:
           sed -e 's/storePassword=.*/storePassword=*** /' \
               -e 's/keyPassword=.*/keyPassword=*** /' android/key.properties
 
-      - name: Keystore sanity check (fail fast)
+      - name: Keystore sanity check (verbose)
         shell: bash
         run: |
           set -euo pipefail
+          
+          echo "== file exists? =="
+          ls -la android/app/release.jks
+          
+          echo "== keytool list (no passwords printed) =="
+          set +e
           keytool -list -keystore android/app/release.jks \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >/dev/null
-
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          RC=$?
+          set -e
+          
+          if [ "$RC" -ne 0 ]; then
+            echo "keytool failed to open the keystore -> wrong ANDROID_KEYSTORE_PASSWORD or wrong ANDROID_KEYSTORE_B64"
+            exit 1
+          fi
+          
+          echo "== alias check =="
           keytool -list -keystore android/app/release.jks \
             -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             | grep -F "verhaarm_release" >/dev/null
-
+          
           echo "Keystore + alias OK."
+
 
       - name: Cache Gradle
         uses: actions/cache@v4
