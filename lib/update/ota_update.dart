@@ -46,7 +46,12 @@ class VersionParts {
   final int patch;
   final int? build;
 
-  VersionParts({required this.major, required this.minor, required this.patch, required this.build});
+  VersionParts({
+    required this.major,
+    required this.minor,
+    required this.patch,
+    required this.build,
+  });
 
   static VersionParts parse(String s) {
     final parts = s.trim().split('+');
@@ -68,9 +73,19 @@ class OtaUpdateState {
   final bool downloading;
   final double progress; // 0..1
   final String? error;
+
+  /// If we found a higher APK already sitting in temp cache, store its version+path
+  final String? cachedApkVersion;
   final String? downloadedPath;
 
-  bool get updateAvailable => compareAppVersions(latest.version, currentVersion) > 0;
+  /// Highest available version we can offer (network latest vs cached apk)
+  String get effectiveAvailableVersion {
+    final c = cachedApkVersion;
+    if (c == null || c.isEmpty) return latest.version;
+    return compareAppVersions(c, latest.version) > 0 ? c : latest.version;
+  }
+
+  bool get updateAvailable => compareAppVersions(effectiveAvailableVersion, currentVersion) > 0;
 
   const OtaUpdateState({
     required this.latest,
@@ -78,6 +93,7 @@ class OtaUpdateState {
     required this.downloading,
     required this.progress,
     required this.error,
+    required this.cachedApkVersion,
     required this.downloadedPath,
   });
 
@@ -87,6 +103,7 @@ class OtaUpdateState {
     bool? downloading,
     double? progress,
     String? error,
+    String? cachedApkVersion,
     String? downloadedPath,
   }) {
     return OtaUpdateState(
@@ -95,6 +112,7 @@ class OtaUpdateState {
       downloading: downloading ?? this.downloading,
       progress: progress ?? this.progress,
       error: error,
+      cachedApkVersion: cachedApkVersion ?? this.cachedApkVersion,
       downloadedPath: downloadedPath ?? this.downloadedPath,
     );
   }
@@ -133,6 +151,105 @@ class OtaUpdateController extends ChangeNotifier {
     _timer = null;
   }
 
+  String _apkUrlFor(String version) => apkUrlTemplate.replaceAll('<VERSION>', version);
+
+  // --- Cache management (temp dir) ---
+
+  static const String _apkPrefix = 'verhaaarm-';
+  static const String _apkSuffix = '.apk';
+
+  String _safeVersionForFileName(String version) => version.replaceAll('/', '_');
+
+  String? _extractVersionFromFileName(String name) {
+    if (!name.startsWith(_apkPrefix) || !name.endsWith(_apkSuffix)) return null;
+    final raw = name.substring(_apkPrefix.length, name.length - _apkSuffix.length);
+    // We only ever replaced '/' -> '_' when writing; restore is optional.
+    return raw.replaceAll('_', '/');
+  }
+
+  Future<Directory> _tempDir() => getTemporaryDirectory();
+
+  Future<List<FileSystemEntity>> _listCachedApks() async {
+    final dir = await _tempDir();
+    if (!await dir.exists()) return const [];
+    final items = await dir.list(followLinks: false).toList();
+    return items.where((e) {
+      final n = e.uri.pathSegments.isNotEmpty ? e.uri.pathSegments.last : '';
+      return n.startsWith(_apkPrefix) && n.endsWith(_apkSuffix);
+    }).toList(growable: false);
+  }
+
+  Future<void> _deleteFileQuietly(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) {
+        await f.delete();
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Cleans cached APKs:
+  /// - Deletes any cached APK with version <= currentVersion
+  /// - Returns the highest cached APK with version > currentVersion (if any)
+  Future<({String version, String path})?> _cleanupAndFindBestCachedApk(String currentVersion) async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+
+    final cached = await _listCachedApks();
+
+    ({String version, String path})? best;
+
+    for (final e in cached) {
+      final path = e.path;
+      final name = path.split(Platform.pathSeparator).last;
+      final v = _extractVersionFromFileName(name);
+      if (v == null || v.isEmpty) {
+        // unknown file name pattern -> delete to prevent accumulation
+        await _deleteFileQuietly(path);
+        continue;
+      }
+
+      final cmp = compareAppVersions(v, currentVersion);
+      if (cmp <= 0) {
+        // installed version is same/newer -> safe to delete (this is how we delete after successful install+restart)
+        await _deleteFileQuietly(path);
+        continue;
+      }
+
+      if (best == null || compareAppVersions(v, best.version) > 0) {
+        best = (version: v, path: path);
+      }
+    }
+
+    // If multiple higher versions exist, keep only the highest and delete the rest.
+    if (best != null) {
+      for (final e in cached) {
+        final path = e.path;
+        if (path == best.path) continue;
+        final name = path.split(Platform.pathSeparator).last;
+        final v = _extractVersionFromFileName(name);
+        if (v == null) continue;
+        if (compareAppVersions(v, currentVersion) > 0) {
+          await _deleteFileQuietly(path);
+        }
+      }
+    }
+
+    return best;
+  }
+
+  /// Delete all cached APKs except `keepPath` (or delete all if keepPath is null)
+  Future<void> _purgeCachedApks({String? keepPath}) async {
+    final cached = await _listCachedApks();
+    for (final e in cached) {
+      if (keepPath != null && e.path == keepPath) continue;
+      await _deleteFileQuietly(e.path);
+    }
+  }
+
+  // --- OTA flow ---
+
   Future<void> checkNow() async {
     if (kIsWeb || !Platform.isAndroid) return;
     if (_checkInFlight) return;
@@ -142,13 +259,26 @@ class OtaUpdateController extends ChangeNotifier {
       final pkg = await PackageInfo.fromPlatform();
       final current = '${pkg.version}+${pkg.buildNumber}';
 
-      final res = await _dio.get<String>(
-        latestJsonUrl,
-        options: Options(responseType: ResponseType.plain),
+      // First: cleanup old APKs and detect cached newer one (for "Install" after restart)
+      final bestCached = await _cleanupAndFindBestCachedApk(current);
+
+      // Default latest (in case network fails): use cached as "latest" so banner can still appear
+      OtaLatest latestFallback = OtaLatest(
+        version: bestCached?.version ?? current,
+        sha1: '',
       );
 
-      final map = jsonDecode(res.data ?? '{}') as Map<String, dynamic>;
-      final latest = OtaLatest.fromJson(map);
+      OtaLatest latest;
+      try {
+        final res = await _dio.get<String>(
+          latestJsonUrl,
+          options: Options(responseType: ResponseType.plain),
+        );
+        final map = jsonDecode(res.data ?? '{}') as Map<String, dynamic>;
+        latest = OtaLatest.fromJson(map);
+      } catch (_) {
+        latest = latestFallback;
+      }
 
       final newState = OtaUpdateState(
         latest: latest,
@@ -156,34 +286,48 @@ class OtaUpdateController extends ChangeNotifier {
         downloading: false,
         progress: 0,
         error: null,
-        downloadedPath: null,
+        cachedApkVersion: bestCached?.version,
+        downloadedPath: bestCached?.path,
       );
 
       _state = newState;
       notifyListeners();
-    } catch (e) {
-      // keep last state; you can log if you want
+    } catch (_) {
+      // keep last state
     } finally {
       _checkInFlight = false;
     }
   }
 
-  String _apkUrlFor(String version) => apkUrlTemplate.replaceAll('<VERSION>', version);
-
   Future<void> downloadLatest() async {
     final st = _state;
     if (st == null) return;
-    if (!st.updateAvailable) return;
     if (kIsWeb || !Platform.isAndroid) return;
 
-    final url = _apkUrlFor(st.latest.version);
+    // We download the network-latest version, not "effective".
+    // (If you want to download "effective", you must also host it.)
+    final targetVersion = st.latest.version;
+
+    // If there is no update available, no need to download.
+    if (compareAppVersions(targetVersion, st.currentVersion) <= 0) return;
+
+    final url = _apkUrlFor(targetVersion);
 
     try {
-      final dir = await getTemporaryDirectory();
-      final safeVersion = st.latest.version.replaceAll('/', '_');
+      final dir = await _tempDir();
+      final safeVersion = _safeVersionForFileName(targetVersion);
       final outPath = '${dir.path}/verhaaarm-$safeVersion.apk';
 
-      _state = st.copyWith(downloading: true, progress: 0, error: null, downloadedPath: null);
+      // Prevent accumulation: keep only the file we are about to write (or none).
+      await _purgeCachedApks(keepPath: null);
+
+      _state = st.copyWith(
+        downloading: true,
+        progress: 0,
+        error: null,
+        cachedApkVersion: null,
+        downloadedPath: null,
+      );
       notifyListeners();
 
       await _dio.download(
@@ -207,7 +351,15 @@ class OtaUpdateController extends ChangeNotifier {
       final cur = _state;
       if (cur == null) return;
 
-      _state = cur.copyWith(downloading: false, progress: 1.0, downloadedPath: outPath);
+      // After download: keep only this one APK in cache.
+      await _purgeCachedApks(keepPath: outPath);
+
+      _state = cur.copyWith(
+        downloading: false,
+        progress: 1.0,
+        cachedApkVersion: targetVersion,
+        downloadedPath: outPath,
+      );
       notifyListeners();
     } catch (e) {
       final cur = _state;
@@ -224,6 +376,14 @@ class OtaUpdateController extends ChangeNotifier {
     if (path == null) return;
     if (kIsWeb || !Platform.isAndroid) return;
 
+    // If the file vanished (Android cache purge), clear state
+    final f = File(path);
+    if (!await f.exists()) {
+      _state = st.copyWith(cachedApkVersion: null, downloadedPath: null);
+      notifyListeners();
+      return;
+    }
+
     final canInstall = await _platform.invokeMethod<bool>('canInstallUnknownApps') ?? false;
     if (!canInstall) {
       await _platform.invokeMethod('openUnknownAppsSettings');
@@ -231,5 +391,8 @@ class OtaUpdateController extends ChangeNotifier {
     }
 
     await _platform.invokeMethod('installApk', {'path': path});
+
+    // Do NOT delete here: we don't know if user completed install.
+    // Cleanup happens on next app start/checkNow() when currentVersion >= apkVersion.
   }
 }
