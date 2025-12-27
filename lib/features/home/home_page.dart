@@ -53,6 +53,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   bool get _isAndroidApp => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  void _checkOtaIfAndroid() {
+    if (_isAndroidApp) {
+      _ota.checkNow();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -68,8 +74,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
         _ota.checkNow();
       });
 
-      // periodic checks (daily is usually enough for APK updates)
-      _ota.startPeriodicChecks(interval: const Duration(hours: 24));
+      // Removed daily periodic checks:
+      // OTA checks now happen whenever _load() refreshes content.
+      // _ota.startPeriodicChecks(interval: const Duration(hours: 24));
     }
   }
 
@@ -237,6 +244,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final liveFresh = (cLive != null && cLive.isFresh(_ttlHomeLive));
 
       if (!force && baseFresh && liveFresh) return;
+
+      // OTA: tie checks to the same refresh trigger as the rest of Home content
+      _checkOtaIfAndroid();
 
       final showFullSpinner = !hasAnyCache;
       if (mounted) {
