@@ -61,6 +61,30 @@ jobs:
           sed -e 's/storePassword=.*/storePassword=*** /' \
               -e 's/keyPassword=.*/keyPassword=*** /' android/key.properties
 
+      - name: Keystore sanity check (fail fast)
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -list -keystore android/app/release.jks \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >/dev/null
+
+          keytool -list -keystore android/app/release.jks \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            | grep -F "verhaarm_release" >/dev/null
+
+          echo "Keystore + alias OK."
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      
+
       - name: Build APK (release)
         shell: bash
         run: |
