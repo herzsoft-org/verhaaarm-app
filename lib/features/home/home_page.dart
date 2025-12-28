@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +14,7 @@ import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/quote_of_the_day_card.dart';
 import '../../models/dtos.dart';
 
 // OTA update (android)
@@ -37,10 +41,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
   static const _kHomeLiveEvents = 'home.liveEvents';
   static const _kHomeEvents = 'home.events';
 
+  static const _kHomeQuote = 'home.quote';
+  static const _quoteUrl = 'https://verhaarmapi.herz.moe/public/quotes';
+
   ConventPeriodDto? _activePeriod;
   UserBalanceDto? _balance;
   List<LiveEventDto> _liveEvents = const [];
   EventDto? _nextEvent;
+
+  QuoteDto? _quote;
 
   bool _loading = true;
   bool _refreshing = false;
@@ -53,6 +62,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   bool get _isAndroidApp => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  // Dedicated lightweight client for quotes
+  late final Dio _quoteDio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 6),
+      receiveTimeout: const Duration(seconds: 6),
+      sendTimeout: const Duration(seconds: 6),
+      responseType: ResponseType.plain,
+      headers: const {
+        'Accept': 'application/json',
+      },
+    ),
+  );
+
   void _checkOtaIfAndroid() {
     if (_isAndroidApp) {
       _ota.checkNow();
@@ -62,10 +84,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void initState() {
     super.initState();
-    _load();
-    _startLiveTimer();
 
+    // IMPORTANT: init OTA controller BEFORE calling _load()
     _ota = OtaUpdateController();
+
+    _load();
+    _loadQuote();
+    _startLiveTimer();
 
     if (_isAndroidApp) {
       // one quick check after landing on Home
@@ -76,7 +101,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       // Removed daily periodic checks:
       // OTA checks now happen whenever _load() refreshes content.
-      // _ota.startPeriodicChecks(interval: const Duration(hours: 24));
     }
   }
 
@@ -100,6 +124,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void didPopNext() {
     _load();
+    _loadQuote();
     _startLiveTimer();
 
     if (_isAndroidApp) {
@@ -127,6 +152,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
     'userId': b.userId,
     'balanceCents': b.balanceCents,
+    'balanceFormatted': b.balanceFormatted,
   };
 
   UserBalanceDto _decodeBalance(Object json) =>
@@ -152,10 +178,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'mandatory': e.mandatory,
     'creatorUserId': e.creatorUserId,
     'ownerType': e.ownerType.name,
+    'createdAt': e.createdAt,
   };
 
   EventDto _decodeEvent(Object json) =>
       EventDto.fromJson((json as Map).cast<String, dynamic>());
+
+  QuoteDto _decodeQuote(Object json) =>
+      QuoteDto.fromJson((json as Map).cast<String, dynamic>());
 
   void _startLiveTimer() {
     _liveTimer?.cancel();
@@ -197,6 +227,50 @@ class _HomePageState extends State<HomePage> with RouteAware {
       // silent
     } finally {
       _liveRefreshInFlight = false;
+    }
+  }
+
+  Future<void> _loadQuote({bool force = false}) async {
+    final cached = await AppCache.I.entryOrLoadPersisted<QuoteDto>(
+      _kHomeQuote,
+      decode: _decodeQuote,
+    );
+
+    if (!force && cached != null && cached.isFresh(_ttlHomeBase)) {
+      if (mounted) setState(() => _quote = cached.value);
+      return;
+    }
+
+    try {
+      final resp = await _quoteDio.get(_quoteUrl);
+      final text = (resp.data ?? '').toString();
+
+      final decoded = jsonDecode(text);
+      final List<dynamic> rawList = switch (decoded) {
+        List<dynamic>() => decoded,
+        Map<String, dynamic>() => (decoded['quotes'] as List<dynamic>? ?? const <dynamic>[]),
+        _ => const <dynamic>[],
+      };
+
+      final quotes = rawList
+          .whereType<Map>()
+          .map((m) => QuoteDto.fromJson(m.cast<String, dynamic>()))
+          .where((q) => q.text.trim().isNotEmpty)
+          .toList(growable: false);
+
+      if (quotes.isEmpty) return;
+
+      final picked = quotes[Random().nextInt(quotes.length)];
+
+      await AppCache.I.setPersisted<QuoteDto>(
+        _kHomeQuote,
+        picked,
+        encode: (q) => q.toJson(),
+      );
+
+      if (mounted) setState(() => _quote = picked);
+    } catch (_) {
+      // silent by design (empty placeholder)
     }
   }
 
@@ -247,6 +321,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       // OTA: tie checks to the same refresh trigger as the rest of Home content
       _checkOtaIfAndroid();
+
+      // Quote refresh: same trigger + TTL as base Home content
+      unawaited(_loadQuote(force: force));
 
       final showFullSpinner = !hasAnyCache;
       if (mounted) {
@@ -391,6 +468,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
             _buildNextEventCard(context),
             const SizedBox(height: 12),
             _buildQuickActions(context),
+
+            // Quote of the day (silent placeholder if null)
+            if (_quote != null) ...[
+              const SizedBox(height: 12),
+              QuoteOfTheDayCard(quote: _quote!),
+            ],
           ],
         ),
       ),

@@ -373,6 +373,24 @@ class CreateFineRequest {
   };
 }
 
+class QuoteDto {
+  final String text;
+  final String? author;
+
+  QuoteDto({required this.text, this.author});
+
+  factory QuoteDto.fromJson(Map<String, dynamic> json) => QuoteDto(
+    text: _reqString(json, 'text').trim(),
+    author: _optString(json, 'author')?.trim(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'author': author,
+  };
+}
+
+
 // ---------- Fine Suggestions ----------
 class FineSuggestionDto {
   final String id;
