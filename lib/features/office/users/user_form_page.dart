@@ -29,7 +29,9 @@ class _UserFormPageState extends State<UserFormPage> {
   final _passwordCtrl = TextEditingController();
 
   bool _disabled = false;
-  final Set<String> _roles = {};
+
+  // Backend: exactly one role
+  String _role = 'MEMBER';
 
   bool get _isEdit => widget.userId != null;
 
@@ -63,14 +65,12 @@ class _UserFormPageState extends State<UserFormPage> {
         _usernameCtrl.text = u.username;
         _displayNameCtrl.text = u.displayName;
         _disabled = u.disabled;
-        _roles
-          ..clear()
-          ..addAll(u.roles);
+
+        // Defensive: backend should return exactly one, but keep UI stable if old data exists.
+        _role = u.roles.isNotEmpty ? u.roles.first : 'MEMBER';
       } else {
         _disabled = false;
-        _roles
-          ..clear()
-          ..add('MEMBER');
+        _role = 'MEMBER';
       }
 
       if (!mounted) return;
@@ -93,7 +93,7 @@ class _UserFormPageState extends State<UserFormPage> {
         final req = UpdateUserRequest(
           displayName: _displayNameCtrl.text.trim(),
           disabled: _disabled,
-          roles: _roles.toList(),
+          roles: [_role],
         );
         await widget.api.updateUser(widget.userId!, req);
       } else {
@@ -101,7 +101,7 @@ class _UserFormPageState extends State<UserFormPage> {
           username: _usernameCtrl.text.trim(),
           displayName: _displayNameCtrl.text.trim(),
           password: _passwordCtrl.text,
-          roles: _roles.toList(),
+          roles: [_role],
         );
         await widget.api.createUser(req);
       }
@@ -182,23 +182,42 @@ class _UserFormPageState extends State<UserFormPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Rollen', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Rolle', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 6),
-                    _RoleToggle(label: 'ADMIN', value: 'ADMIN', roles: _roles, onChanged: () => setState(() {})),
-                    _RoleToggle(label: 'SENIOR', value: 'SENIOR', roles: _roles, onChanged: () => setState(() {})),
-                    _RoleToggle(
+                    const Text(
+                      'Hinweis: Es muss immer mindestens einen ADMIN, SENIOR und HOUSEKEEPING geben.',
+                    ),
+                    const SizedBox(height: 12),
+                    _RoleRadio(
+                      label: 'ADMIN',
+                      value: 'ADMIN',
+                      groupValue: _role,
+                      onChanged: (v) => setState(() => _role = v),
+                    ),
+                    _RoleRadio(
+                      label: 'SENIOR',
+                      value: 'SENIOR',
+                      groupValue: _role,
+                      onChanged: (v) => setState(() => _role = v),
+                    ),
+                    _RoleRadio(
                       label: 'HOUSEKEEPING',
                       value: 'HOUSEKEEPING',
-                      roles: _roles,
-                      onChanged: () => setState(() {}),
+                      groupValue: _role,
+                      onChanged: (v) => setState(() => _role = v),
                     ),
-                    _RoleToggle(
+                    _RoleRadio(
                       label: 'TREASURER',
                       value: 'TREASURER',
-                      roles: _roles,
-                      onChanged: () => setState(() {}),
+                      groupValue: _role,
+                      onChanged: (v) => setState(() => _role = v),
                     ),
-                    _RoleToggle(label: 'MEMBER', value: 'MEMBER', roles: _roles, onChanged: () => setState(() {})),
+                    _RoleRadio(
+                      label: 'MEMBER',
+                      value: 'MEMBER',
+                      groupValue: _role,
+                      onChanged: (v) => setState(() => _role = v),
+                    ),
                   ],
                 ),
               ),
@@ -239,28 +258,29 @@ class _UserFormPageState extends State<UserFormPage> {
   }
 }
 
-class _RoleToggle extends StatelessWidget {
+class _RoleRadio extends StatelessWidget {
   final String label;
   final String value;
-  final Set<String> roles;
-  final VoidCallback onChanged;
+  final String groupValue;
+  final ValueChanged<String> onChanged;
 
-  const _RoleToggle({required this.label, required this.value, required this.roles, required this.onChanged});
+  const _RoleRadio({
+    required this.label,
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final enabled = roles.contains(value);
-    return CheckboxListTile(
+    return RadioListTile<String>(
       contentPadding: EdgeInsets.zero,
       title: Text(label),
-      value: enabled,
+      value: value,
+      groupValue: groupValue,
       onChanged: (v) {
-        if (v == true) {
-          roles.add(value);
-        } else {
-          roles.remove(value);
-        }
-        onChanged();
+        if (v == null) return;
+        onChanged(v);
       },
     );
   }

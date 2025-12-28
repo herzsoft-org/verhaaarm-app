@@ -77,7 +77,8 @@ class _EventsPageState extends State<EventsPage> {
   static ({int year, int term}) _semesterKey(String semester) {
     final s = semester.trim().toUpperCase();
     if (s.startsWith('SS')) {
-      final yy = int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final yy =
+          int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
       return (year: 2000 + yy, term: 1);
     }
     if (s.startsWith('WS')) {
@@ -95,19 +96,28 @@ class _EventsPageState extends State<EventsPage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
+      final cPeriods =
+      await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
         _kEventsPeriods,
         decode: (json) =>
-            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
+            (json as List).map((e) => _decodePeriod(e as Object)).toList(
+              growable: false,
+            ),
       );
       final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
         _kEventsEvents,
         decode: (json) =>
-            (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+            (json as List).map((e) => _decodeEvent(e as Object)).toList(
+              growable: false,
+            ),
       );
-      final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
+      final cUsers =
+      await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
         _kEventsUsers,
-        decode: (json) => (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
+        decode: (json) =>
+            (json as List).map((e) => _decodeUser(e as Object)).toList(
+              growable: false,
+            ),
       );
 
       final hasPeriods = cPeriods != null;
@@ -116,11 +126,14 @@ class _EventsPageState extends State<EventsPage> {
       final hasAnyCache = hasPeriods || hasEvents || hasUsers;
 
       if (hasAnyCache && mounted) {
-        final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
+        // Sort periods so that "next / current" ends up higher later when we group by semester.
+        final periods =
+        List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
           ..sort((a, b) => a.startAt.compareTo(b.startAt));
         final periodById = {for (final p in periods) p.id: p};
 
-        final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
+        final users =
+        List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
         final userById = {for (final u in users) u.id: u};
 
         setState(() {
@@ -171,7 +184,8 @@ class _EventsPageState extends State<EventsPage> {
           encode: (v) => v.map(_encodeUser).toList(growable: false),
         );
 
-        final periodsSorted = List<ConventPeriodDto>.from(periods)..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodsSorted = List<ConventPeriodDto>.from(periods)
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
         final periodById = {for (final p in periodsSorted) p.id: p};
         final userById = {for (final u in users) u.id: u};
 
@@ -298,13 +312,67 @@ class _EventsPageState extends State<EventsPage> {
       map[semester]![pid]!.add(e);
     }
 
+    // Semester order: "next upcoming semester" on top (closest future period start),
+    // then further future semesters, then past semesters at the bottom.
+    final now = DateTime.now();
+
+    DateTime semesterSortKey(String sem) {
+      final periodMap = map[sem]!;
+      final periods = periodMap.keys
+          .map((pid) => _periodById[pid])
+          .whereType<ConventPeriodDto>()
+          .toList(growable: false);
+
+      if (periods.isEmpty) {
+        // Unknown semesters go to bottom.
+        return DateTime.fromMillisecondsSinceEpoch(1 << 62);
+      }
+
+      final starts = periods.map((p) => Format.parseIsoToLocal(p.startAt)).toList(growable: false);
+
+      // prefer next upcoming start; if none, use most recent past start (so past semesters are ordered sensibly)
+      final futureStarts = starts.where((d) => !d.isBefore(now)).toList(growable: false)..sort();
+      if (futureStarts.isNotEmpty) return futureStarts.first;
+
+      final pastStarts = starts.where((d) => d.isBefore(now)).toList(growable: false)..sort();
+      return pastStarts.isNotEmpty ? pastStarts.last : DateTime.fromMillisecondsSinceEpoch(1 << 62);
+    }
+
+    int semesterIsFuture(String sem) {
+      final periodMap = map[sem]!;
+      final periods = periodMap.keys
+          .map((pid) => _periodById[pid])
+          .whereType<ConventPeriodDto>()
+          .toList(growable: false);
+      if (periods.isEmpty) return 2; // unknown last
+
+      final anyFuture = periods.any((p) {
+        final start = Format.parseIsoToLocal(p.startAt);
+        final end = Format.parseIsoToLocal(p.endAt);
+        return !end.isBefore(now); // current or future
+      });
+
+      return anyFuture ? 0 : 1; // future/current first, then past
+    }
+
     final semesters = map.keys.toList()
       ..sort((a, b) {
+        final fa = semesterIsFuture(a);
+        final fb = semesterIsFuture(b);
+        final c0 = fa.compareTo(fb);
+        if (c0 != 0) return c0;
+
+        final da = semesterSortKey(a);
+        final db = semesterSortKey(b);
+        final c1 = da.compareTo(db);
+        if (c1 != 0) return c1;
+
+        // stable tie-breaker by parsed semantic key
         final ka = _semesterKey(a);
         final kb = _semesterKey(b);
-        final c1 = kb.year.compareTo(ka.year);
-        if (c1 != 0) return c1;
-        return kb.term.compareTo(ka.term);
+        final c2 = ka.year.compareTo(kb.year);
+        if (c2 != 0) return c2;
+        return ka.term.compareTo(kb.term);
       });
 
     final result = <_SemesterGroup>[];
@@ -317,13 +385,26 @@ class _EventsPageState extends State<EventsPage> {
 
           final pa = _periodById[a];
           final pb = _periodById[b];
+
           final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pa.startAt);
           final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pb.startAt);
+
+          final aCurrentOrFuture = pa != null && !Format.parseIsoToLocal(pa.endAt).isBefore(now);
+          final bCurrentOrFuture = pb != null && !Format.parseIsoToLocal(pb.endAt).isBefore(now);
+
+          // Put current/future periods first (so the "current" one ends up above future ones)
+          if (aCurrentOrFuture != bCurrentOrFuture) return aCurrentOrFuture ? -1 : 1;
+
+          // Within current/future: oldest first (current first, then later future)
+          if (aCurrentOrFuture && bCurrentOrFuture) return da.compareTo(db);
+
+          // Within past: newest first (optional, but usually nicer)
           return db.compareTo(da);
         });
 
       final periods = <_PeriodGroup>[];
       for (final pid in periodIds) {
+        // events inside a period: next upcoming event first (ascending datetime)
         final events = [...periodMap[pid]!]..sort((a, b) => a.startsAt.compareTo(b.startsAt));
         periods.add(_PeriodGroup(periodId: pid, events: events));
       }
@@ -467,11 +548,13 @@ class _PeriodSection extends StatelessWidget {
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: ListTile(
                   titleAlignment: ListTileTitleAlignment.center,
-                  leading: Icon(e.mandatory ? Icons.star_rounded : Icons.event_rounded),
+                  // 2) mandatory uses calendar; non-mandatory uses leisure-ish icon
+                  leading: Icon(e.mandatory ? Icons.event_rounded : Icons.sports_bar_rounded),
                   title: Text(e.title),
                   subtitle: Text(
                     '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}\n'
-                        'Creator: ${userName(e.creatorUserId)}',
+                    // 1) show Pflichtveranstaltung instead of Creator for mandatory
+                        '${e.mandatory ? 'Pflichtveranstaltung' : ''}',
                   ),
                   isThreeLine: true,
                   trailing: canEdit(e) ? const Icon(Icons.edit_rounded) : null,

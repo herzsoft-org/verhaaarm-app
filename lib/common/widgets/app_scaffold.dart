@@ -15,16 +15,20 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    final isOnProfile = location == '/profile' || location.startsWith('/profile/');
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
         actions: [
           ...(actions ?? const []),
-          IconButton(
-            tooltip: 'Profil',
-            icon: const Icon(Icons.person_rounded),
-            onPressed: () => context.push('/profile'),
-          ),
+          if (!isOnProfile)
+            IconButton(
+              tooltip: 'Profil',
+              icon: const Icon(Icons.person_rounded),
+              onPressed: () => context.push('/profile'),
+            ),
         ],
       ),
       body: body,

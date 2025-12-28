@@ -60,6 +60,12 @@ class _UsersPageState extends State<UsersPage> {
     }
   }
 
+  String _singleRoleLabel(UserDto u) {
+    if (u.roles.isEmpty) return '—';
+    // Backend is now "exactly one", but be defensive if older data exists.
+    return u.roles.first;
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
@@ -96,7 +102,7 @@ class _UsersPageState extends State<UsersPage> {
                 leading: Icon(u.disabled ? Icons.block_rounded : Icons.person_rounded),
                 title: Text('${u.displayName} (${u.username})'),
                 subtitle: Text(
-                  'Roles: ${u.roles.join(', ')}${u.disabled ? '\nDeaktiviert' : ''}',
+                  'Role: ${_singleRoleLabel(u)}${u.disabled ? '\nDeaktiviert' : ''}',
                 ),
                 isThreeLine: u.disabled,
                 trailing: const Icon(Icons.chevron_right_rounded),
