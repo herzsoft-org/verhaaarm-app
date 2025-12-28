@@ -45,8 +45,17 @@ class _UsersPageState extends State<UsersPage> {
       // IMPORTANT: Always request active users (Swagger requires active param; backend should treat it as "active=true").
       final users = await widget.api.listUsersFull(active: true);
 
-      // Sort by username
-      users.sort((a, b) => a.username.toLowerCase().compareTo(b.username.toLowerCase()));
+      // Sort alphabetically by display name (fallback to username if needed)
+      users.sort((a, b) {
+        final ad = a.displayName.trim().toLowerCase();
+        final bd = b.displayName.trim().toLowerCase();
+        if (ad.isEmpty && bd.isEmpty) {
+          return a.username.toLowerCase().compareTo(b.username.toLowerCase());
+        }
+        if (ad.isEmpty) return 1;
+        if (bd.isEmpty) return -1;
+        return ad.compareTo(bd);
+      });
 
       if (!mounted) return;
       setState(() => _users = users);

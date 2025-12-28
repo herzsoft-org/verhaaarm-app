@@ -115,7 +115,6 @@ class _MemberPickerSheetState extends State<MemberPickerSheet> {
                       });
                     },
                     title: Text(u.displayName),
-                    subtitle: Text(u.username),
                     controlAffinity: ListTileControlAffinity.leading,
                   );
                 },

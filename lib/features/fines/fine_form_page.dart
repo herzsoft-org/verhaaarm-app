@@ -1,5 +1,3 @@
-// lib/features/fines/fine_form_page.dart
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -29,7 +27,6 @@ class FineFormPage extends StatefulWidget {
   @override
   State<FineFormPage> createState() => _FineFormPageState();
 }
-
 
 class _FineFormPageState extends State<FineFormPage> {
   final _formKey = GlobalKey<FormState>();
@@ -130,7 +127,6 @@ class _FineFormPageState extends State<FineFormPage> {
       );
     }
   }
-
 
   String _toEurText(int cents) {
     final s = Format.centsToEur(cents);
@@ -263,7 +259,6 @@ class _FineFormPageState extends State<FineFormPage> {
         if (!mounted) return;
 
         context.pushReplacement('/fines/${fine.id}');
-
       } else {
         final req = CreateFineSuggestionRequest(
           fineDate: fd,
@@ -321,31 +316,50 @@ class _FineFormPageState extends State<FineFormPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Datum', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: _saving ? null : _pickFineDate,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        children: [
-                          Expanded(child: Text(Format.dateOnlyShort(_fineDate))),
-                          const Icon(Icons.calendar_month_rounded),
-                        ],
+                  // Date picker: icon left + looks obviously clickable
+                  Material(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _saving ? null : _pickFineDate,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_month_rounded),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Datum',
+                                    style: Theme.of(context).textTheme.labelMedium,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    Format.dateOnlyShort(_fineDate),
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Zuordnung (aus Datum): ${_periodLabelForFineDate()}',
+                    'Conventsperiode: ${_periodLabelForFineDate()}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Aktive Conventsperiode (Info): ${_activePeriod == null ? '—' : _activePeriod!.semester}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  // Removed: "Aktive Conventsperiode (Info): ..."
                 ],
               ),
             ),
@@ -460,8 +474,12 @@ class _FineFormPageState extends State<FineFormPage> {
 
                         _MultiplierRow(
                           value: _multiplier,
-                          onMinus: _saving ? null : () => setState(() => _multiplier = _clampMultiplier(_multiplier - 1)),
-                          onPlus: _saving ? null : () => setState(() => _multiplier = _clampMultiplier(_multiplier + 1)),
+                          onMinus: _saving
+                              ? null
+                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier - 1)),
+                          onPlus: _saving
+                              ? null
+                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier + 1)),
                           totalLabel: _totalAmountLabel(),
                         ),
 
@@ -504,7 +522,7 @@ class _FineFormPageState extends State<FineFormPage> {
               child: Text(
                 widget.mode == FineFormMode.official
                     ? 'Hinweis: Offizielle Beihängungen nur mit Berechtigung.'
-                    : 'Hinweis: Vorschläge beeinflussen den Saldo nicht direkt.',
+                    : 'Hinweis: Vorschläge müssen erst von dem Sprecher oder Schmuckwart angenommen werden.',
               ),
             ),
           ),
