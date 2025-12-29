@@ -51,11 +51,12 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
         SnackBar(content: Text('Arbeitsaufträge laden fehlgeschlagen: $e')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _refreshing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
   }
 

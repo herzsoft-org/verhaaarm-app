@@ -59,6 +59,16 @@ class OfficePage extends StatelessWidget {
                   subtitle: const Text('Ansehen, akzeptieren oder ablehnen'),
                   onTap: () => context.push('/office/fine-suggestions'),
                 ),
+
+              // MOVED: Catalog management belongs here (under "Beihängungen")
+              if (canCatalog)
+                ListTile(
+                  leading: const Icon(Icons.rule_rounded),
+                  title: const Text('Beihängungskatalog verwalten'),
+                  subtitle: const Text('Gründe + Default Beträge'),
+                  onTap: () => context.push('/office/catalog'),
+                ),
+
               ListTile(
                 leading: const Icon(Icons.download_rounded),
                 title: const Text('CSV Export'),
@@ -97,18 +107,7 @@ class OfficePage extends StatelessWidget {
             ),
           if (canUsers) const SizedBox(height: 12),
 
-          if (canCatalog)
-            _Section(
-              title: 'Beihängungskatalog',
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.rule_rounded),
-                  title: const Text('Katalog verwalten'),
-                  subtitle: const Text('Gründe + Default Beträge'),
-                  onTap: () => context.push('/office/catalog'),
-                ),
-              ],
-            ),
+          // REMOVED: Separate "Beihängungskatalog" section
         ],
       ),
     );

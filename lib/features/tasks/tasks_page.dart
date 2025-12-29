@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
-import '../../common/format.dart';
+
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 
@@ -58,12 +58,14 @@ class _TasksPageState extends State<TasksPage> {
         SnackBar(content: Text('Arbeitsaufträge laden fehlgeschlagen: $e')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _refreshing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
+
   }
 
   Future<void> _toggleSolved(TaskDto t) async {
@@ -179,7 +181,7 @@ class _TasksPageState extends State<TasksPage> {
               ),
             ],
 
-            // NEW: Disclaimer
+            // Disclaimer
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -223,17 +225,20 @@ class _TasksPageState extends State<TasksPage> {
               ),
             ),
             const SizedBox(height: 12),
+
             if (_tasks.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(child: Text('Keine Arbeitsaufträge.')),
               )
             else
-              ..._tasks.map((t) => _TaskCard(
-                task: t,
-                onToggleSolved: () => _toggleSolved(t),
-                onDelete: () => _deleteTask(t),
-              )),
+              ..._tasks.map(
+                    (t) => _TaskCard(
+                  task: t,
+                  onToggleSolved: () => _toggleSolved(t),
+                  onDelete: () => _deleteTask(t),
+                ),
+              ),
           ],
         ),
       ),
@@ -254,59 +259,149 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final titleStyle = theme.textTheme.titleMedium?.copyWith(
+      decoration: task.solved ? TextDecoration.lineThrough : null,
+    );
+
+    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: task.solved ? cs.onSurfaceVariant : cs.onSurface,
+      decoration: task.solved ? TextDecoration.lineThrough : null,
+    );
 
     return Card(
       color: task.solved ? cs.surfaceContainerLowest : cs.surfaceContainerLow,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Top row: indicator + title + overflow actions
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(task.solved ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    task.title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      decoration: task.solved ? TextDecoration.lineThrough : null,
-                    ),
+                // keep the circle->check idea, but make it feel like a "status badge"
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    task.solved
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    size: 22,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Löschen',
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  onPressed: onDelete,
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.title,
+                        style: titleStyle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (task.description.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          task.description,
+                          style: bodyStyle,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            if (task.description.trim().isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(task.description, style: Theme.of(context).textTheme.bodyMedium),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                if (task.assignees.isEmpty)
-                  const Chip(label: Text('Keine Empfänger'))
-                else
-                  for (final u in task.assignees)
-                    Chip(
-                      label: Text(u.displayName),
-                      visualDensity: VisualDensity.compact,
+
+                const SizedBox(width: 6),
+
+                // actions menu keeps the header balanced (instead of a big delete button)
+                PopupMenuButton<_TaskMenuAction>(
+                  tooltip: 'Aktionen',
+                  onSelected: (a) {
+                    switch (a) {
+                      case _TaskMenuAction.toggleSolved:
+                        onToggleSolved();
+                        break;
+                      case _TaskMenuAction.delete:
+                        onDelete();
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: _TaskMenuAction.toggleSolved,
+                      child: Row(
+                        children: [
+                          Icon(task.solved ? Icons.undo_rounded : Icons.check_rounded),
+                          const SizedBox(width: 10),
+                          Text(task.solved ? 'Wieder offen' : 'Erledigt'),
+                        ],
+                      ),
                     ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: _TaskMenuAction.delete,
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline_rounded),
+                          SizedBox(width: 10),
+                          Text('Löschen'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.more_vert_rounded),
+                  ),
+                ),
               ],
             ),
 
-            // CHANGED: Removed "Erstellt/Erledigt" line entirely
             const SizedBox(height: 10),
+
+            // Assignees: smaller "chips row" with label for structure
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.people_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (task.assignees.isEmpty)
+                        Chip(
+                          label: const Text('Keine Empfänger'),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                        )
+                      else
+                        for (final u in task.assignees)
+                          Chip(
+                            label: Text(u.displayName),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                          ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Bottom row: primary action button aligned left, with subtle timestamp on the right (optional)
             Row(
               children: [
-                const Spacer(),
                 FilledButton.tonalIcon(
                   onPressed: onToggleSolved,
                   icon: Icon(task.solved ? Icons.undo_rounded : Icons.check_rounded),
@@ -314,9 +409,12 @@ class _TaskCard extends StatelessWidget {
                 ),
               ],
             ),
+
           ],
         ),
       ),
     );
   }
 }
+
+enum _TaskMenuAction { toggleSolved, delete }
