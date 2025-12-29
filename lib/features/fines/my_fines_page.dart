@@ -99,7 +99,11 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
   String _userLabel(String id) => _userById[id]?.displayName ?? id;
 
-  String _fineTitle(FineDto f) => 'Beihängung';
+  // 2) show actual fine title instead of hardcoded "Beihängung"
+  String _fineTitle(FineDto f) {
+    final title = (f.reason ?? '').trim();
+    return title.isEmpty ? 'Beihängung' : title;
+  }
 
   Future<void> _load({bool force = false}) async {
     try {
@@ -263,14 +267,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
                 padding: EdgeInsets.only(bottom: 12),
                 child: LinearProgressIndicator(),
               ),
-            if (_activePeriod != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
-                child: Text(
-                  'Aktive Conventsperiode: ${_activePeriod!.semester}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
+
+            // 1) removed "Aktive Conventsperiode: ..." text
+
             if (myId == null)
               const Padding(
                 padding: EdgeInsets.all(8),
@@ -485,10 +484,10 @@ class _PeriodSection extends StatelessWidget {
   }
 
   String _subtitleForFine(FineDto f) {
+    // 3) remove "Creator: ..."
     final amount = f.amountCents ?? 0;
-    final creator = userLabel(f.creatorUserId);
 
-    return 'Betrag: ${Format.centsToEur(amount)} · Creator: $creator\n'
+    return 'Betrag: ${Format.centsToEur(amount)}\n'
         'Beihängungsdatum: ${Format.dateOnlyShort(f.fineDate)}';
   }
 }
