@@ -35,6 +35,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
   List<ConventPeriodDto> _periods = const [];
   Map<String, FineCatalogItemDto> _catalogById = const {};
 
+  // System attendance catalog item IDs (source of truth)
+  Set<String> _attendanceSystemCatalogIds = const {};
+
   // Photos meta for UI (count + enable/disable buttons)
   bool _photosMetaLoading = false;
   int? _photoCount; // null while not loaded yet
@@ -45,17 +48,39 @@ class _FineDetailPageState extends State<FineDetailPage> {
     _load();
   }
 
+  bool _isAttendanceFine(FineDto f) {
+    if (f.type != FineType.catalog) return false;
+    final cid = (f.catalogItemId ?? '').trim();
+    if (cid.isEmpty) return false;
+    return _attendanceSystemCatalogIds.contains(cid);
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final fine = await widget.api.getFine(widget.fineId);
-      final users = await widget.api.pickerUsers();
+      // Fetch everything we need; attendance config is required for reliable system detection.
+      final results = await Future.wait([
+        widget.api.getFine(widget.fineId),
+        widget.api.pickerUsers(),
+        widget.api.listPeriods(),
+        widget.api.listFineCatalog(active: null),
+        widget.api.getAttendanceFineConfig(),
+      ]);
 
-      final periods = (await widget.api.listPeriods()).toList();
-      final catalog = await widget.api.listFineCatalog(active: null);
+      final fine = results[0] as FineDto;
+      final users = results[1] as List<UserPickerDto>;
+      final periods = (results[2] as List<ConventPeriodDto>).toList();
+      final catalog = results[3] as List<FineCatalogItemDto>;
+      final cfg = results[4] as AttendanceFineConfigDto;
 
       final userById = {for (final u in users) u.id: u};
       final catalogById = {for (final c in catalog) c.id: c};
+
+      final sys = <String>{};
+      final lateId = (cfg.lateCatalogItemId ?? '').trim();
+      final absentId = (cfg.absentCatalogItemId ?? '').trim();
+      if (lateId.isNotEmpty) sys.add(lateId);
+      if (absentId.isNotEmpty) sys.add(absentId);
 
       if (!mounted) return;
       setState(() {
@@ -63,6 +88,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
         _userById = userById;
         _periods = periods;
         _catalogById = catalogById;
+        _attendanceSystemCatalogIds = sys;
       });
 
       // load photo count in background after the main card content is ready
@@ -87,7 +113,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
       if (!mounted) return;
       setState(() => _photoCount = list.length);
     } catch (_) {
-      // keep UI usable even if this fails
       if (!mounted) return;
       setState(() => _photoCount = _photoCount ?? 0);
     } finally {
@@ -127,6 +152,14 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     if (!Roles.canManageFines(roles)) return;
+
+    // Attendance fines are system-generated and not deletable.
+    if (_isAttendanceFine(fine)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Automatische Anwesenheits-Beihängungen können nicht gelöscht werden.')),
+      );
+      return;
+    }
 
     final ok = await showDialog<bool>(
       context: context,
@@ -179,7 +212,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
       fineId: fine.id,
     );
 
-    // refresh count after closing
     await _loadPhotoCount();
   }
 
@@ -196,17 +228,17 @@ class _FineDetailPageState extends State<FineDetailPage> {
       currentCount: _photoCount ?? 0,
     );
 
-    // refresh count after closing
     await _loadPhotoCount();
   }
 
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
-    final canDelete = Roles.canManageFines(roles);
 
     final fine = _fine;
     final p = (fine == null) ? null : _periodForFine(fine);
+
+    final canDelete = Roles.canManageFines(roles) && fine != null && !_isAttendanceFine(fine);
 
     final count = _photoCount ?? 0;
     final canView = !_photosMetaLoading && count > 0;
@@ -244,6 +276,13 @@ class _FineDetailPageState extends State<FineDetailPage> {
                     _titleForFine(fine),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
+                  if (_isAttendanceFine(fine)) ...[
+                    const SizedBox(height: 8),
+                    const Chip(
+                      label: Text('Automatisch (Anwesenheit)'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text('Betrag: ${Format.centsToEur(fine.amountCents ?? 0)}'),
                   const SizedBox(height: 8),
@@ -260,7 +299,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
           ),
           const SizedBox(height: 12),
 
-          // Photos card with two separate buttons + counter
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -288,7 +326,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
-
                   Row(
                     children: [
                       Expanded(
@@ -308,7 +345,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
                       ),
                     ],
                   ),
-
                   if (!canAdd)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),

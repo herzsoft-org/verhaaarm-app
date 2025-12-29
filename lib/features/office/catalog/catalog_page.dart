@@ -22,6 +22,11 @@ class _CatalogPageState extends State<CatalogPage> {
   bool _loading = true;
   List<FineCatalogItemDto> _items = const [];
 
+  // IDs of system attendance catalog items from /attendance-fines
+  Set<String> _systemIds = const {};
+
+  bool _isSystemItem(FineCatalogItemDto it) => _systemIds.contains(it.id);
+
   @override
   void initState() {
     super.initState();
@@ -31,11 +36,33 @@ class _CatalogPageState extends State<CatalogPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final items = await widget.api.listFineCatalog(active: null);
-      items.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      final results = await Future.wait([
+        widget.api.listFineCatalog(active: null),
+        widget.api.getAttendanceFineConfig(),
+      ]);
+
+      final items = results[0] as List<FineCatalogItemDto>;
+      final cfg = results[1] as AttendanceFineConfigDto;
+
+      final sys = <String>{};
+      final lateId = (cfg.lateCatalogItemId ?? '').trim();
+      final absentId = (cfg.absentCatalogItemId ?? '').trim();
+      if (lateId.isNotEmpty) sys.add(lateId);
+      if (absentId.isNotEmpty) sys.add(absentId);
+
+      // Sort: system items first, then alphabetical
+      items.sort((a, b) {
+        final as = sys.contains(a.id);
+        final bs = sys.contains(b.id);
+        if (as != bs) return as ? -1 : 1;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
 
       if (!mounted) return;
-      setState(() => _items = items);
+      setState(() {
+        _systemIds = sys;
+        _items = items;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Katalog laden fehlgeschlagen: $e')));
@@ -79,13 +106,29 @@ class _CatalogPageState extends State<CatalogPage> {
           for (final it in _items)
             Card(
               child: ListTile(
-                leading: Icon(it.active ? Icons.check_circle_rounded : Icons.remove_circle_rounded),
-                title: Text(it.title),
+                leading: _isSystemItem(it)
+                    ? const Icon(Icons.lock_rounded)
+                    : Icon(it.active ? Icons.check_circle_rounded : Icons.remove_circle_rounded),
+                title: Row(
+                  children: [
+                    Expanded(child: Text(it.title)),
+                    if (_isSystemItem(it))
+                      const Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Chip(
+                          label: Text('System'),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                  ],
+                ),
                 subtitle: Text(
                   'Default: ${Format.centsToEur(it.defaultAmountCents ?? 0)}'
+                      '${_isSystemItem(it) ? '\nAutomatisch (Anwesenheit) – nur Betrag änderbar' : ''}'
                       '${it.active ? '' : '\nInaktiv'}',
                 ),
-                isThreeLine: !it.active,
+                isThreeLine: _isSystemItem(it) || !it.active,
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push('/office/catalog/${it.id}/edit'),
               ),

@@ -34,7 +34,6 @@ class _FineFormPageState extends State<FineFormPage> {
   bool _loading = true;
   bool _saving = false;
 
-  ConventPeriodDto? _activePeriod;
   List<ConventPeriodDto> _periods = const [];
   List<FineCatalogItemDto> _catalog = const [];
 
@@ -61,6 +60,11 @@ class _FineFormPageState extends State<FineFormPage> {
         '${now.day.toString().padLeft(2, '0')}';
   }
 
+  bool _isAttendanceSystemTitle(String title) {
+    final t = title.trim().toLowerCase();
+    return t == 'absent' || t == 'late';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,16 +81,20 @@ class _FineFormPageState extends State<FineFormPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final period = await widget.api.getActivePeriod();
       final periods = await widget.api.listPeriods();
-      final catalog = await widget.api.listFineCatalog(active: true);
+
+      // Backend change: supports /fine-catalog?forCreation=true
+      // This should exclude system attendance items (absent/late) from the result.
+      final catalog = await widget.api.listFineCatalog(active: true, forCreation: true);
 
       if (!mounted) return;
 
+      // Extra safety: filter them out client-side too.
+      final filtered = catalog.where((c) => !_isAttendanceSystemTitle(c.title)).toList();
+
       setState(() {
-        _activePeriod = period;
         _periods = periods;
-        _catalog = catalog;
+        _catalog = filtered;
         _selectedCatalogItem = null; // placeholder default
         _multiplier = 1;
 
@@ -238,6 +246,14 @@ class _FineFormPageState extends State<FineFormPage> {
       return;
     }
 
+    // Extra safety: never allow selecting system attendance items from UI.
+    if (_useCatalog && _selectedCatalogItem != null && _isAttendanceSystemTitle(_selectedCatalogItem!.title)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dieser Katalogeintrag wird automatisch durch Anwesenheit vergeben.')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
     try {
@@ -359,7 +375,6 @@ class _FineFormPageState extends State<FineFormPage> {
                     'Conventsperiode: ${_periodLabelForFineDate()}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  // Removed: "Aktive Conventsperiode (Info): ..."
                 ],
               ),
             ),
@@ -421,6 +436,9 @@ class _FineFormPageState extends State<FineFormPage> {
                             ),
                             validator: (v) {
                               if (_useCatalog && v == null) return 'Bitte Beihängung auswählen.';
+                              if (v != null && _isAttendanceSystemTitle(v.title)) {
+                                return 'Dieser Eintrag ist ein Systemeintrag (Anwesenheit).';
+                              }
                               return null;
                             },
                           ),

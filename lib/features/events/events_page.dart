@@ -347,7 +347,7 @@ class _EventsPageState extends State<EventsPage> {
       if (periods.isEmpty) return 2; // unknown last
 
       final anyFuture = periods.any((p) {
-        final start = Format.parseIsoToLocal(p.startAt);
+        final _ = Format.parseIsoToLocal(p.startAt);
         final end = Format.parseIsoToLocal(p.endAt);
         return !end.isBefore(now); // current or future
       });

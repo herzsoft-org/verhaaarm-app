@@ -25,8 +25,10 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
   bool _loading = true;
 
   final _titleCtrl = TextEditingController();
-  final _defaultEurCtrl = TextEditingController(); // EUR text now
+  final _defaultEurCtrl = TextEditingController();
   bool _active = true;
+
+  bool _isSystemAttendanceItem = false;
 
   bool get _isEdit => widget.itemId != null;
 
@@ -64,13 +66,25 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
         return;
       }
 
+      // Get system IDs from backend config (source of truth)
+      final cfg = await widget.api.getAttendanceFineConfig();
+      final sys = <String>{
+        if ((cfg.lateCatalogItemId ?? '').trim().isNotEmpty) cfg.lateCatalogItemId!.trim(),
+        if ((cfg.absentCatalogItemId ?? '').trim().isNotEmpty) cfg.absentCatalogItemId!.trim(),
+      };
+
       if (_isEdit) {
         final it = await widget.api.getFineCatalogItem(widget.itemId!);
+
+        _isSystemAttendanceItem = sys.contains(it.id);
+
         _titleCtrl.text = it.title;
         _defaultEurCtrl.text = it.defaultAmountCents == null ? '' : _toEurText(it.defaultAmountCents!);
         _active = it.active;
       } else {
+        _isSystemAttendanceItem = false;
         _active = true;
+        _titleCtrl.text = '';
         _defaultEurCtrl.text = '';
       }
 
@@ -93,19 +107,31 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
       final cents = _parseOptionalEurToCents(_defaultEurCtrl.text);
 
       if (_isEdit) {
-        await widget.api.updateFineCatalogItem(
-          widget.itemId!,
-          UpdateFineCatalogItemRequest(
-            title: _titleCtrl.text.trim(),
-            defaultAmountCents: cents, // nullable ok
-            active: _active,
-          ),
-        );
+        if (_isSystemAttendanceItem) {
+          await widget.api.updateFineCatalogItem(
+            widget.itemId!,
+            UpdateFineCatalogItemRequest(
+              // System: only amount
+              title: null,
+              defaultAmountCents: cents,
+              active: null,
+            ),
+          );
+        } else {
+          await widget.api.updateFineCatalogItem(
+            widget.itemId!,
+            UpdateFineCatalogItemRequest(
+              title: _titleCtrl.text.trim(),
+              defaultAmountCents: cents,
+              active: _active,
+            ),
+          );
+        }
       } else {
         await widget.api.createFineCatalogItem(
           CreateFineCatalogItemRequest(
             title: _titleCtrl.text.trim(),
-            defaultAmountCents: cents, // nullable ok
+            defaultAmountCents: cents,
             active: _active,
           ),
         );
@@ -124,6 +150,14 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
 
   Future<void> _delete() async {
     if (!_isEdit) return;
+
+    // Hard guard against backend 500
+    if (_isSystemAttendanceItem) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Systemeinträge können nicht gelöscht werden.')),
+      );
+      return;
+    }
 
     final ok = await showDialog<bool>(
       context: context,
@@ -161,7 +195,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
     return AppScaffold(
       title: _isEdit ? 'Katalogeintrag bearbeiten' : 'Katalogeintrag anlegen',
       actions: [
-        if (can && _isEdit)
+        if (can && _isEdit && !_isSystemAttendanceItem)
           IconButton(
             tooltip: 'Löschen',
             icon: const Icon(Icons.delete_rounded),
@@ -182,6 +216,16 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (_isSystemAttendanceItem)
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.lock_rounded),
+                  title: Text('Systemeintrag (Anwesenheit)'),
+                  subtitle: Text('Wird automatisch vergeben. Titel/Aktiv-Status sind gesperrt. '
+                      'Du kannst nur den Default Betrag ändern.'),
+                ),
+              ),
+            if (_isSystemAttendanceItem) const SizedBox(height: 12),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -189,8 +233,15 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
                   children: [
                     TextFormField(
                       controller: _titleCtrl,
-                      decoration: const InputDecoration(labelText: 'Titel'),
-                      validator: (v) => ((v ?? '').trim().isEmpty) ? 'Pflichtfeld' : null,
+                      enabled: !_isSystemAttendanceItem,
+                      decoration: InputDecoration(
+                        labelText: 'Titel',
+                        helperText: _isSystemAttendanceItem ? 'Titel ist gesperrt (Systemeintrag).' : null,
+                      ),
+                      validator: (v) {
+                        if (_isSystemAttendanceItem) return null;
+                        return ((v ?? '').trim().isEmpty) ? 'Pflichtfeld' : null;
+                      },
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -202,7 +253,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
                       ),
                       validator: (v) {
                         final s = (v ?? '').trim();
-                        if (s.isEmpty) return null; // optional
+                        if (s.isEmpty) return null;
                         final cents = Format.eurTextToCents(s);
                         if (cents == null) return 'Ungültiger Betrag';
                         if (cents < 0) return '>= 0';
@@ -214,7 +265,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Aktiv'),
                       value: _active,
-                      onChanged: (v) => setState(() => _active = v),
+                      onChanged: _isSystemAttendanceItem ? null : (v) => setState(() => _active = v),
                     ),
                   ],
                 ),
@@ -224,7 +275,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _save,
+                onPressed: _loading ? null : _save,
                 icon: const Icon(Icons.save_rounded),
                 label: const Text('Speichern'),
               ),

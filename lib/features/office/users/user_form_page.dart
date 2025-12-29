@@ -12,7 +12,12 @@ class UserFormPage extends StatefulWidget {
   final AuthStore authStore;
   final String? userId; // null => create
 
-  const UserFormPage({super.key, required this.api, required this.authStore, this.userId});
+  const UserFormPage({
+    super.key,
+    required this.api,
+    required this.authStore,
+    this.userId,
+  });
 
   @override
   State<UserFormPage> createState() => _UserFormPageState();
@@ -55,7 +60,9 @@ class _UserFormPageState extends State<UserFormPage> {
       final roles = Roles.fromAccessToken(widget.authStore.accessToken);
       if (!Roles.canManageUsers(roles)) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Keine Berechtigung.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Keine Berechtigung.')),
+        );
         context.pop();
         return;
       }
@@ -77,7 +84,9 @@ class _UserFormPageState extends State<UserFormPage> {
       setState(() {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Laden fehlgeschlagen: $e')),
+      );
       context.pop();
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -107,11 +116,15 @@ class _UserFormPageState extends State<UserFormPage> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gespeichert.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gespeichert.')),
+      );
       context.pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -179,46 +192,28 @@ class _UserFormPageState extends State<UserFormPage> {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Rolle', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Hinweis: Es muss immer mindestens einen ADMIN, SENIOR und HOUSEKEEPING geben.',
-                    ),
-                    const SizedBox(height: 12),
-                    _RoleRadio(
-                      label: 'ADMIN',
-                      value: 'ADMIN',
-                      groupValue: _role,
-                      onChanged: (v) => setState(() => _role = v),
-                    ),
-                    _RoleRadio(
-                      label: 'SENIOR',
-                      value: 'SENIOR',
-                      groupValue: _role,
-                      onChanged: (v) => setState(() => _role = v),
-                    ),
-                    _RoleRadio(
-                      label: 'HOUSEKEEPING',
-                      value: 'HOUSEKEEPING',
-                      groupValue: _role,
-                      onChanged: (v) => setState(() => _role = v),
-                    ),
-                    _RoleRadio(
-                      label: 'TREASURER',
-                      value: 'TREASURER',
-                      groupValue: _role,
-                      onChanged: (v) => setState(() => _role = v),
-                    ),
-                    _RoleRadio(
-                      label: 'MEMBER',
-                      value: 'MEMBER',
-                      groupValue: _role,
-                      onChanged: (v) => setState(() => _role = v),
-                    ),
-                  ],
+                child: RadioGroup<String>(
+                  groupValue: _role,
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _role = value);
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Rolle', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Hinweis: Es muss immer mindestens einen ADMIN, SENIOR und HOUSEKEEPING geben.',
+                      ),
+                      const SizedBox(height: 12),
+                      const _RoleRadio(label: 'ADMIN', value: 'ADMIN'),
+                      const _RoleRadio(label: 'SENIOR', value: 'SENIOR'),
+                      const _RoleRadio(label: 'HOUSEKEEPING', value: 'HOUSEKEEPING'),
+                      const _RoleRadio(label: 'TREASURER', value: 'TREASURER'),
+                      const _RoleRadio(label: 'MEMBER', value: 'MEMBER'),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -261,14 +256,10 @@ class _UserFormPageState extends State<UserFormPage> {
 class _RoleRadio extends StatelessWidget {
   final String label;
   final String value;
-  final String groupValue;
-  final ValueChanged<String> onChanged;
 
   const _RoleRadio({
     required this.label,
     required this.value,
-    required this.groupValue,
-    required this.onChanged,
   });
 
   @override
@@ -277,11 +268,6 @@ class _RoleRadio extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(label),
       value: value,
-      groupValue: groupValue,
-      onChanged: (v) {
-        if (v == null) return;
-        onChanged(v);
-      },
     );
   }
 }

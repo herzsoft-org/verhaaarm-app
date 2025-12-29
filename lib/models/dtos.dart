@@ -623,6 +623,39 @@ class UpsertAttendanceRequest {
   };
 }
 
+class AttendanceFineConfigDto {
+  final String? periodId;
+
+  final String? lateCatalogItemId;
+  final String? lateReason;
+  final int lateAmountCents;
+
+  final String? absentCatalogItemId;
+  final String? absentReason;
+  final int absentAmountCents;
+
+  AttendanceFineConfigDto({
+    required this.periodId,
+    required this.lateCatalogItemId,
+    required this.lateReason,
+    required this.lateAmountCents,
+    required this.absentCatalogItemId,
+    required this.absentReason,
+    required this.absentAmountCents,
+  });
+
+  factory AttendanceFineConfigDto.fromJson(Map<String, dynamic> json) => AttendanceFineConfigDto(
+    periodId: _optString(json, 'periodId'),
+    lateCatalogItemId: _optString(json, 'lateCatalogItemId'),
+    lateReason: _optString(json, 'lateReason'),
+    lateAmountCents: _optInt(json, 'lateAmountCents', fallback: 0),
+    absentCatalogItemId: _optString(json, 'absentCatalogItemId'),
+    absentReason: _optString(json, 'absentReason'),
+    absentAmountCents: _optInt(json, 'absentAmountCents', fallback: 0),
+  );
+}
+
+
 // ---------- Live Events ----------
 class CreateLiveEventRequest {
   final String title;

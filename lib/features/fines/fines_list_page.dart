@@ -1,5 +1,3 @@
-// lib/features/fines/fines_list_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,6 +27,20 @@ class _FinesListPageState extends State<FinesListPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  bool _isAttendanceSystemTitle(String title) {
+    final t = title.trim().toLowerCase();
+    return t == 'absent' || t == 'late';
+  }
+
+  bool _isAttendanceFine(FineDto f) {
+    if (f.type != FineType.catalog) return false;
+    final cid = f.catalogItemId;
+    if (cid == null) return false;
+    final item = _catalogById[cid];
+    if (item == null) return false;
+    return _isAttendanceSystemTitle(item.title);
   }
 
   static ({int year, int term}) _semesterKey(String semester) {
@@ -123,6 +135,7 @@ class _FinesListPageState extends State<FinesListPage> {
                 fineTitle: _fineTitle,
                 userLabel: _userLabel,
                 onTapFine: (id) => context.push('/fines/$id'),
+                isAttendanceFine: _isAttendanceFine, // CHANGED
               ),
           ],
         ),
@@ -254,6 +267,7 @@ class _SemesterSection extends StatelessWidget {
   final String Function(FineDto) fineTitle;
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
+  final bool Function(FineDto) isAttendanceFine; // CHANGED
 
   const _SemesterSection({
     required this.semester,
@@ -261,6 +275,7 @@ class _SemesterSection extends StatelessWidget {
     required this.fineTitle,
     required this.userLabel,
     required this.onTapFine,
+    required this.isAttendanceFine, // CHANGED
   });
 
   @override
@@ -281,6 +296,7 @@ class _SemesterSection extends StatelessWidget {
                 fineTitle: fineTitle,
                 userLabel: userLabel,
                 onTapFine: onTapFine,
+                isAttendanceFine: isAttendanceFine, // CHANGED
               ),
           ],
         ),
@@ -296,6 +312,7 @@ class _PeriodSection extends StatelessWidget {
   final String Function(FineDto) fineTitle;
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
+  final bool Function(FineDto) isAttendanceFine; // CHANGED
 
   const _PeriodSection({
     required this.period,
@@ -303,6 +320,7 @@ class _PeriodSection extends StatelessWidget {
     required this.fineTitle,
     required this.userLabel,
     required this.onTapFine,
+    required this.isAttendanceFine, // CHANGED
   });
 
   @override
@@ -347,7 +365,18 @@ class _PeriodSection extends StatelessWidget {
                   title: Text(fineTitle(f)),
                   subtitle: Text(_subtitleForFine(f)),
                   isThreeLine: true,
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isAttendanceFine(f))
+                        const Chip(
+                          label: Text('Auto'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      if (isAttendanceFine(f)) const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right_rounded),
+                    ],
+                  ),
                   onTap: () => onTapFine(f.id),
                 ),
               ),

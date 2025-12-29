@@ -205,13 +205,24 @@ class ApiClient {
   }
 
   // --- Fine Catalog
-  Future<List<FineCatalogItemDto>> listFineCatalog({bool? active}) async {
-    final r = await dio.get('/fine-catalog', queryParameters: {
-      if (active != null) 'active': active,
-    });
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => FineCatalogItemDto.fromJson(e as Map<String, dynamic>)).toList();
+  Future<List<FineCatalogItemDto>> listFineCatalog({bool? active, bool? forCreation}) async {
+    final res = await dio.get(
+      '/fine-catalog',
+      queryParameters: {
+        if (active != null) 'active': active,
+        if (forCreation != null) 'forCreation': forCreation,
+      },
+    );
+
+    final data = res.data as List;
+    return data.map((e) => FineCatalogItemDto.fromJson(e as Map<String, dynamic>)).toList();
   }
+
+  Future<AttendanceFineConfigDto> getAttendanceFineConfig() async {
+    final r = await dio.get('/attendance-fines');
+    return AttendanceFineConfigDto.fromJson(r.data as Map<String, dynamic>);
+  }
+
 
   // --- Fine Suggestions
   Future<List<FineSuggestionDto>> listSuggestions({String? status, bool mine = false}) async {
