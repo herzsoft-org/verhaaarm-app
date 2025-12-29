@@ -45,9 +45,7 @@ class Roles {
   }
 
   static bool canAcceptFineSuggestions(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin) ||
-        roles.contains(AppRole.senior) ||
-        roles.contains(AppRole.housekeeping);
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
   }
 
   static bool canCreateOfficialFine(Set<AppRole> roles) {
@@ -74,9 +72,7 @@ class Roles {
   }
 
   static bool canAccessOffice(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin) ||
-        roles.contains(AppRole.senior) ||
-        roles.contains(AppRole.housekeeping);
+    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
   }
 
   static bool canManageUsers(Set<AppRole> roles) {
@@ -97,5 +93,8 @@ class Roles {
     return roles.contains(AppRole.admin);
   }
 
-
+  // --- Tasks (ADMIN can see/edit/delete all)
+  static bool canManageTasks(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin);
+  }
 }

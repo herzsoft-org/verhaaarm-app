@@ -44,12 +44,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
   static const _kHomeQuote = 'home.quote';
   static const _quoteUrl = 'https://verhaarmapi.herz.moe/public/quotes';
 
+  static const _kHomeTasksUnsolved = 'home.tasks.unsolved';
+
   ConventPeriodDto? _activePeriod;
   UserBalanceDto? _balance;
   List<LiveEventDto> _liveEvents = const [];
   EventDto? _nextEvent;
 
   QuoteDto? _quote;
+
+  int _unsolvedTasks = 0;
 
   bool _loading = true;
   bool _refreshing = false;
@@ -98,9 +102,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
         if (!mounted) return;
         _ota.checkNow();
       });
-
-      // Removed daily periodic checks:
-      // OTA checks now happen whenever _load() refreshes content.
     }
   }
 
@@ -146,8 +147,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'locked': p.locked,
   };
 
-  ConventPeriodDto _decodePeriod(Object json) =>
-      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+  ConventPeriodDto _decodePeriod(Object json) => ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
     'userId': b.userId,
@@ -155,8 +155,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'balanceFormatted': b.balanceFormatted,
   };
 
-  UserBalanceDto _decodeBalance(Object json) =>
-      UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
+  UserBalanceDto _decodeBalance(Object json) => UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeLive(LiveEventDto e) => {
     'id': e.id,
@@ -168,8 +167,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'createdByUserId': e.createdByUserId,
   };
 
-  LiveEventDto _decodeLive(Object json) =>
-      LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
+  LiveEventDto _decodeLive(Object json) => LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeEvent(EventDto e) => {
     'id': e.id,
@@ -181,11 +179,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'createdAt': e.createdAt,
   };
 
-  EventDto _decodeEvent(Object json) =>
-      EventDto.fromJson((json as Map).cast<String, dynamic>());
+  EventDto _decodeEvent(Object json) => EventDto.fromJson((json as Map).cast<String, dynamic>());
 
-  QuoteDto _decodeQuote(Object json) =>
-      QuoteDto.fromJson((json as Map).cast<String, dynamic>());
+  QuoteDto _decodeQuote(Object json) => QuoteDto.fromJson((json as Map).cast<String, dynamic>());
+
+  int _decodeInt(Object json) {
+    if (json is int) return json;
+    if (json is num) return json.toInt();
+    return int.tryParse(json.toString()) ?? 0;
+  }
 
   void _startLiveTimer() {
     _liveTimer?.cancel();
@@ -205,8 +207,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
       _kHomeLiveEvents,
-      decode: (json) =>
-          (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+      decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
     );
     if (cLive != null && cLive.isFresh(_ttlHomeLive)) return;
 
@@ -286,17 +287,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
       );
       final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
         _kHomeLiveEvents,
-        decode: (json) =>
-            (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+        decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
       );
       final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
         _kHomeEvents,
-        decode: (json) =>
-            (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+        decode: (json) => (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+      );
+      final cTasks = await AppCache.I.entryOrLoadPersisted<int>(
+        _kHomeTasksUnsolved,
+        decode: _decodeInt,
       );
 
       final hasAnyCache =
-          (cPeriod != null) || (cBalance != null) || (cLive != null) || (cEvents != null);
+          (cPeriod != null) || (cBalance != null) || (cLive != null) || (cEvents != null) || (cTasks != null);
 
       if (hasAnyCache && mounted) {
         final events = List<EventDto>.from(cEvents?.value ?? const <EventDto>[]);
@@ -307,13 +310,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
           _balance = cBalance?.value;
           _liveEvents = List<LiveEventDto>.unmodifiable(cLive?.value ?? const <LiveEventDto>[]);
           _nextEvent = next;
+          _quote = _quote; // keep
+          _unsolvedTasks = cTasks?.value ?? 0;
           _loading = false;
         });
       }
 
       final baseFresh = (cPeriod != null && cPeriod.isFresh(_ttlHomeBase)) &&
           (cBalance != null && cBalance.isFresh(_ttlHomeBase)) &&
-          (cEvents != null && cEvents.isFresh(_ttlHomeBase));
+          (cEvents != null && cEvents.isFresh(_ttlHomeBase)) &&
+          (cTasks != null && cTasks.isFresh(_ttlHomeBase));
 
       final liveFresh = (cLive != null && cLive.isFresh(_ttlHomeLive));
 
@@ -356,6 +362,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
         final events = await widget.api.listEvents();
         final next = _pickNextEvent(events);
 
+        final tasks = await widget.api.listMyTasks();
+        final unsolved = tasks.where((t) => !t.solved).length;
+
         final frozenLive = List<LiveEventDto>.unmodifiable(live);
         final frozenEvents = List<EventDto>.unmodifiable(events);
 
@@ -379,6 +388,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
           frozenEvents,
           encode: (v) => v.map(_encodeEvent).toList(growable: false),
         );
+        await AppCache.I.setPersisted<int>(
+          _kHomeTasksUnsolved,
+          unsolved,
+          encode: (v) => v,
+        );
 
         if (!mounted) return;
         setState(() {
@@ -386,6 +400,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
           _balance = balance;
           _liveEvents = frozenLive;
           _nextEvent = next;
+          _unsolvedTasks = unsolved;
         });
       } catch (e) {
         if (!mounted) return;
@@ -467,6 +482,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
             const SizedBox(height: 12),
             _buildNextEventCard(context),
             const SizedBox(height: 12),
+
+            // NEW: Arbeitsaufträge card (below "Nächster Termin")
+            _buildTasksCard(context),
+            const SizedBox(height: 12),
+
             _buildQuickActions(context),
 
             // Quote of the day (silent placeholder if null)
@@ -475,6 +495,50 @@ class _HomePageState extends State<HomePage> with RouteAware {
               QuoteOfTheDayCard(quote: _quote!),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTasksCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final n = _unsolvedTasks;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => GoRouter.of(context).push('/tasks'),
+      child: Card(
+        color: cs.surfaceContainerLow,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.assignment_rounded, color: cs.primary),
+              const SizedBox(width: 10),
+              Text(
+                'Arbeitsaufträge',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const Spacer(),
+              if (n > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$n',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
         ),
       ),
     );

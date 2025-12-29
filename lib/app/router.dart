@@ -28,6 +28,13 @@ import '../features/live_events/live_event_form_page.dart';
 import '../features/events/events_page.dart';
 import '../features/events/event_form_page.dart';
 
+import '../features/tasks/tasks_page.dart';
+import '../features/tasks/task_form_page.dart';
+import '../features/office/tasks/office_tasks_page.dart';
+
+import '../models/dtos.dart';
+import '../auth/roles.dart';
+
 Future<GoRouter> buildRouter() async {
   final authStore = AuthStore();
   await authStore.init();
@@ -63,6 +70,21 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/profile',
         builder: (context, state) => ProfilePage(api: api, authStore: authStore),
+      ),
+
+      // --- Tasks (my)
+      GoRoute(
+        path: '/tasks',
+        builder: (context, state) => TasksPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/tasks/new',
+        builder: (context, state) => TaskFormPage(
+          api: api,
+          authStore: authStore,
+          isEdit: false,
+          isAdminEdit: false,
+        ),
       ),
 
       // --- Events (scheduled)
@@ -141,11 +163,39 @@ Future<GoRouter> buildRouter() async {
           liveEventId: state.pathParameters['id']!,
         ),
       ),
+
       // --- Office
       GoRoute(
         path: '/office',
         builder: (context, state) => OfficePage(api: api, authStore: authStore),
       ),
+
+      // Office: Tasks (ADMIN)
+      GoRoute(
+        path: '/office/tasks',
+        builder: (context, state) => OfficeTasksPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/tasks/:id/edit',
+        builder: (context, state) {
+          final roles = Roles.fromAccessToken(authStore.accessToken);
+          if (!Roles.canManageTasks(roles)) {
+            return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
+          }
+
+          // We pass TaskDto as extra from OfficeTasksPage for instant edit.
+          final TaskDto? t = state.extra is TaskDto ? state.extra as TaskDto : null;
+
+          return TaskFormPage(
+            api: api,
+            authStore: authStore,
+            initial: t,
+            isEdit: true,
+            isAdminEdit: true,
+          );
+        },
+      ),
+
       GoRoute(
         path: '/office/periods',
         builder: (context, state) => PeriodsPage(api: api, authStore: authStore),
@@ -206,7 +256,6 @@ Future<GoRouter> buildRouter() async {
           itemId: state.pathParameters['id']!,
         ),
       ),
-
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(

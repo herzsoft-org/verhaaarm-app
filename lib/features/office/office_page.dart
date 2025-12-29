@@ -20,14 +20,29 @@ class OfficePage extends StatelessWidget {
     final canUsers = Roles.canManageUsers(roles);
     final canCatalog = Roles.canManageCatalog(roles);
     final canPeriods = Roles.canManagePeriods(roles);
-
     final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
+    final canTasks = Roles.canManageTasks(roles);
 
     return AppScaffold(
       title: 'Amtsausführung',
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          if (canTasks) ...[
+            _Section(
+              title: 'Arbeitsaufträge',
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.assignment_rounded),
+                  title: const Text('Arbeitsaufträge verwalten'),
+                  subtitle: const Text('Alle Nutzer · bearbeiten · löschen'),
+                  onTap: () => context.push('/office/tasks'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+
           _Section(
             title: 'Beihängungen',
             children: [

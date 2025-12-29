@@ -119,6 +119,42 @@ class ApiClient {
     return list.map((e) => UserPickerDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  // --- TASKS
+  Future<List<TaskDto>> listMyTasks() async {
+    final r = await dio.get('/tasks');
+    final list = (r.data as List).cast<dynamic>();
+    return list.map((e) => TaskDto.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
+  Future<TaskDto> createTask(CreateTaskRequest req) async {
+    final r = await dio.post('/tasks', data: req.toJson());
+    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<TaskDto> setTaskSolved(String taskId, {required bool solved}) async {
+    final r = await dio.post('/tasks/$taskId/solved', data: {'solved': solved});
+    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteTask(String taskId) async {
+    await dio.delete('/tasks/$taskId');
+  }
+
+  Future<TaskDto> updateTask(String taskId, UpdateTaskRequest req) async {
+    final r = await dio.patch('/tasks/$taskId', data: req.toJson());
+    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteAllSolvedMyTasks() async {
+    await dio.delete('/tasks/solved');
+  }
+
+  Future<List<TaskDto>> listAdminTasks() async {
+    final r = await dio.get('/admin/tasks');
+    final list = (r.data as List).cast<dynamic>();
+    return list.map((e) => TaskDto.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
   // --- FINES
   Future<List<FineDto>> listFines() async {
     final r = await dio.get('/fines');
@@ -222,7 +258,6 @@ class ApiClient {
     final r = await dio.get('/attendance-fines');
     return AttendanceFineConfigDto.fromJson(r.data as Map<String, dynamic>);
   }
-
 
   // --- Fine Suggestions
   Future<List<FineSuggestionDto>> listSuggestions({String? status, bool mine = false}) async {

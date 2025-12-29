@@ -1,5 +1,3 @@
-// lib/models/dtos.dart
-
 // ---- tiny JSON helpers (robust against null + wrong types) ----
 String _reqString(Map<String, dynamic> j, String k) => (j[k] ?? '').toString();
 
@@ -200,8 +198,83 @@ class UpdateUserRequest {
 
   Map<String, dynamic> toJson() => {
     if (displayName != null) 'displayName': displayName,
-    if (disabled != null) 'disabled': disabled,
+    if (disabled !=null) 'disabled': disabled,
     if (roles != null) 'roles': roles,
+  };
+}
+
+// ---------- TASKS ----------
+class TaskDto {
+  final String id;
+  final String creatorUserId;
+  final String title;
+  final String description;
+  final bool solved;
+  final String? solvedAt;
+  final List<UserPickerDto> assignees;
+  final String createdAt;
+
+  TaskDto({
+    required this.id,
+    required this.creatorUserId,
+    required this.title,
+    required this.description,
+    required this.solved,
+    required this.solvedAt,
+    required this.assignees,
+    required this.createdAt,
+  });
+
+  factory TaskDto.fromJson(Map<String, dynamic> json) => TaskDto(
+    id: _reqString(json, 'id'),
+    creatorUserId: _reqString(json, 'creatorUserId'),
+    title: _reqString(json, 'title'),
+    description: _reqString(json, 'description'),
+    solved: _optBool(json, 'solved', fallback: false),
+    solvedAt: _optString(json, 'solvedAt'),
+    assignees: (json['assignees'] is List)
+        ? (json['assignees'] as List)
+        .whereType<Map>()
+        .map((m) => UserPickerDto.fromJson(m.cast<String, dynamic>()))
+        .toList(growable: false)
+        : const <UserPickerDto>[],
+    createdAt: _reqString(json, 'createdAt'),
+  );
+}
+
+class CreateTaskRequest {
+  final String title;
+  final String description;
+  final List<String> assigneeUserIds;
+
+  CreateTaskRequest({
+    required this.title,
+    required this.description,
+    required this.assigneeUserIds,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'description': description,
+    'assigneeUserIds': assigneeUserIds,
+  };
+}
+
+class UpdateTaskRequest {
+  final String? title;
+  final String? description;
+  final List<String>? assigneeUserIds;
+
+  UpdateTaskRequest({
+    this.title,
+    this.description,
+    this.assigneeUserIds,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (title != null) 'title': title,
+    if (description != null) 'description': description,
+    if (assigneeUserIds != null) 'assigneeUserIds': assigneeUserIds,
   };
 }
 
@@ -344,9 +417,6 @@ class FinePhotoDto {
   );
 }
 
-
-
-
 class CreateFineRequest {
   /// date-only: YYYY-MM-DD
   final String fineDate;
@@ -389,7 +459,6 @@ class QuoteDto {
     'author': author,
   };
 }
-
 
 // ---------- Fine Suggestions ----------
 class FineSuggestionDto {
@@ -654,7 +723,6 @@ class AttendanceFineConfigDto {
     absentAmountCents: _optInt(json, 'absentAmountCents', fallback: 0),
   );
 }
-
 
 // ---------- Live Events ----------
 class CreateLiveEventRequest {
