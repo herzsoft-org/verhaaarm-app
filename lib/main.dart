@@ -1,8 +1,7 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'push/push_fcm.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
@@ -10,6 +9,8 @@ import 'common/cache/app_cache.dart';
 
 // Firebase (only initialize on non-web)
 import 'package:firebase_core/firebase_core.dart';
+
+import 'push/push_fcm.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,7 @@ Future<void> main() async {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
+
 
   final router = await buildRouter();
   runApp(VerhaaarmApp(router: router));

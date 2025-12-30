@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -13,14 +14,17 @@ final FlutterLocalNotificationsPlugin _ln = FlutterLocalNotificationsPlugin();
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(); // required in background isolate
+  await Firebase.initializeApp();
   await _ensureLocalNotificationsInitialized();
 
-  final title = message.notification?.title ?? message.data['title']?.toString() ?? 'Notification';
-  final body = message.notification?.body ?? message.data['body']?.toString() ?? '';
+  // If FCM included a notification payload, Android already shows it in background.
+  if (message.notification != null) return;
+
+  final title = message.data['title']?.toString() ?? 'Notification';
+  final body = message.data['body']?.toString() ?? '';
 
   await _ln.show(
-    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    _notificationId(message),
     title,
     body,
     const NotificationDetails(
@@ -32,6 +36,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       ),
     ),
   );
+}
+
+int _notificationId(RemoteMessage m) {
+  // stable-ish ID to avoid duplicates on retries
+  final s = m.messageId ?? '${m.sentTime?.millisecondsSinceEpoch ?? 0}:${m.data.hashCode}';
+  return s.hashCode & 0x7fffffff;
 }
 
 Future<void> _ensureLocalNotificationsInitialized() async {
@@ -62,18 +72,17 @@ class FcmRegistrar {
 
   FcmRegistrar({required this.api, required this.authStore});
 
+  static bool _didInit = false;
+
   Future<void> initBestEffort() async {
     if (!authStore.isLoggedIn) return;
     if (!Platform.isAndroid) return;
+    if (_didInit) return;
+    _didInit = true;
 
     await _ensureLocalNotificationsInitialized();
 
-    // required for background messages
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
     final fm = FirebaseMessaging.instance;
-
-    // Android 13+ runtime permission
     await fm.requestPermission();
 
     final token = await fm.getToken();
@@ -82,20 +91,16 @@ class FcmRegistrar {
     }
 
     fm.onTokenRefresh.listen((t) async {
-      if (!authStore.isLoggedIn) return;
-      if (t.isEmpty) return;
-      try {
-        await api.registerFcmToken(t);
-      } catch (_) {}
+      if (!authStore.isLoggedIn || t.isEmpty) return;
+      try { await api.registerFcmToken(t); } catch (_) {}
     });
 
-    // Foreground: show local notification + refresh unread count
     FirebaseMessaging.onMessage.listen((msg) async {
       final title = msg.notification?.title ?? msg.data['title']?.toString() ?? 'Notification';
       final body = msg.notification?.body ?? msg.data['body']?.toString() ?? '';
 
       await _ln.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        _notificationId(msg),
         title,
         body,
         const NotificationDetails(
