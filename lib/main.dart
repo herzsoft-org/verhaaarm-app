@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -5,10 +6,17 @@ import 'app/router.dart';
 import 'app/theme.dart';
 import 'common/cache/app_cache.dart';
 
+// Firebase (only initialize on non-web)
+import 'package:firebase_core/firebase_core.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppCache.I.init();
   await initializeDateFormatting('de_DE', null);
+
+  if (!kIsWeb) {
+    await Firebase.initializeApp();
+  }
 
   final router = await buildRouter();
   runApp(VerhaaarmApp(router: router));

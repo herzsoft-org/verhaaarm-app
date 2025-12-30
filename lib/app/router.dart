@@ -32,6 +32,10 @@ import '../features/tasks/tasks_page.dart';
 import '../features/tasks/task_form_page.dart';
 import '../features/office/tasks/office_tasks_page.dart';
 
+import '../features/notifications/notifications_page.dart';
+import '../notifications/notification_center.dart';
+import '../push/push_manager.dart';
+
 import '../models/dtos.dart';
 import '../auth/roles.dart';
 
@@ -44,6 +48,24 @@ Future<GoRouter> buildRouter() async {
   // On app start: if we have refresh token but no access token (or it expired earlier), try refresh.
   if (!authStore.isLoggedIn) {
     await authStore.tryRefresh(api);
+  }
+
+  // Global notifications badge + polling
+  NotificationCenter.I.init(api: api, authStore: authStore);
+
+  // Push auto-registration whenever auth flips to logged-in
+  final push = PushManager(api: api, authStore: authStore);
+  authStore.addListener(() {
+    if (authStore.isLoggedIn) {
+      push.initAndRegisterBestEffort();
+      NotificationCenter.I.refreshUnreadCount();
+    }
+  });
+
+  // If already logged in after refresh attempt, register now
+  if (authStore.isLoggedIn) {
+    push.initAndRegisterBestEffort();
+    NotificationCenter.I.refreshUnreadCount();
   }
 
   return GoRouter(
@@ -70,6 +92,12 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/profile',
         builder: (context, state) => ProfilePage(api: api, authStore: authStore),
+      ),
+
+      // --- Notifications
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => NotificationsPage(api: api, authStore: authStore),
       ),
 
       // --- Tasks (my)

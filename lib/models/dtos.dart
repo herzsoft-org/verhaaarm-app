@@ -31,6 +31,17 @@ List<String> _optStringList(Map<String, dynamic> j, String k) {
   return const [];
 }
 
+DateTime? _optDateTime(Map<String, dynamic> j, String k) {
+  final s = _optString(j, k);
+  if (s == null) return null;
+  return DateTime.tryParse(s);
+}
+
+DateTime _reqDateTime(Map<String, dynamic> j, String k) {
+  final s = _reqString(j, k);
+  return DateTime.parse(s);
+}
+
 // ---------------- DTOs ----------------
 
 class TokenResponse {
@@ -198,7 +209,7 @@ class UpdateUserRequest {
 
   Map<String, dynamic> toJson() => {
     if (displayName != null) 'displayName': displayName,
-    if (disabled !=null) 'disabled': disabled,
+    if (disabled != null) 'disabled': disabled,
     if (roles != null) 'roles': roles,
   };
 }
@@ -565,8 +576,7 @@ class FineDtoAcceptResult {
 // ---------- Scheduled Events ----------
 enum EventOwnerType { senior, housekeeping }
 
-EventOwnerType _eventOwnerTypeFromJson(String s) =>
-    (s == 'SENIOR') ? EventOwnerType.senior : EventOwnerType.housekeeping;
+EventOwnerType _eventOwnerTypeFromJson(String s) => (s == 'SENIOR') ? EventOwnerType.senior : EventOwnerType.housekeeping;
 
 class EventDto {
   final String id;
@@ -801,4 +811,73 @@ class UpdateConventPeriodRequest {
     if (active != null) 'active': active,
     if (locked != null) 'locked': locked,
   };
+}
+
+// ---------- Notifications ----------
+class NotificationDto {
+  final String id;
+  final String userId;
+  final String type;
+  final String title;
+  final String body;
+  final Map<String, String> data;
+  final DateTime createdAt;
+  final DateTime? readAt;
+
+  NotificationDto({
+    required this.id,
+    required this.userId,
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.data,
+    required this.createdAt,
+    required this.readAt,
+  });
+
+  factory NotificationDto.fromJson(Map<String, dynamic> json) {
+    final rawData = (json['data'] is Map) ? (json['data'] as Map).cast<String, dynamic>() : <String, dynamic>{};
+    final data = <String, String>{};
+    for (final e in rawData.entries) {
+      final v = e.value;
+      if (v == null) continue;
+      data[e.key] = v.toString();
+    }
+
+    return NotificationDto(
+      id: _reqString(json, 'id'),
+      userId: _reqString(json, 'userId'),
+      type: _reqString(json, 'type'),
+      title: _reqString(json, 'title'),
+      body: _reqString(json, 'body'),
+      data: data,
+      createdAt: _reqDateTime(json, 'createdAt'),
+      readAt: _optDateTime(json, 'readAt'),
+    );
+  }
+
+  NotificationDto copyWith({
+    DateTime? readAt,
+  }) {
+    return NotificationDto(
+      id: id,
+      userId: userId,
+      type: type,
+      title: title,
+      body: body,
+      data: data,
+      createdAt: createdAt,
+      readAt: readAt ?? this.readAt,
+    );
+  }
+}
+
+class UnreadCountDto {
+  final int unread;
+
+  UnreadCountDto({required this.unread});
+
+  factory UnreadCountDto.fromJson(Map<String, dynamic> json) => UnreadCountDto(
+    unread: _optInt(json, 'unread', fallback: 0),
+  );
 }

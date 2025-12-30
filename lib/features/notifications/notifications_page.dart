@@ -1,0 +1,211 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../api/api_client.dart';
+import '../../auth/auth_store.dart';
+import '../../common/widgets/app_scaffold.dart';
+import '../../models/dtos.dart';
+import '../../notifications/notification_center.dart';
+import '../../push/push_manager.dart';
+
+class NotificationsPage extends StatefulWidget {
+  final ApiClient api;
+  final AuthStore authStore;
+
+  const NotificationsPage({
+    super.key,
+    required this.api,
+    required this.authStore,
+  });
+
+  @override
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends State<NotificationsPage> {
+  bool _loading = true;
+  bool _clearing = false;
+  List<NotificationDto> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+
+    // nice UX: refresh unread when entering page
+    NotificationCenter.I.refreshUnreadCount();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final list = await widget.api.listNotifications(limit: 50);
+      // newest first
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      setState(() => _items = list);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _markRead(NotificationDto n) async {
+    if (n.readAt != null) return;
+
+    // optimistic
+    setState(() {
+      _items = _items.map((x) => x.id == n.id ? x.copyWith(readAt: DateTime.now().toUtc()) : x).toList(growable: false);
+    });
+    NotificationCenter.I.decrementUnread(by: 1);
+
+    try {
+      await widget.api.markNotificationRead(n.id);
+    } catch (_) {
+      // resync later
+      NotificationCenter.I.refreshUnreadCount();
+    }
+  }
+
+  Future<void> _delete(NotificationDto n) async {
+    final prev = _items;
+    setState(() => _items = _items.where((x) => x.id != n.id).toList(growable: false));
+
+    // keep unread badge sane
+    if (n.readAt == null) NotificationCenter.I.decrementUnread(by: 1);
+
+    try {
+      await widget.api.deleteNotification(n.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _items = prev);
+      NotificationCenter.I.refreshUnreadCount();
+    }
+  }
+
+  Future<void> _clearAll() async {
+    if (_clearing) return;
+    setState(() => _clearing = true);
+
+    final prev = _items;
+    setState(() => _items = const []);
+    NotificationCenter.I.resetUnread();
+
+    try {
+      await widget.api.clearNotifications();
+      debugPrint('Clear all: OK');
+    } catch (e, st) {
+      debugPrint('Clear all: FAILED: $e\n$st');
+      if (!mounted) return;
+      setState(() => _items = prev);
+      NotificationCenter.I.refreshUnreadCount();
+    } finally {
+      if (mounted) setState(() => _clearing = false);
+    }
+  }
+
+
+  void _openFromNotification(NotificationDto n) {
+    final fineId = n.data['fineId'];
+    if (fineId != null && fineId.isNotEmpty) {
+      context.push('/fines/$fineId');
+      return;
+    }
+
+    // fallback: no deep link
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppScaffold(
+      title: 'Notifications',
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await _load();
+          await NotificationCenter.I.refreshUnreadCount();
+        },
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: Row(
+                children: [
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _items.isEmpty || _clearing ? null : _clearAll,
+                    icon: const Icon(Icons.delete_sweep),
+                    label: const Text('Clear all'),
+                  ),
+                ],
+              ),
+            ),
+            if (_items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 40),
+                child: Column(
+                  children: [
+                    Icon(Icons.notifications_none, size: 48),
+                    SizedBox(height: 12),
+                    Text('No notifications'),
+                  ],
+                ),
+              ),
+            if (_items.isNotEmpty)
+              ..._items.map((n) {
+                final unread = n.readAt == null;
+
+                return Dismissible(
+                  key: ValueKey(n.id),
+                  background: Container(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: const Icon(Icons.delete),
+                  ),
+                  direction: DismissDirection.endToStart,
+                  onDismissed: (_) => _delete(n),
+                  child: ListTile(
+                    title: Text(
+                      n.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: unread ? const TextStyle(fontWeight: FontWeight.w600) : null,
+                    ),
+                    subtitle: Text(
+                      n.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    leading: unread ? const Icon(Icons.circle, size: 10) : const Icon(Icons.circle_outlined, size: 10),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await _markRead(n);
+                      _openFromNotification(n);
+                    },
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 24),
+
+            // Web push enable button (safe to show everywhere; it no-ops on non-web)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final pm = PushManager(api: widget.api, authStore: widget.authStore);
+                  await pm.enableWebPushFromButtonClick();
+                },
+                icon: const Icon(Icons.notifications_active),
+                label: const Text('Enable web notifications'),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}

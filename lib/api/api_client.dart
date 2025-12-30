@@ -51,6 +51,48 @@ class ApiClient {
     await auth.logout(refreshToken: refreshToken);
   }
 
+  // --- NOTIFICATIONS
+  Future<List<NotificationDto>> listNotifications({int limit = 50}) async {
+    final r = await dio.get('/notifications', queryParameters: {'limit': limit});
+    final list = (r.data as List).cast<dynamic>();
+    return list.map((e) => NotificationDto.fromJson((e as Map).cast<String, dynamic>())).toList(growable: false);
+  }
+
+  Future<UnreadCountDto> getUnreadCount() async {
+    final r = await dio.get('/notifications/unread-count');
+    return UnreadCountDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    await dio.post('/notifications/$id/read');
+  }
+
+  Future<void> deleteNotification(String id) async {
+    await dio.delete('/notifications/$id');
+  }
+
+  Future<void> clearNotifications() async {
+    await dio.delete('/notifications');
+  }
+
+  // --- PUSH REGISTRATION
+  Future<void> registerFcmToken(String token) async {
+    await dio.post('/push/register/fcm', data: {'token': token});
+  }
+
+  Future<void> registerWebPush({
+    required String endpoint,
+    required String p256dh,
+    required String auth,
+    required Map<String, dynamic> raw,
+  }) async {
+    await dio.post('/push/register/webpush', data: {
+      'endpoint': endpoint,
+      'keys': {'p256dh': p256dh, 'auth': auth},
+      'raw': raw,
+    });
+  }
+
   // --- PERIODS / BALANCE
   Future<ConventPeriodDto> getActivePeriod() async {
     final r = await dio.get('/periods/active');
