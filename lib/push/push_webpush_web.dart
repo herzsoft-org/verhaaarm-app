@@ -55,7 +55,6 @@ class WebPushRegistrar {
     debugPrint('Notification in window=${win.getProperty('Notification'.toJS) != null}');
     debugPrint('SW in navigator=${_serviceWorkerContainer() != null}');
     debugPrint('displayModeStandalone=${_isStandalone()}');
-
     debugPrint('Notification.permission (before) = ${_getNotificationPermission()}');
 
     if (!authStore.isLoggedIn) return;
@@ -75,28 +74,18 @@ class WebPushRegistrar {
 
     debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
 
-    // Controller diagnostics
-    final ctrlAny = sw.getProperty('controller'.toJS);
-    debugPrint('serviceWorker.controller=${ctrlAny != null}');
-    if (ctrlAny != null) {
-      try {
-        final ctrl = ctrlAny as JSObject;
-        debugPrint(
-          'serviceWorker.controller.scriptURL=${ctrl.getProperty('scriptURL'.toJS)?.toString()}',
-        );
-        debugPrint('serviceWorker.controller.state=${ctrl.getProperty('state'.toJS)?.toString()}');
-      } catch (_) {
-        // ignore
-      }
-    }
-
-    // IMPORTANT: dev build web has controller=false; stop here.
-    if (ctrlAny == null) {
-      debugPrint('No SW controller (dev build web). Web push will not work here.');
+    // --- FIXED controller detection (safe cast) ---
+    final ctrl = _asJsObject(sw.getProperty('controller'.toJS));
+    debugPrint('serviceWorker.controller=${ctrl != null}');
+    if (ctrl != null) {
+      debugPrint('serviceWorker.controller.scriptURL=${ctrl.getProperty('scriptURL'.toJS)?.toString()}');
+      debugPrint('serviceWorker.controller.state=${ctrl.getProperty('state'.toJS)?.toString()}');
+    } else {
+      debugPrint('No SW controller. Web push will not work in this context.');
       return;
     }
 
-    // Get registration (this is what matters for pushManager)
+    // Get registration (WebKit-safe: Promise.then)
     final reg = await _getRegistrationViaThen(sw);
     if (reg == null) {
       debugPrint('SW getRegistration returned null (cannot subscribe)');
@@ -108,12 +97,10 @@ class WebPushRegistrar {
     final activeAny = reg.getProperty('active'.toJS);
     debugPrint('SW reg.active=${activeAny != null}');
     if (activeAny != null) {
-      try {
-        final a = activeAny as JSObject;
+      final a = _asJsObject(activeAny);
+      if (a != null) {
         debugPrint('SW active.scriptURL=${a.getProperty('scriptURL'.toJS)?.toString()}');
         debugPrint('SW active.state=${a.getProperty('state'.toJS)?.toString()}');
-      } catch (_) {
-        // ignore
       }
     }
 
@@ -126,7 +113,7 @@ class WebPushRegistrar {
 
     final pushManager = pushManagerAny as JSObject;
 
-    // Optional: check existing subscription first
+    // Check existing subscription first (optional, but useful)
     try {
       final existingAny = await _awaitPromiseThen(
         pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
@@ -136,7 +123,6 @@ class WebPushRegistrar {
         final existing = existingAny as JSObject;
         final endpoint = existing.getProperty('endpoint'.toJS)?.toString() ?? '';
         debugPrint('Existing subscription endpoint=$endpoint');
-        // If you want, you can reuse existing without re-subscribing.
       }
     } catch (e) {
       debugPrint('getSubscription() failed: $e');
@@ -202,8 +188,7 @@ class WebPushRegistrar {
     try {
       final sw = _serviceWorkerContainer();
       if (sw == null) return;
-      // no-op; Flutter registers its SW automatically
-      sw.getProperty('ready'.toJS);
+      sw.getProperty('ready'.toJS); // no-op (Flutter handles SW registration)
     } catch (_) {
       // ignore
     }
@@ -237,7 +222,6 @@ class WebPushRegistrar {
     final lenAny = fnObj.getProperty('length'.toJS);
     final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
 
-    // Callback form (WebKit)
     if (fnLen >= 1) {
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
@@ -253,13 +237,11 @@ class WebPushRegistrar {
       }
     }
 
-    // Promise form
     try {
       final resAny = (fnAny as JSFunction).callAsFunction(ctor);
       final resolved = await _awaitPromiseThen(resAny);
       return resolved?.toString() ?? 'default';
     } catch (_) {
-      // Fallback to callback anyway
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
         final s = perm?.toString() ?? 'default';
@@ -292,8 +274,8 @@ class WebPushRegistrar {
       final regAny = await _awaitPromiseThen(
         sw.callMethod('getRegistration'.toJS, <JSAny?>[].toJS),
       );
-      if (regAny == null) return null;
-      return regAny as JSObject;
+      final reg = _asJsObject(regAny);
+      return reg;
     } catch (e) {
       debugPrint('SW getRegistration failed: $e');
       return null;
@@ -329,6 +311,15 @@ class WebPushRegistrar {
     final nav = web.window.navigator as JSObject;
     final sw = nav.getProperty('serviceWorker'.toJS);
     return sw == null ? null : (sw as JSObject);
+  }
+
+  JSObject? _asJsObject(JSAny? any) {
+    if (any == null) return null;
+    try {
+      return any as JSObject;
+    } catch (_) {
+      return null;
+    }
   }
 
   Uint8List? _arrayBufferToBytes(JSAny buf) {
