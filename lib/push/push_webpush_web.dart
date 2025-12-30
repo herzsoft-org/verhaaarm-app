@@ -78,11 +78,29 @@ class WebPushRegistrar {
     // Extra diagnostics: check Push APIs exist
     debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
     debugPrint('has serviceWorker.ready=${sw.getProperty('ready'.toJS) != null}');
+    debugPrint('serviceWorker.controller=${sw.getProperty('controller'.toJS) != null}');
 
     // Wait for Flutter's SW to be ready
     final regAny = await _awaitPromiseResolve(sw.getProperty('ready'.toJS));
     if (regAny == null) return;
     final reg = regAny as JSObject;
+
+    // Registration diagnostics
+    debugPrint('SW reg.scope=${reg.getProperty('scope'.toJS)?.toString()}');
+    debugPrint('SW reg.active=${reg.getProperty('active'.toJS) != null}');
+    debugPrint('SW reg.installing=${reg.getProperty('installing'.toJS) != null}');
+    debugPrint('SW reg.waiting=${reg.getProperty('waiting'.toJS) != null}');
+
+    // List all registrations (raw dump; good enough to spot scope mismatches)
+    try {
+      final regsAny = await _awaitPromiseResolve(
+        sw.callMethod('getRegistrations'.toJS, <JSAny?>[].toJS),
+      );
+      debugPrint('SW getRegistrations returned null? ${regsAny == null}');
+      debugPrint('SW getRegistrations raw=${regsAny?.toString()}');
+    } catch (e) {
+      debugPrint('SW getRegistrations failed: $e');
+    }
 
     debugPrint('PushManager in reg=${reg.getProperty('pushManager'.toJS) != null}');
 
@@ -247,7 +265,6 @@ class WebPushRegistrar {
     final nav = web.window.navigator as JSObject;
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
   }
-
 
   // ---- Promise helper: always await via Promise.resolve(...) ----
   Future<JSAny?> _awaitPromiseResolve(JSAny? value) async {
