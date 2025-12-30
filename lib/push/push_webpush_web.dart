@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'dart:html' as html;
+
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
@@ -162,18 +164,23 @@ class WebPushRegistrar {
   // ---- Notifications permission (no dart:html) ----
   Future<String> _requestNotificationPermission() async {
     final win = web.window as JSObject;
-
     final notificationCtorAny = win.getProperty('Notification'.toJS);
     if (notificationCtorAny == null) return 'denied';
 
-    final notificationCtor = notificationCtorAny as JSObject;
+    final ctor = notificationCtorAny as JSObject;
 
+    // Get the function reference
+    final fnAny = ctor.getProperty('requestPermission'.toJS);
+    if (fnAny == null) return 'denied';
+
+    // Call with correct receiver (ctor) and no args
     final res = await _awaitPromise(
-      notificationCtor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS),
+      (fnAny as JSFunction).callAsFunction(ctor, <JSAny?>[].toJS),
     );
 
     return res?.toString() ?? 'denied';
   }
+
 
   // ---- Promise helper (avoid `is JSPromise` runtime checks) ----
   Future<JSAny?> _awaitPromise(JSAny? any) async {
