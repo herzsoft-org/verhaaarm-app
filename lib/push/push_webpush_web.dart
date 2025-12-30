@@ -62,7 +62,6 @@ class WebPushRegistrar {
     if (!authStore.isLoggedIn) return;
     if (!_supportsWebPush()) return;
 
-    // Permission first (must be a direct user gesture).
     final perm = await _ensureNotificationPermission();
 
     debugPrint('Notification.requestPermission() result = $perm');
@@ -76,23 +75,49 @@ class WebPushRegistrar {
     if (sw == null) return;
 
     debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
-    debugPrint('serviceWorker.controller=${sw.getProperty('controller'.toJS) != null}');
 
-    // Get a REAL ServiceWorkerRegistration (ready is too flaky via generic interop)
-    final reg = await _getBestRegistrationForThisPage(sw);
+    // Controller diagnostics (this is key on iOS)
+    final ctrlAny = sw.getProperty('controller'.toJS);
+    debugPrint('serviceWorker.controller=${ctrlAny != null}');
+    if (ctrlAny != null) {
+      try {
+        final ctrl = ctrlAny as JSObject;
+        debugPrint('serviceWorker.controller.scriptURL=${ctrl.getProperty('scriptURL'.toJS)?.toString()}');
+        debugPrint('serviceWorker.controller.state=${ctrl.getProperty('state'.toJS)?.toString()}');
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    // IMPORTANT: do NOT use navigator.serviceWorker.ready through typed casts;
+    // use getRegistration() and unwrap promises via Promise.then (WebKit-safe).
+    final reg = await _getRegistrationViaThen(sw);
     if (reg == null) {
       debugPrint('SW registration: null (cannot subscribe)');
       return;
     }
 
     final scope = reg.getProperty('scope'.toJS)?.toString();
-    debugPrint('SW chosen scope=$scope');
-    debugPrint('SW chosen active=${reg.getProperty('active'.toJS) != null}');
-    debugPrint('SW chosen pushManager=${reg.getProperty('pushManager'.toJS) != null}');
+    debugPrint('SW reg.scope=$scope');
+
+    final activeAny = reg.getProperty('active'.toJS);
+    debugPrint('SW reg.active=${activeAny != null}');
+    if (activeAny != null) {
+      try {
+        final a = activeAny as JSObject;
+        debugPrint('SW active.scriptURL=${a.getProperty('scriptURL'.toJS)?.toString()}');
+        debugPrint('SW active.state=${a.getProperty('state'.toJS)?.toString()}');
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    final hasPushManager = reg.getProperty('pushManager'.toJS) != null;
+    debugPrint('SW reg.pushManager=$hasPushManager');
 
     final pushManagerAny = reg.getProperty('pushManager'.toJS);
     if (pushManagerAny == null) {
-      debugPrint('No pushManager on chosen registration (iOS: push not enabled for this reg/scope)');
+      debugPrint('No pushManager on registration (cannot subscribe)');
       return;
     }
     final pushManager = pushManagerAny as JSObject;
@@ -109,7 +134,7 @@ class WebPushRegistrar {
 
     JSAny? subAny;
     try {
-      subAny = await _awaitPromiseResolve(
+      subAny = await _awaitPromiseThen(
         pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
       );
       debugPrint('subscribe() returned null? ${subAny == null}');
@@ -121,8 +146,7 @@ class WebPushRegistrar {
     if (subAny == null) return;
     final sub = subAny as JSObject;
 
-    final endpointAny = sub.getProperty('endpoint'.toJS);
-    final endpoint = endpointAny?.toString() ?? '';
+    final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
     debugPrint('Push endpoint=$endpoint');
     if (endpoint.isEmpty) return;
 
@@ -150,35 +174,27 @@ class WebPushRegistrar {
     );
   }
 
-  bool _supportsWebPush() {
-    return _serviceWorkerContainer() != null;
-  }
+  bool _supportsWebPush() => _serviceWorkerContainer() != null;
 
   Future<void> _registerServiceWorkerBestEffort() async {
     try {
       final sw = _serviceWorkerContainer();
       if (sw == null) return;
-
-      // Touch ready but ignore it; we fetch registrations explicitly elsewhere.
+      // no-op; Flutter registers its SW automatically
       sw.getProperty('ready'.toJS);
     } catch (_) {
       // ignore
     }
   }
 
-  // ---- Read current permission state without prompting ----
   String _getNotificationPermission() {
     final win = web.window as JSObject;
-
     final notificationCtorAny = win.getProperty('Notification'.toJS);
     if (notificationCtorAny == null) return 'missing';
-
     final ctor = notificationCtorAny as JSObject;
-    final p = ctor.getProperty('permission'.toJS);
-    return p?.toString() ?? 'unknown';
+    return ctor.getProperty('permission'.toJS)?.toString() ?? 'unknown';
   }
 
-  // ---- Permission request (supports Promise and callback forms) ----
   Future<String> _ensureNotificationPermission() async {
     final current = _getNotificationPermission();
     if (current == 'granted' || current == 'denied') return current;
@@ -196,7 +212,6 @@ class WebPushRegistrar {
     if (fnAny == null) return 'missing';
 
     final fnObj = fnAny as JSObject;
-
     final lenAny = fnObj.getProperty('length'.toJS);
     final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
 
@@ -217,7 +232,7 @@ class WebPushRegistrar {
 
     try {
       final resAny = (fnAny as JSFunction).callAsFunction(ctor);
-      final resolved = await _awaitPromiseResolve(resAny);
+      final resolved = await _awaitPromiseThen(resAny);
       return resolved?.toString() ?? 'default';
     } catch (_) {
       final completer = Completer<String>();
@@ -247,113 +262,53 @@ class WebPushRegistrar {
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
   }
 
-  // ---- Get the best ServiceWorkerRegistration for this page ----
-  Future<JSObject?> _getBestRegistrationForThisPage(JSObject sw) async {
-    // 1) Try getRegistration() for current scope/page.
+  // ---- Get registration in a WebKit-safe way: Promise.then (no JSPromise casts) ----
+  Future<JSObject?> _getRegistrationViaThen(JSObject sw) async {
     try {
-      final regAny = await _awaitPromiseResolve(
+      final regAny = await _awaitPromiseThen(
         sw.callMethod('getRegistration'.toJS, <JSAny?>[].toJS),
       );
-      final reg = _asJsObject(regAny);
-      if (reg != null) {
-        final scope = reg.getProperty('scope'.toJS)?.toString();
-        debugPrint('SW getRegistration scope=$scope');
-        return reg;
-      }
+      if (regAny == null) return null;
+      return regAny as JSObject;
     } catch (e) {
       debugPrint('SW getRegistration failed: $e');
-    }
-
-    // 2) Fallback: getRegistrations() and pick one with a scope and pushManager if possible.
-    try {
-      final regsAny = await _awaitPromiseResolve(
-        sw.callMethod('getRegistrations'.toJS, <JSAny?>[].toJS),
-      );
-      final regs = _asJsArray(regsAny);
-      if (regs == null) {
-        debugPrint('SW getRegistrations not an array: ${regsAny?.toString()}');
-        return null;
-      }
-
-      JSObject? best;
-      int bestScore = -1;
-
-      for (final item in regs) {
-        final r = _asJsObject(item);
-        if (r == null) continue;
-
-        final scope = r.getProperty('scope'.toJS)?.toString() ?? '';
-        final hasScope = scope.isNotEmpty && scope != 'null';
-        final hasPm = r.getProperty('pushManager'.toJS) != null;
-
-        debugPrint('SW reg candidate scope=$scope pushManager=$hasPm');
-
-        var score = 0;
-        if (hasScope) score += 1;
-        if (hasPm) score += 2;
-
-        if (score > bestScore) {
-          bestScore = score;
-          best = r;
-        }
-      }
-
-      return best;
-    } catch (e) {
-      debugPrint('SW getRegistrations failed: $e');
       return null;
     }
   }
 
-  JSObject? _asJsObject(JSAny? any) {
-    if (any == null) return null;
-    try {
-      return any as JSObject;
-    } catch (_) {
-      return null;
-    }
-  }
+  // ---- Promise helper: unwrap via Promise.resolve(...).then(...) (WebKit-safe) ----
+  Future<JSAny?> _awaitPromiseThen(JSAny? promiseLike) {
+    if (promiseLike == null) return Future.value(null);
 
-  // Best-effort JS Array -> Dart List<JSAny?>
-  List<JSAny?>? _asJsArray(JSAny? any) {
-    if (any == null) return null;
-    try {
-      final arr = any as JSArray<JSAny?>;
-      final out = <JSAny?>[];
-      final lenAny = (arr as JSObject).getProperty('length'.toJS);
-      final len = int.tryParse(lenAny?.toString() ?? '') ?? 0;
-      for (var i = 0; i < len; i++) {
-        out.add(arr[i]);
-      }
-      return out;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // ---- Promise helper: always await via Promise.resolve(...) ----
-  Future<JSAny?> _awaitPromiseResolve(JSAny? value) async {
-    if (value == null) return null;
+    final c = Completer<JSAny?>();
 
     final win = web.window as JSObject;
-
     final promiseCtorAny = win.getProperty('Promise'.toJS);
-    if (promiseCtorAny == null) return value;
+    if (promiseCtorAny == null) {
+      return Future.value(promiseLike);
+    }
 
     final promiseCtor = promiseCtorAny as JSObject;
+    final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[promiseLike].toJS);
 
-    final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[value].toJS);
-    return (pAny as JSPromise<JSAny?>).toDart;
+    final onFulfilled = ((JSAny? v) {
+      if (!c.isCompleted) c.complete(v);
+    }).toJS;
+
+    final onRejected = ((JSAny? e) {
+      if (!c.isCompleted) c.completeError(e ?? 'Promise rejected');
+    }).toJS;
+
+    (pAny as JSObject).callMethod('then'.toJS, <JSAny?>[onFulfilled, onRejected].toJS);
+    return c.future;
   }
 
-  // ---- Service Worker container access ----
   JSObject? _serviceWorkerContainer() {
     final nav = web.window.navigator as JSObject;
     final sw = nav.getProperty('serviceWorker'.toJS);
     return sw == null ? null : (sw as JSObject);
   }
 
-  // ---- ArrayBuffer -> Uint8List ----
   Uint8List? _arrayBufferToBytes(JSAny buf) {
     try {
       final ab = buf as JSArrayBuffer;
@@ -364,12 +319,10 @@ class WebPushRegistrar {
     }
   }
 
-  // ---- Base64url without padding (RFC 4648) ----
   String _b64UrlNoPad(Uint8List bytes) {
     return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
-  // ---- VAPID public key: base64url -> bytes ----
   Uint8List _urlBase64ToUint8List(String base64Url) {
     var s = base64Url.replaceAll('-', '+').replaceAll('_', '/');
     switch (s.length % 4) {
