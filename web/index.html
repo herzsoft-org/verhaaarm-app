@@ -23,13 +23,6 @@
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
-<script>
-    // Register dedicated web-push SW (separate from Flutter's own SW).
-    (function () {
-      if (!('serviceWorker' in navigator)) return;
-      navigator.serviceWorker.register('/webpush-sw.js', { scope: '/' }).catch(function () {});
-    })();
-</script>
 
 <script src="flutter_bootstrap.js" async></script>
 

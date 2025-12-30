@@ -10,6 +10,8 @@
     <!-- Needed only if you trigger the system package installer with an APK you downloaded -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Optional: declare camera is not required -->
     <uses-feature
         android:name="android.hardware.camera"
