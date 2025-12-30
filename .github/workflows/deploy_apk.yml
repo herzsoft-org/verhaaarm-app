@@ -115,7 +115,6 @@ jobs:
           flutter build apk --release
           echo "== build/app/outputs/flutter-apk =="
           ls -la build/app/outputs/flutter-apk/ | head -200
-          cat web/push_sw_patch.js >> build/web/flutter_service_worker.js
 
       # Uses YOUR renamed files from build.gradle.kts:
       #   build/app/outputs/flutter-apk/verhaarm-release-<versionName>+<versionCode>.apk

@@ -39,6 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           flutter build web --release
+          cat web/push_sw_patch.js >> build/web/flutter_service_worker.js
           echo "== build/web contents =="
           ls -la build/web | head -200
 
