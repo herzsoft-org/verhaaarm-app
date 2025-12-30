@@ -173,10 +173,28 @@ class WebPushRegistrar {
 
     final resAny = ctor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS);
 
-    // Modern browsers: Promise<"granted"|"denied"|"default">
-    final awaited = await _awaitPromiseOrValue(resAny);
-    return awaited?.toString() ?? 'unknown';
+    // Always await via Promise.resolve(...)
+    final resolved = await _awaitViaPromiseResolve(resAny);
+
+    return resolved?.toString() ?? 'unknown'; // "granted" | "denied" | "default"
   }
+
+  Future<JSAny?> _awaitViaPromiseResolve(JSAny? value) async {
+    if (value == null) return null;
+
+    final win = web.window as JSObject;
+
+    final promiseCtorAny = win.getProperty('Promise'.toJS);
+    if (promiseCtorAny == null) return value; // very old browser fallback
+
+    final promiseCtor = promiseCtorAny as JSObject;
+
+    // Promise.resolve(value) -> Promise<value>
+    final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[value].toJS);
+
+    return (pAny as JSPromise<JSAny?>).toDart;
+  }
+
 
   Future<JSAny?> _awaitPromiseOrValue(JSAny? any) async {
     if (any == null) return null;
