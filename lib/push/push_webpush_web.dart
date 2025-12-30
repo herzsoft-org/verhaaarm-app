@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -74,10 +75,16 @@ class WebPushRegistrar {
     final sw = _serviceWorkerContainer();
     if (sw == null) return;
 
+    // Extra diagnostics: check Push APIs exist
+    debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
+    debugPrint('has serviceWorker.ready=${sw.getProperty('ready'.toJS) != null}');
+
     // Wait for Flutter's SW to be ready
     final regAny = await _awaitPromiseResolve(sw.getProperty('ready'.toJS));
     if (regAny == null) return;
     final reg = regAny as JSObject;
+
+    debugPrint('PushManager in reg=${reg.getProperty('pushManager'.toJS) != null}');
 
     final pushManagerAny = reg.getProperty('pushManager'.toJS);
     if (pushManagerAny == null) return;
@@ -93,9 +100,17 @@ class WebPushRegistrar {
       'applicationServerKey': appServerKey,
     }.jsify();
 
-    final subAny = await _awaitPromiseResolve(
-      pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
-    );
+    JSAny? subAny;
+    try {
+      subAny = await _awaitPromiseResolve(
+        pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
+      );
+      debugPrint('subscribe() returned null? ${subAny == null}');
+    } catch (e) {
+      debugPrint('subscribe() failed: $e');
+      rethrow;
+    }
+
     if (subAny == null) return;
     final sub = subAny as JSObject;
 
@@ -160,41 +175,79 @@ class WebPushRegistrar {
   Future<String> _ensureNotificationPermission() async {
     final current = _getNotificationPermission();
     if (current == 'granted' || current == 'denied') return current;
-    // Only request when "default".
+
+    // iOS Safari: in normal tab (not installed PWA), web push is not usable.
+    // Avoid calling requestPermission() there to prevent WebKit callback-signature crashes.
+    if (!_isStandalone() && _isProbablyIosSafari()) {
+      return current; // typically "default"
+    }
 
     final win = web.window as JSObject;
-
     final notificationCtorAny = win.getProperty('Notification'.toJS);
     if (notificationCtorAny == null) return 'missing';
-
     final ctor = notificationCtorAny as JSObject;
 
-    // 1) Try modern Promise form: requestPermission() -> Promise<string>
-    try {
-      final resAny = ctor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS);
-      final resolved = await _awaitPromiseResolve(resAny);
-      final s = resolved?.toString();
-      if (s == 'granted' || s == 'denied' || s == 'default') return s!;
-    } catch (_) {
-      // fall through
+    final fnAny = ctor.getProperty('requestPermission'.toJS);
+    if (fnAny == null) return 'missing';
+
+    final fnObj = fnAny as JSObject;
+
+    // requestPermission.length: 0 -> promise form, 1 -> callback form (WebKit)
+    final lenAny = fnObj.getProperty('length'.toJS);
+    final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
+
+    // Callback form (WebKit): requestPermission(cb)
+    if (fnLen >= 1) {
+      final completer = Completer<String>();
+
+      final cb = ((JSAny? perm) {
+        final s = perm?.toString() ?? 'default';
+        if (!completer.isCompleted) completer.complete(s);
+      }).toJS;
+
+      try {
+        (fnAny as JSFunction).callAsFunction(ctor, cb);
+        return completer.future;
+      } catch (_) {
+        return _getNotificationPermission();
+      }
     }
 
-    // 2) Legacy Safari form: requestPermission(callback)
-    final completer = Completer<String>();
-
-    final cb = ((JSAny? perm) {
-      final s = perm?.toString() ?? 'default';
-      if (!completer.isCompleted) completer.complete(s);
-    }).toJS;
-
+    // Promise form: requestPermission()
     try {
-      ctor.callMethod('requestPermission'.toJS, <JSAny?>[cb].toJS);
-      return completer.future;
+      final resAny = (fnAny as JSFunction).callAsFunction(ctor); // no args
+      final resolved = await _awaitPromiseResolve(resAny);
+      final s = resolved?.toString() ?? 'default';
+      return s;
     } catch (_) {
-      // Last resort: return whatever the browser reports now.
-      return _getNotificationPermission();
+      // Fallback: try callback form even if length lied
+      final completer = Completer<String>();
+      final cb = ((JSAny? perm) {
+        final s = perm?.toString() ?? 'default';
+        if (!completer.isCompleted) completer.complete(s);
+      }).toJS;
+
+      try {
+        (fnAny as JSFunction).callAsFunction(ctor, cb);
+        return completer.future;
+      } catch (_) {
+        return _getNotificationPermission();
+      }
     }
   }
+
+  bool _isProbablyIosSafari() {
+    final ua = _userAgent().toLowerCase();
+    final isIos = ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
+    final isSafari = ua.contains('safari') && !ua.contains('crios') && !ua.contains('fxios');
+    return isIos && isSafari;
+  }
+
+  String _userAgent() {
+    final nav = web.window.navigator as JSObject;
+    return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
+  }
+
 
   // ---- Promise helper: always await via Promise.resolve(...) ----
   Future<JSAny?> _awaitPromiseResolve(JSAny? value) async {
@@ -207,9 +260,7 @@ class WebPushRegistrar {
 
     final promiseCtor = promiseCtorAny as JSObject;
 
-    // Promise.resolve(value) -> Promise<value>
     final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[value].toJS);
-
     return (pAny as JSPromise<JSAny?>).toDart;
   }
 
