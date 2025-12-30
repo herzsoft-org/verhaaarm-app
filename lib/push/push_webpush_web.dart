@@ -61,22 +61,16 @@ class WebPushRegistrar {
     if (!_supportsWebPush()) return;
 
     final perm = await _ensureNotificationPermission();
-
     debugPrint('Notification.requestPermission() result = $perm');
     debugPrint('Notification.permission (after) = ${_getNotificationPermission()}');
-
     if (perm != 'granted') return;
-
-    await _registerServiceWorkerBestEffort();
 
     final sw = _serviceWorkerContainer();
     if (sw == null) return;
 
-    debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
-
-    // Get registration (WebKit-safe: Promise.then)
-    // Wait until we have an active SW registration (this is what matters)
-    final reg = await _waitForReadyRegistration();
+    // IMPORTANT: use ready registration, not controller
+    final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS) as JSAny?);
+    final reg = _asJsObject(readyRegAny);
     if (reg == null) {
       debugPrint('serviceWorker.ready returned null (cannot subscribe)');
       return;
@@ -84,42 +78,36 @@ class WebPushRegistrar {
 
     debugPrint('SW ready.scope=${reg.getProperty('scope'.toJS)?.toString()}');
 
-    final activeAny = reg.getProperty('active'.toJS);
-    debugPrint('SW reg.active=${activeAny != null}');
-    if (activeAny != null) {
-      final a = _asJsObject(activeAny);
-      if (a != null) {
-        debugPrint('SW active.scriptURL=${a.getProperty('scriptURL'.toJS)?.toString()}');
-        debugPrint('SW active.state=${a.getProperty('state'.toJS)?.toString()}');
-      }
-    }
-
     final pushManagerAny = reg.getProperty('pushManager'.toJS);
     debugPrint('SW reg.pushManager=${pushManagerAny != null}');
     if (pushManagerAny == null) {
       debugPrint('No pushManager on registration (cannot subscribe)');
       return;
     }
-
     final pushManager = pushManagerAny as JSObject;
 
-    // Check existing subscription first (optional, but useful)
+    // Existing subscription?
+    JSObject? existing;
     try {
       final existingAny = await _awaitPromiseThen(
         pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
       );
-      debugPrint('getSubscription() is null? ${existingAny == null}');
-      if (existingAny != null) {
-        final existing = existingAny as JSObject;
-        final endpoint = existing.getProperty('endpoint'.toJS)?.toString() ?? '';
-        debugPrint('Existing subscription endpoint=$endpoint');
-      }
+      existing = _asJsObject(existingAny);
     } catch (e) {
       debugPrint('getSubscription() failed: $e');
     }
 
+    if (existing != null) {
+      final endpoint = existing.getProperty('endpoint'.toJS)?.toString() ?? '';
+      debugPrint('Existing subscription endpoint=$endpoint');
+      // Optional: still send it to backend to ensure backend has it
+    }
+
     final vapidPublicKey = WebPushVapid.publicKey.trim();
-    if (vapidPublicKey.isEmpty) return;
+    if (vapidPublicKey.isEmpty) {
+      debugPrint('Missing VAPID public key');
+      return;
+    }
 
     final appServerKey = _urlBase64ToUint8List(vapidPublicKey).toJS;
 
@@ -128,19 +116,21 @@ class WebPushRegistrar {
       'applicationServerKey': appServerKey,
     }.jsify();
 
-    JSAny? subAny;
+    JSObject sub;
     try {
-      subAny = await _awaitPromiseThen(
+      final subAny = await _awaitPromiseThen(
         pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
       );
-      debugPrint('subscribe() returned null? ${subAny == null}');
+      final s = _asJsObject(subAny);
+      if (s == null) {
+        debugPrint('subscribe() returned null');
+        return;
+      }
+      sub = s;
     } catch (e) {
       debugPrint('subscribe() failed: $e');
       rethrow;
     }
-
-    if (subAny == null) return;
-    final sub = subAny as JSObject;
 
     final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
     debugPrint('Push endpoint=$endpoint');
