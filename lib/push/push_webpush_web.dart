@@ -1,10 +1,10 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
-
 
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
@@ -32,7 +32,6 @@ class WebPushRegistrar {
       <JSAny?>['(display-mode: standalone)'.toJS].toJS,
     );
 
-    // Avoid `is` checks between JS interop types.
     final JSObject mm;
     try {
       mm = mmAny as JSObject;
@@ -42,15 +41,12 @@ class WebPushRegistrar {
 
     final matchesAny = mm.getProperty('matches'.toJS);
 
-    // Convert JS boolean to Dart bool (avoid comparing JSAny? to `true`).
     try {
       return (matchesAny as JSBoolean).toDart;
     } catch (_) {
-      // Fallback for odd browsers/values
       return matchesAny?.toString() == 'true';
     }
   }
-
 
   Future<void> enableFromButtonClick() async {
     final win = web.window as JSObject;
@@ -60,15 +56,13 @@ class WebPushRegistrar {
     debugPrint('SW in navigator=${_serviceWorkerContainer() != null}');
     debugPrint('displayModeStandalone=${_isStandalone()}');
 
-
-    // Log current permission state (does NOT request)
     debugPrint('Notification.permission (before) = ${_getNotificationPermission()}');
 
     if (!authStore.isLoggedIn) return;
     if (!_supportsWebPush()) return;
 
-    // IMPORTANT: do permission first, before any awaited work
-    final perm = await _requestNotificationPermission();
+    // Permission first (must be a direct user gesture).
+    final perm = await _ensureNotificationPermission();
 
     debugPrint('Notification.requestPermission() result = $perm');
     debugPrint('Notification.permission (after) = ${_getNotificationPermission()}');
@@ -81,7 +75,7 @@ class WebPushRegistrar {
     if (sw == null) return;
 
     // Wait for Flutter's SW to be ready
-    final regAny = await _awaitPromise(sw.getProperty('ready'.toJS));
+    final regAny = await _awaitPromiseResolve(sw.getProperty('ready'.toJS));
     if (regAny == null) return;
     final reg = regAny as JSObject;
 
@@ -99,7 +93,7 @@ class WebPushRegistrar {
       'applicationServerKey': appServerKey,
     }.jsify();
 
-    final subAny = await _awaitPromise(
+    final subAny = await _awaitPromiseResolve(
       pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
     );
     if (subAny == null) return;
@@ -117,7 +111,7 @@ class WebPushRegistrar {
     final authBytes = _arrayBufferToBytes(authBufAny);
     if (p256dhBytes == null || authBytes == null) return;
 
-    // IMPORTANT: use base64url without padding (matches backend Base64.getUrlDecoder())
+    // Base64url without padding (matches backend Base64.getUrlDecoder()).
     final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
     final authB64Url = _b64UrlNoPad(authBytes);
 
@@ -144,7 +138,7 @@ class WebPushRegistrar {
     try {
       final sw = _serviceWorkerContainer();
       if (sw == null) return;
-      await _awaitPromise(sw.getProperty('ready'.toJS));
+      await _awaitPromiseResolve(sw.getProperty('ready'.toJS));
     } catch (_) {
       // ignore
     }
@@ -162,8 +156,12 @@ class WebPushRegistrar {
     return p?.toString() ?? 'unknown';
   }
 
-  // ---- Notifications permission (no dart:html) ----
-  Future<String> _requestNotificationPermission() async {
+  // ---- Permission request (supports Promise and callback forms) ----
+  Future<String> _ensureNotificationPermission() async {
+    final current = _getNotificationPermission();
+    if (current == 'granted' || current == 'denied') return current;
+    // Only request when "default".
+
     final win = web.window as JSObject;
 
     final notificationCtorAny = win.getProperty('Notification'.toJS);
@@ -171,21 +169,41 @@ class WebPushRegistrar {
 
     final ctor = notificationCtorAny as JSObject;
 
-    final resAny = ctor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS);
+    // 1) Try modern Promise form: requestPermission() -> Promise<string>
+    try {
+      final resAny = ctor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS);
+      final resolved = await _awaitPromiseResolve(resAny);
+      final s = resolved?.toString();
+      if (s == 'granted' || s == 'denied' || s == 'default') return s!;
+    } catch (_) {
+      // fall through
+    }
 
-    // Always await via Promise.resolve(...)
-    final resolved = await _awaitViaPromiseResolve(resAny);
+    // 2) Legacy Safari form: requestPermission(callback)
+    final completer = Completer<String>();
 
-    return resolved?.toString() ?? 'unknown'; // "granted" | "denied" | "default"
+    final cb = ((JSAny? perm) {
+      final s = perm?.toString() ?? 'default';
+      if (!completer.isCompleted) completer.complete(s);
+    }).toJS;
+
+    try {
+      ctor.callMethod('requestPermission'.toJS, <JSAny?>[cb].toJS);
+      return completer.future;
+    } catch (_) {
+      // Last resort: return whatever the browser reports now.
+      return _getNotificationPermission();
+    }
   }
 
-  Future<JSAny?> _awaitViaPromiseResolve(JSAny? value) async {
+  // ---- Promise helper: always await via Promise.resolve(...) ----
+  Future<JSAny?> _awaitPromiseResolve(JSAny? value) async {
     if (value == null) return null;
 
     final win = web.window as JSObject;
 
     final promiseCtorAny = win.getProperty('Promise'.toJS);
-    if (promiseCtorAny == null) return value; // very old browser fallback
+    if (promiseCtorAny == null) return value;
 
     final promiseCtor = promiseCtorAny as JSObject;
 
@@ -193,28 +211,6 @@ class WebPushRegistrar {
     final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[value].toJS);
 
     return (pAny as JSPromise<JSAny?>).toDart;
-  }
-
-
-  Future<JSAny?> _awaitPromiseOrValue(JSAny? any) async {
-    if (any == null) return null;
-
-    // If it's a Promise, await it; otherwise treat it as an immediate value.
-    try {
-      return await (any as JSPromise<JSAny?>).toDart;
-    } catch (_) {
-      return any;
-    }
-  }
-
-  // ---- Promise helper (avoid `is JSPromise` runtime checks) ----
-  Future<JSAny?> _awaitPromise(JSAny? any) async {
-    if (any == null) return null;
-    try {
-      return (any as JSPromise<JSAny?>).toDart;
-    } catch (_) {
-      return null;
-    }
   }
 
   // ---- Service Worker container access ----
@@ -226,8 +222,6 @@ class WebPushRegistrar {
 
   // ---- ArrayBuffer -> Uint8List ----
   Uint8List? _arrayBufferToBytes(JSAny buf) {
-    // subscription.getKey(...) returns an ArrayBuffer
-    // Wrap it in a JSUint8Array and copy to Dart.
     try {
       final ab = buf as JSArrayBuffer;
       final u8 = JSUint8Array(ab);
