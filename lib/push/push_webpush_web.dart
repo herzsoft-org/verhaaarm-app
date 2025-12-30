@@ -75,37 +75,26 @@ class WebPushRegistrar {
     final sw = _serviceWorkerContainer();
     if (sw == null) return;
 
-    // Extra diagnostics: check Push APIs exist
     debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
-    debugPrint('has serviceWorker.ready=${sw.getProperty('ready'.toJS) != null}');
     debugPrint('serviceWorker.controller=${sw.getProperty('controller'.toJS) != null}');
 
-    // Wait for Flutter's SW to be ready
-    final regAny = await _awaitPromiseResolve(sw.getProperty('ready'.toJS));
-    if (regAny == null) return;
-    final reg = regAny as JSObject;
-
-    // Registration diagnostics
-    debugPrint('SW reg.scope=${reg.getProperty('scope'.toJS)?.toString()}');
-    debugPrint('SW reg.active=${reg.getProperty('active'.toJS) != null}');
-    debugPrint('SW reg.installing=${reg.getProperty('installing'.toJS) != null}');
-    debugPrint('SW reg.waiting=${reg.getProperty('waiting'.toJS) != null}');
-
-    // List all registrations (raw dump; good enough to spot scope mismatches)
-    try {
-      final regsAny = await _awaitPromiseResolve(
-        sw.callMethod('getRegistrations'.toJS, <JSAny?>[].toJS),
-      );
-      debugPrint('SW getRegistrations returned null? ${regsAny == null}');
-      debugPrint('SW getRegistrations raw=${regsAny?.toString()}');
-    } catch (e) {
-      debugPrint('SW getRegistrations failed: $e');
+    // Get a REAL ServiceWorkerRegistration (ready is too flaky via generic interop)
+    final reg = await _getBestRegistrationForThisPage(sw);
+    if (reg == null) {
+      debugPrint('SW registration: null (cannot subscribe)');
+      return;
     }
 
-    debugPrint('PushManager in reg=${reg.getProperty('pushManager'.toJS) != null}');
+    final scope = reg.getProperty('scope'.toJS)?.toString();
+    debugPrint('SW chosen scope=$scope');
+    debugPrint('SW chosen active=${reg.getProperty('active'.toJS) != null}');
+    debugPrint('SW chosen pushManager=${reg.getProperty('pushManager'.toJS) != null}');
 
     final pushManagerAny = reg.getProperty('pushManager'.toJS);
-    if (pushManagerAny == null) return;
+    if (pushManagerAny == null) {
+      debugPrint('No pushManager on chosen registration (iOS: push not enabled for this reg/scope)');
+      return;
+    }
     final pushManager = pushManagerAny as JSObject;
 
     final vapidPublicKey = WebPushVapid.publicKey.trim();
@@ -134,6 +123,7 @@ class WebPushRegistrar {
 
     final endpointAny = sub.getProperty('endpoint'.toJS);
     final endpoint = endpointAny?.toString() ?? '';
+    debugPrint('Push endpoint=$endpoint');
     if (endpoint.isEmpty) return;
 
     final p256dhBufAny = sub.callMethod('getKey'.toJS, <JSAny?>['p256dh'.toJS].toJS);
@@ -144,7 +134,6 @@ class WebPushRegistrar {
     final authBytes = _arrayBufferToBytes(authBufAny);
     if (p256dhBytes == null || authBytes == null) return;
 
-    // Base64url without padding (matches backend Base64.getUrlDecoder()).
     final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
     final authB64Url = _b64UrlNoPad(authBytes);
 
@@ -166,12 +155,12 @@ class WebPushRegistrar {
   }
 
   Future<void> _registerServiceWorkerBestEffort() async {
-    // Do nothing: Flutter registers its own SW.
-    // We only wait for it to become ready.
     try {
       final sw = _serviceWorkerContainer();
       if (sw == null) return;
-      await _awaitPromiseResolve(sw.getProperty('ready'.toJS));
+
+      // Touch ready but ignore it; we fetch registrations explicitly elsewhere.
+      sw.getProperty('ready'.toJS);
     } catch (_) {
       // ignore
     }
@@ -185,7 +174,7 @@ class WebPushRegistrar {
     if (notificationCtorAny == null) return 'missing';
 
     final ctor = notificationCtorAny as JSObject;
-    final p = ctor.getProperty('permission'.toJS); // "default" | "granted" | "denied"
+    final p = ctor.getProperty('permission'.toJS);
     return p?.toString() ?? 'unknown';
   }
 
@@ -194,10 +183,8 @@ class WebPushRegistrar {
     final current = _getNotificationPermission();
     if (current == 'granted' || current == 'denied') return current;
 
-    // iOS Safari: in normal tab (not installed PWA), web push is not usable.
-    // Avoid calling requestPermission() there to prevent WebKit callback-signature crashes.
     if (!_isStandalone() && _isProbablyIosSafari()) {
-      return current; // typically "default"
+      return current;
     }
 
     final win = web.window as JSObject;
@@ -210,14 +197,11 @@ class WebPushRegistrar {
 
     final fnObj = fnAny as JSObject;
 
-    // requestPermission.length: 0 -> promise form, 1 -> callback form (WebKit)
     final lenAny = fnObj.getProperty('length'.toJS);
     final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
 
-    // Callback form (WebKit): requestPermission(cb)
     if (fnLen >= 1) {
       final completer = Completer<String>();
-
       final cb = ((JSAny? perm) {
         final s = perm?.toString() ?? 'default';
         if (!completer.isCompleted) completer.complete(s);
@@ -231,14 +215,11 @@ class WebPushRegistrar {
       }
     }
 
-    // Promise form: requestPermission()
     try {
-      final resAny = (fnAny as JSFunction).callAsFunction(ctor); // no args
+      final resAny = (fnAny as JSFunction).callAsFunction(ctor);
       final resolved = await _awaitPromiseResolve(resAny);
-      final s = resolved?.toString() ?? 'default';
-      return s;
+      return resolved?.toString() ?? 'default';
     } catch (_) {
-      // Fallback: try callback form even if length lied
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
         final s = perm?.toString() ?? 'default';
@@ -264,6 +245,90 @@ class WebPushRegistrar {
   String _userAgent() {
     final nav = web.window.navigator as JSObject;
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
+  }
+
+  // ---- Get the best ServiceWorkerRegistration for this page ----
+  Future<JSObject?> _getBestRegistrationForThisPage(JSObject sw) async {
+    // 1) Try getRegistration() for current scope/page.
+    try {
+      final regAny = await _awaitPromiseResolve(
+        sw.callMethod('getRegistration'.toJS, <JSAny?>[].toJS),
+      );
+      final reg = _asJsObject(regAny);
+      if (reg != null) {
+        final scope = reg.getProperty('scope'.toJS)?.toString();
+        debugPrint('SW getRegistration scope=$scope');
+        return reg;
+      }
+    } catch (e) {
+      debugPrint('SW getRegistration failed: $e');
+    }
+
+    // 2) Fallback: getRegistrations() and pick one with a scope and pushManager if possible.
+    try {
+      final regsAny = await _awaitPromiseResolve(
+        sw.callMethod('getRegistrations'.toJS, <JSAny?>[].toJS),
+      );
+      final regs = _asJsArray(regsAny);
+      if (regs == null) {
+        debugPrint('SW getRegistrations not an array: ${regsAny?.toString()}');
+        return null;
+      }
+
+      JSObject? best;
+      int bestScore = -1;
+
+      for (final item in regs) {
+        final r = _asJsObject(item);
+        if (r == null) continue;
+
+        final scope = r.getProperty('scope'.toJS)?.toString() ?? '';
+        final hasScope = scope.isNotEmpty && scope != 'null';
+        final hasPm = r.getProperty('pushManager'.toJS) != null;
+
+        debugPrint('SW reg candidate scope=$scope pushManager=$hasPm');
+
+        var score = 0;
+        if (hasScope) score += 1;
+        if (hasPm) score += 2;
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = r;
+        }
+      }
+
+      return best;
+    } catch (e) {
+      debugPrint('SW getRegistrations failed: $e');
+      return null;
+    }
+  }
+
+  JSObject? _asJsObject(JSAny? any) {
+    if (any == null) return null;
+    try {
+      return any as JSObject;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Best-effort JS Array -> Dart List<JSAny?>
+  List<JSAny?>? _asJsArray(JSAny? any) {
+    if (any == null) return null;
+    try {
+      final arr = any as JSArray<JSAny?>;
+      final out = <JSAny?>[];
+      final lenAny = (arr as JSObject).getProperty('length'.toJS);
+      final len = int.tryParse(lenAny?.toString() ?? '') ?? 0;
+      for (var i = 0; i < len; i++) {
+        out.add(arr[i]);
+      }
+      return out;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---- Promise helper: always await via Promise.resolve(...) ----
