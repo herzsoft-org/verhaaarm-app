@@ -74,25 +74,15 @@ class WebPushRegistrar {
 
     debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
 
-    // --- FIXED controller detection (safe cast) ---
-    final ctrl = _asJsObject(sw.getProperty('controller'.toJS));
-    debugPrint('serviceWorker.controller=${ctrl != null}');
-    if (ctrl != null) {
-      debugPrint('serviceWorker.controller.scriptURL=${ctrl.getProperty('scriptURL'.toJS)?.toString()}');
-      debugPrint('serviceWorker.controller.state=${ctrl.getProperty('state'.toJS)?.toString()}');
-    } else {
-      debugPrint('No SW controller. Web push will not work in this context.');
-      return;
-    }
-
     // Get registration (WebKit-safe: Promise.then)
-    final reg = await _getRegistrationViaThen(sw);
+    // Wait until we have an active SW registration (this is what matters)
+    final reg = await _waitForReadyRegistration();
     if (reg == null) {
-      debugPrint('SW getRegistration returned null (cannot subscribe)');
+      debugPrint('serviceWorker.ready returned null (cannot subscribe)');
       return;
     }
 
-    debugPrint('SW reg.scope=${reg.getProperty('scope'.toJS)?.toString()}');
+    debugPrint('SW ready.scope=${reg.getProperty('scope'.toJS)?.toString()}');
 
     final activeAny = reg.getProperty('active'.toJS);
     debugPrint('SW reg.active=${activeAny != null}');
@@ -184,15 +174,28 @@ class WebPushRegistrar {
 
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
 
-  Future<void> _registerServiceWorkerBestEffort() async {
+  Future<JSObject?> _waitForReadyRegistration() async {
+    final sw = _serviceWorkerContainer();
+    if (sw == null) return null;
+
     try {
-      final sw = _serviceWorkerContainer();
-      if (sw == null) return;
-      sw.getProperty('ready'.toJS); // no-op (Flutter handles SW registration)
-    } catch (_) {
-      // ignore
+      // navigator.serviceWorker.ready -> Promise<ServiceWorkerRegistration>
+      final readyAny = sw.getProperty('ready'.toJS);
+      final regAny = await _awaitPromiseThen(readyAny as JSAny?);
+      final reg = _asJsObject(regAny);
+      return reg;
+    } catch (e) {
+      debugPrint('serviceWorker.ready failed: $e');
+      return null;
     }
   }
+
+  Future<void> _registerServiceWorkerBestEffort() async {
+    // For Flutter web: don’t register your own SW here.
+    // Just touching ready is fine, but do it properly so the SW activates.
+    await _waitForReadyRegistration();
+  }
+
 
   String _getNotificationPermission() {
     final win = web.window as JSObject;
