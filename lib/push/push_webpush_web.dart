@@ -1,3 +1,4 @@
+// lib/push/push_webpush_web.dart
 // ignore_for_file: avoid_web_libraries_in_flutter
 
 import 'dart:async';
@@ -80,7 +81,7 @@ class WebPushRegistrar {
       return;
     }
 
-    // Wait for active registration
+    // IMPORTANT: use ready registration, not controller
     debugPrint('Awaiting serviceWorker.ready...');
     final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS) as JSAny?);
     final reg = _asJsObject(readyRegAny);
@@ -123,19 +124,23 @@ class WebPushRegistrar {
       debugPrint('getSubscription() failed: $e');
     }
 
-    final vapidPublicKey = WebPushVapid.publicKey.trim();
-    debugPrint('VAPID public key length=${vapidPublicKey.length}');
-    if (vapidPublicKey.isEmpty) {
-      debugPrint('ABORT: Missing VAPID public key');
-      return;
-    }
+    // --- VAPID sanity logs (recommended) ---
+    final key = WebPushVapid.publicKey;
+    debugPrint('VAPID publicKey len=${key.length}');
+    debugPrint('VAPID publicKey head=${key.length >= 12 ? key.substring(0, 12) : key}');
+    debugPrint('VAPID publicKey tail=${key.length >= 12 ? key.substring(key.length - 12) : key}');
 
     Uint8List appServerKeyDart;
     try {
-      appServerKeyDart = _urlBase64ToUint8List(vapidPublicKey);
-      debugPrint('Decoded appServerKey bytes=${appServerKeyDart.length}');
+      appServerKeyDart = _urlBase64ToUint8List(key);
+      debugPrint('VAPID decoded bytes=${appServerKeyDart.length}');
     } catch (e) {
       debugPrint('ABORT: VAPID key base64 decode failed: $e');
+      return;
+    }
+
+    if (appServerKeyDart.length != 65) {
+      debugPrint('ABORT: VAPID decoded length is ${appServerKeyDart.length}, expected 65');
       return;
     }
 
@@ -164,6 +169,10 @@ class WebPushRegistrar {
 
     final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
     debugPrint('New subscription endpoint=$endpoint');
+    if (endpoint.isEmpty) {
+      debugPrint('ABORT: empty endpoint');
+      return;
+    }
 
     // Verify it persisted
     try {
@@ -210,31 +219,18 @@ class WebPushRegistrar {
     debugPrint('WebPush subscription registered on backend.');
   }
 
-
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
 
-  Future<JSObject?> _waitForReadyRegistration() async {
-    final sw = _serviceWorkerContainer();
-    if (sw == null) return null;
-
+  Future<void> _registerServiceWorkerBestEffort() async {
     try {
-      // navigator.serviceWorker.ready -> Promise<ServiceWorkerRegistration>
-      final readyAny = sw.getProperty('ready'.toJS);
-      final regAny = await _awaitPromiseThen(readyAny as JSAny?);
-      final reg = _asJsObject(regAny);
-      return reg;
-    } catch (e) {
-      debugPrint('serviceWorker.ready failed: $e');
-      return null;
+      final sw = _serviceWorkerContainer();
+      if (sw == null) return;
+      // Actually touch ready so Flutter’s SW is ensured active
+      await _awaitPromiseThen(sw.getProperty('ready'.toJS) as JSAny?);
+    } catch (_) {
+      // ignore
     }
   }
-
-  Future<void> _registerServiceWorkerBestEffort() async {
-    // For Flutter web: don’t register your own SW here.
-    // Just touching ready is fine, but do it properly so the SW activates.
-    await _waitForReadyRegistration();
-  }
-
 
   String _getNotificationPermission() {
     final win = web.window as JSObject;
@@ -264,6 +260,7 @@ class WebPushRegistrar {
     final lenAny = fnObj.getProperty('length'.toJS);
     final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
 
+    // Old callback-style
     if (fnLen >= 1) {
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
@@ -279,6 +276,7 @@ class WebPushRegistrar {
       }
     }
 
+    // Promise-style
     try {
       final resAny = (fnAny as JSFunction).callAsFunction(ctor);
       final resolved = await _awaitPromiseThen(resAny);
@@ -309,19 +307,6 @@ class WebPushRegistrar {
   String _userAgent() {
     final nav = web.window.navigator as JSObject;
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
-  }
-
-  Future<JSObject?> _getRegistrationViaThen(JSObject sw) async {
-    try {
-      final regAny = await _awaitPromiseThen(
-        sw.callMethod('getRegistration'.toJS, <JSAny?>[].toJS),
-      );
-      final reg = _asJsObject(regAny);
-      return reg;
-    } catch (e) {
-      debugPrint('SW getRegistration failed: $e');
-      return null;
-    }
   }
 
   // Promise helper: unwrap via Promise.resolve(...).then(...) (WebKit-safe)
@@ -377,7 +362,11 @@ class WebPushRegistrar {
   String _b64UrlNoPad(Uint8List bytes) => base64UrlEncode(bytes).replaceAll('=', '');
 
   Uint8List _urlBase64ToUint8List(String base64Url) {
-    var s = base64Url.replaceAll('-', '+').replaceAll('_', '/');
+    // STRICT: avoid hidden whitespace / newlines / copy-paste artifacts
+    var s = base64Url.trim();
+    s = s.replaceAll('\n', '').replaceAll('\r', '').replaceAll(' ', '');
+
+    s = s.replaceAll('-', '+').replaceAll('_', '/');
     switch (s.length % 4) {
       case 0:
         break;
