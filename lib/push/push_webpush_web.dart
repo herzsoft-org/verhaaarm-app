@@ -41,7 +41,6 @@ class WebPushRegistrar {
     }
 
     final matchesAny = mm.getProperty('matches'.toJS);
-
     try {
       return (matchesAny as JSBoolean).toDart;
     } catch (_) {
@@ -76,29 +75,35 @@ class WebPushRegistrar {
 
     debugPrint('PushManager.supported=${win.getProperty('PushManager'.toJS) != null}');
 
-    // Controller diagnostics (this is key on iOS)
+    // Controller diagnostics
     final ctrlAny = sw.getProperty('controller'.toJS);
     debugPrint('serviceWorker.controller=${ctrlAny != null}');
     if (ctrlAny != null) {
       try {
         final ctrl = ctrlAny as JSObject;
-        debugPrint('serviceWorker.controller.scriptURL=${ctrl.getProperty('scriptURL'.toJS)?.toString()}');
+        debugPrint(
+          'serviceWorker.controller.scriptURL=${ctrl.getProperty('scriptURL'.toJS)?.toString()}',
+        );
         debugPrint('serviceWorker.controller.state=${ctrl.getProperty('state'.toJS)?.toString()}');
       } catch (_) {
         // ignore
       }
     }
 
-    // IMPORTANT: do NOT use navigator.serviceWorker.ready through typed casts;
-    // use getRegistration() and unwrap promises via Promise.then (WebKit-safe).
-    final reg = await _getRegistrationViaThen(sw);
-    if (reg == null) {
-      debugPrint('SW registration: null (cannot subscribe)');
+    // IMPORTANT: dev build web has controller=false; stop here.
+    if (ctrlAny == null) {
+      debugPrint('No SW controller (dev build web). Web push will not work here.');
       return;
     }
 
-    final scope = reg.getProperty('scope'.toJS)?.toString();
-    debugPrint('SW reg.scope=$scope');
+    // Get registration (this is what matters for pushManager)
+    final reg = await _getRegistrationViaThen(sw);
+    if (reg == null) {
+      debugPrint('SW getRegistration returned null (cannot subscribe)');
+      return;
+    }
+
+    debugPrint('SW reg.scope=${reg.getProperty('scope'.toJS)?.toString()}');
 
     final activeAny = reg.getProperty('active'.toJS);
     debugPrint('SW reg.active=${activeAny != null}');
@@ -112,15 +117,30 @@ class WebPushRegistrar {
       }
     }
 
-    final hasPushManager = reg.getProperty('pushManager'.toJS) != null;
-    debugPrint('SW reg.pushManager=$hasPushManager');
-
     final pushManagerAny = reg.getProperty('pushManager'.toJS);
+    debugPrint('SW reg.pushManager=${pushManagerAny != null}');
     if (pushManagerAny == null) {
       debugPrint('No pushManager on registration (cannot subscribe)');
       return;
     }
+
     final pushManager = pushManagerAny as JSObject;
+
+    // Optional: check existing subscription first
+    try {
+      final existingAny = await _awaitPromiseThen(
+        pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
+      );
+      debugPrint('getSubscription() is null? ${existingAny == null}');
+      if (existingAny != null) {
+        final existing = existingAny as JSObject;
+        final endpoint = existing.getProperty('endpoint'.toJS)?.toString() ?? '';
+        debugPrint('Existing subscription endpoint=$endpoint');
+        // If you want, you can reuse existing without re-subscribing.
+      }
+    } catch (e) {
+      debugPrint('getSubscription() failed: $e');
+    }
 
     final vapidPublicKey = WebPushVapid.publicKey.trim();
     if (vapidPublicKey.isEmpty) return;
@@ -172,6 +192,8 @@ class WebPushRegistrar {
       auth: authB64Url,
       raw: raw,
     );
+
+    debugPrint('WebPush subscription registered on backend.');
   }
 
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
@@ -215,6 +237,7 @@ class WebPushRegistrar {
     final lenAny = fnObj.getProperty('length'.toJS);
     final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
 
+    // Callback form (WebKit)
     if (fnLen >= 1) {
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
@@ -230,11 +253,13 @@ class WebPushRegistrar {
       }
     }
 
+    // Promise form
     try {
       final resAny = (fnAny as JSFunction).callAsFunction(ctor);
       final resolved = await _awaitPromiseThen(resAny);
       return resolved?.toString() ?? 'default';
     } catch (_) {
+      // Fallback to callback anyway
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
         final s = perm?.toString() ?? 'default';
@@ -262,7 +287,6 @@ class WebPushRegistrar {
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
   }
 
-  // ---- Get registration in a WebKit-safe way: Promise.then (no JSPromise casts) ----
   Future<JSObject?> _getRegistrationViaThen(JSObject sw) async {
     try {
       final regAny = await _awaitPromiseThen(
@@ -276,17 +300,15 @@ class WebPushRegistrar {
     }
   }
 
-  // ---- Promise helper: unwrap via Promise.resolve(...).then(...) (WebKit-safe) ----
+  // Promise helper: unwrap via Promise.resolve(...).then(...) (WebKit-safe)
   Future<JSAny?> _awaitPromiseThen(JSAny? promiseLike) {
     if (promiseLike == null) return Future.value(null);
 
     final c = Completer<JSAny?>();
-
     final win = web.window as JSObject;
+
     final promiseCtorAny = win.getProperty('Promise'.toJS);
-    if (promiseCtorAny == null) {
-      return Future.value(promiseLike);
-    }
+    if (promiseCtorAny == null) return Future.value(promiseLike);
 
     final promiseCtor = promiseCtorAny as JSObject;
     final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[promiseLike].toJS);
@@ -319,9 +341,7 @@ class WebPushRegistrar {
     }
   }
 
-  String _b64UrlNoPad(Uint8List bytes) {
-    return base64UrlEncode(bytes).replaceAll('=', '');
-  }
+  String _b64UrlNoPad(Uint8List bytes) => base64UrlEncode(bytes).replaceAll('=', '');
 
   Uint8List _urlBase64ToUint8List(String base64Url) {
     var s = base64Url.replaceAll('-', '+').replaceAll('_', '/');
