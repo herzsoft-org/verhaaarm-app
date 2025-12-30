@@ -23,9 +23,11 @@ class PushManager {
   }
 
   Future<void> enableWebPushFromButtonClick() async {
+    debugPrint('WebPushRegistrar runtime type: $WebPushRegistrar');
     if (!authStore.isLoggedIn) return;
     if (!kIsWeb) return;
 
+    debugPrint('WebPushRegistrar impl: $WebPushRegistrar'); // should not be stub
     await WebPushRegistrar(api: api, authStore: authStore).enableFromButtonClick();
   }
 }

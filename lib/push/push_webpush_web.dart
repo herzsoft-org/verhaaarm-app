@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
 import '../api/api_client.dart';
@@ -22,6 +22,11 @@ class WebPushRegistrar {
   }
 
   Future<void> enableFromButtonClick() async {
+    final win = web.window as JSObject;
+    debugPrint('secureContext=${web.window.isSecureContext}');
+    debugPrint('Notification in window=${win.getProperty('Notification'.toJS) != null}');
+    debugPrint('SW in navigator=${_serviceWorkerContainer() != null}');
+
     if (!authStore.isLoggedIn) return;
     if (!_supportsWebPush()) return;
 

@@ -1,1 +1,2 @@
-export 'push_webpush_stub.dart' if (dart.library.html) 'push_webpush_web.dart';
+export 'push_webpush_stub.dart'
+if (dart.library.js_interop) 'push_webpush_web.dart';

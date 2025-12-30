@@ -7,6 +7,7 @@ import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 import '../../notifications/notification_center.dart';
 import '../../push/push_manager.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class NotificationsPage extends StatefulWidget {
   final ApiClient api;
@@ -190,17 +191,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
             const SizedBox(height: 24),
 
             // Web push enable button (safe to show everywhere; it no-ops on non-web)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final pm = PushManager(api: widget.api, authStore: widget.authStore);
-                  await pm.enableWebPushFromButtonClick();
-                },
-                icon: const Icon(Icons.notifications_active),
-                label: const Text('Enable web notifications'),
+            if (kIsWeb) ...[
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final pm = PushManager(api: widget.api, authStore: widget.authStore);
+                    await pm.enableWebPushFromButtonClick();
+                  },
+                  icon: const Icon(Icons.notifications_active),
+                  label: const Text('Enable web notifications'),
+                ),
               ),
-            ),
+            ],
+
 
             const SizedBox(height: 24),
           ],
