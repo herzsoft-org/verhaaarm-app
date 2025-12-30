@@ -1,9 +1,10 @@
+// ignore_for_file: avoid_web_libraries_in_flutter
+
 import 'dart:convert';
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
-import 'dart:html' as html;
 
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
@@ -164,23 +165,29 @@ class WebPushRegistrar {
   // ---- Notifications permission (no dart:html) ----
   Future<String> _requestNotificationPermission() async {
     final win = web.window as JSObject;
+
     final notificationCtorAny = win.getProperty('Notification'.toJS);
-    if (notificationCtorAny == null) return 'denied';
+    if (notificationCtorAny == null) return 'missing';
 
     final ctor = notificationCtorAny as JSObject;
 
-    // Get the function reference
-    final fnAny = ctor.getProperty('requestPermission'.toJS);
-    if (fnAny == null) return 'denied';
+    final resAny = ctor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS);
 
-    // Call with correct receiver (ctor) and no args
-    final res = await _awaitPromise(
-      (fnAny as JSFunction).callAsFunction(ctor, <JSAny?>[].toJS),
-    );
-
-    return res?.toString() ?? 'denied';
+    // Modern browsers: Promise<"granted"|"denied"|"default">
+    final awaited = await _awaitPromiseOrValue(resAny);
+    return awaited?.toString() ?? 'unknown';
   }
 
+  Future<JSAny?> _awaitPromiseOrValue(JSAny? any) async {
+    if (any == null) return null;
+
+    // If it's a Promise, await it; otherwise treat it as an immediate value.
+    try {
+      return await (any as JSPromise<JSAny?>).toDart;
+    } catch (_) {
+      return any;
+    }
+  }
 
   // ---- Promise helper (avoid `is JSPromise` runtime checks) ----
   Future<JSAny?> _awaitPromise(JSAny? any) async {
