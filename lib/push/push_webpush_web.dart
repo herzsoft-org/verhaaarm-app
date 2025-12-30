@@ -57,110 +57,159 @@ class WebPushRegistrar {
     debugPrint('displayModeStandalone=${_isStandalone()}');
     debugPrint('Notification.permission (before) = ${_getNotificationPermission()}');
 
-    if (!authStore.isLoggedIn) return;
-    if (!_supportsWebPush()) return;
+    if (!authStore.isLoggedIn) {
+      debugPrint('ABORT: not logged in');
+      return;
+    }
+    if (!_supportsWebPush()) {
+      debugPrint('ABORT: no serviceWorker container');
+      return;
+    }
 
     final perm = await _ensureNotificationPermission();
     debugPrint('Notification.requestPermission() result = $perm');
     debugPrint('Notification.permission (after) = ${_getNotificationPermission()}');
-    if (perm != 'granted') return;
+    if (perm != 'granted') {
+      debugPrint('ABORT: permission not granted');
+      return;
+    }
 
     final sw = _serviceWorkerContainer();
-    if (sw == null) return;
+    if (sw == null) {
+      debugPrint('ABORT: serviceWorker container became null');
+      return;
+    }
 
-    // IMPORTANT: use ready registration, not controller
+    // Wait for active registration
+    debugPrint('Awaiting serviceWorker.ready...');
     final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS) as JSAny?);
     final reg = _asJsObject(readyRegAny);
     if (reg == null) {
-      debugPrint('serviceWorker.ready returned null (cannot subscribe)');
+      debugPrint('ABORT: serviceWorker.ready returned null');
       return;
     }
 
     debugPrint('SW ready.scope=${reg.getProperty('scope'.toJS)?.toString()}');
 
+    final activeAny = reg.getProperty('active'.toJS);
+    debugPrint('SW active=${activeAny != null}');
+    if (activeAny != null) {
+      final a = _asJsObject(activeAny);
+      if (a != null) {
+        debugPrint('SW active.scriptURL=${a.getProperty('scriptURL'.toJS)?.toString()}');
+        debugPrint('SW active.state=${a.getProperty('state'.toJS)?.toString()}');
+      }
+    }
+
     final pushManagerAny = reg.getProperty('pushManager'.toJS);
-    debugPrint('SW reg.pushManager=${pushManagerAny != null}');
+    debugPrint('SW pushManager=${pushManagerAny != null}');
     if (pushManagerAny == null) {
-      debugPrint('No pushManager on registration (cannot subscribe)');
+      debugPrint('ABORT: no pushManager on registration');
       return;
     }
     final pushManager = pushManagerAny as JSObject;
 
     // Existing subscription?
-    JSObject? existing;
     try {
       final existingAny = await _awaitPromiseThen(
         pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
       );
-      existing = _asJsObject(existingAny);
+      final existing = _asJsObject(existingAny);
+      debugPrint('Existing subscription? ${existing != null}');
+      if (existing != null) {
+        debugPrint('Existing endpoint=${existing.getProperty('endpoint'.toJS)?.toString()}');
+      }
     } catch (e) {
       debugPrint('getSubscription() failed: $e');
     }
 
-    if (existing != null) {
-      final endpoint = existing.getProperty('endpoint'.toJS)?.toString() ?? '';
-      debugPrint('Existing subscription endpoint=$endpoint');
-      // Optional: still send it to backend to ensure backend has it
-    }
-
     final vapidPublicKey = WebPushVapid.publicKey.trim();
+    debugPrint('VAPID public key length=${vapidPublicKey.length}');
     if (vapidPublicKey.isEmpty) {
-      debugPrint('Missing VAPID public key');
+      debugPrint('ABORT: Missing VAPID public key');
       return;
     }
 
-    final appServerKey = _urlBase64ToUint8List(vapidPublicKey).toJS;
+    Uint8List appServerKeyDart;
+    try {
+      appServerKeyDart = _urlBase64ToUint8List(vapidPublicKey);
+      debugPrint('Decoded appServerKey bytes=${appServerKeyDart.length}');
+    } catch (e) {
+      debugPrint('ABORT: VAPID key base64 decode failed: $e');
+      return;
+    }
 
     final options = <String, Object?>{
       'userVisibleOnly': true,
-      'applicationServerKey': appServerKey,
+      'applicationServerKey': appServerKeyDart.toJS,
     }.jsify();
 
-    JSObject sub;
+    JSObject? sub;
     try {
+      debugPrint('Calling pushManager.subscribe(...)...');
       final subAny = await _awaitPromiseThen(
         pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
       );
-      final s = _asJsObject(subAny);
-      if (s == null) {
-        debugPrint('subscribe() returned null');
-        return;
-      }
-      sub = s;
+      sub = _asJsObject(subAny);
+      debugPrint('subscribe() returned null? ${sub == null}');
     } catch (e) {
-      debugPrint('subscribe() failed: $e');
+      debugPrint('subscribe() threw: $e');
       rethrow;
     }
 
-    final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
-    debugPrint('Push endpoint=$endpoint');
-    if (endpoint.isEmpty) return;
+    if (sub == null) {
+      debugPrint('ABORT: subscribe returned null');
+      return;
+    }
 
+    final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
+    debugPrint('New subscription endpoint=$endpoint');
+
+    // Verify it persisted
+    try {
+      final verifyAny = await _awaitPromiseThen(
+        pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
+      );
+      final verify = _asJsObject(verifyAny);
+      debugPrint('Verify getSubscription() null? ${verify == null}');
+      if (verify != null) {
+        debugPrint('Verify endpoint=${verify.getProperty('endpoint'.toJS)?.toString()}');
+      }
+    } catch (e) {
+      debugPrint('Verify getSubscription() failed: $e');
+    }
+
+    // Extract keys + send to backend
     final p256dhBufAny = sub.callMethod('getKey'.toJS, <JSAny?>['p256dh'.toJS].toJS);
     final authBufAny = sub.callMethod('getKey'.toJS, <JSAny?>['auth'.toJS].toJS);
-    if (p256dhBufAny == null || authBufAny == null) return;
+    if (p256dhBufAny == null || authBufAny == null) {
+      debugPrint('ABORT: subscription keys missing');
+      return;
+    }
 
     final p256dhBytes = _arrayBufferToBytes(p256dhBufAny);
     final authBytes = _arrayBufferToBytes(authBufAny);
-    if (p256dhBytes == null || authBytes == null) return;
+    if (p256dhBytes == null || authBytes == null) {
+      debugPrint('ABORT: key buffers could not be converted');
+      return;
+    }
 
     final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
     final authB64Url = _b64UrlNoPad(authBytes);
-
-    final raw = <String, dynamic>{
-      'endpoint': endpoint,
-      'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
-    };
 
     await api.registerWebPush(
       endpoint: endpoint,
       p256dh: p256dhB64Url,
       auth: authB64Url,
-      raw: raw,
+      raw: {
+        'endpoint': endpoint,
+        'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
+      },
     );
 
     debugPrint('WebPush subscription registered on backend.');
   }
+
 
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
 
