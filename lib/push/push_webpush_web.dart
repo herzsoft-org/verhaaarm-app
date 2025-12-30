@@ -1,5 +1,3 @@
-// ignore_for_file: avoid_web_libraries_in_flutter
-
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -36,10 +34,8 @@ class WebPushRegistrar {
     final sw = _serviceWorkerContainer();
     if (sw == null) return;
 
-    final readyPromise = sw.getProperty('ready'.toJS);
-    if (readyPromise is! JSPromise<JSAny?>) return;
-
-    final regAny = await readyPromise.toDart;
+    // Wait for Flutter's SW to be ready
+    final regAny = await _awaitPromise(sw.getProperty('ready'.toJS));
     if (regAny == null) return;
     final reg = regAny as JSObject;
 
@@ -57,13 +53,9 @@ class WebPushRegistrar {
       'applicationServerKey': appServerKey,
     }.jsify();
 
-    final subPromiseAny = pushManager.callMethod(
-      'subscribe'.toJS,
-      <JSAny?>[options].toJS,
+    final subAny = await _awaitPromise(
+      pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
     );
-
-    if (subPromiseAny is! JSPromise<JSAny?>) return;
-    final subAny = await subPromiseAny.toDart;
     if (subAny == null) return;
     final sub = subAny as JSObject;
 
@@ -100,20 +92,12 @@ class WebPushRegistrar {
   }
 
   Future<void> _registerServiceWorkerBestEffort() async {
+    // Do nothing: Flutter registers its own SW.
+    // We only wait for it to become ready.
     try {
       final sw = _serviceWorkerContainer();
       if (sw == null) return;
-
-      final opts = <String, Object?>{'scope': '/'}.jsify();
-
-      final pAny = sw.callMethod(
-        'register'.toJS,
-        <JSAny?>['/webpush-sw.js'.toJS, opts].toJS, // JSArray args
-      );
-
-      if (pAny is JSPromise<JSAny?>) {
-        await pAny.toDart;
-      }
+      await _awaitPromise(sw.getProperty('ready'.toJS));
     } catch (_) {
       // ignore
     }
@@ -122,15 +106,27 @@ class WebPushRegistrar {
   // ---- Notifications permission (no dart:html) ----
   Future<String> _requestNotificationPermission() async {
     final win = web.window as JSObject;
-    final notificationCtor = win.getProperty('Notification'.toJS);
-    if (notificationCtor == null) return 'denied';
 
-    final ctor = notificationCtor as JSObject;
-    final reqAny = ctor.callMethod('requestPermission'.toJS, (<JSAny?>[]).toJS);
-    if (reqAny is! JSPromise<JSAny?>) return 'denied';
+    final notificationCtorAny = win.getProperty('Notification'.toJS);
+    if (notificationCtorAny == null) return 'denied';
 
-    final res = await reqAny.toDart;
+    final notificationCtor = notificationCtorAny as JSObject;
+
+    final res = await _awaitPromise(
+      notificationCtor.callMethod('requestPermission'.toJS, <JSAny?>[].toJS),
+    );
+
     return res?.toString() ?? 'denied';
+  }
+
+  // ---- Promise helper (avoid `is JSPromise` runtime checks) ----
+  Future<JSAny?> _awaitPromise(JSAny? any) async {
+    if (any == null) return null;
+    try {
+      return (any as JSPromise<JSAny?>).toDart;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---- Service Worker container access ----

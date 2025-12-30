@@ -1,6 +1,6 @@
-cat > tools_patch_sw.sh <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+
 SW="build/web/flutter_service_worker.js"
 [ -f "$SW" ] || { echo "Missing $SW (run: flutter build web first)"; exit 1; }
 
@@ -54,7 +54,3 @@ self.addEventListener('notificationclick', function (event) {
 JS
 
 echo "Patched $SW"
-SH
-
-chmod +x tools_patch_sw.sh
-echo "Run: flutter build web && ./tools_patch_sw.sh"
