@@ -21,17 +21,55 @@ class WebPushRegistrar {
     await _registerServiceWorkerBestEffort();
   }
 
+  bool _isStandalone() {
+    final win = web.window as JSObject;
+
+    final mmAny = win.callMethod(
+      'matchMedia'.toJS,
+      <JSAny?>['(display-mode: standalone)'.toJS].toJS,
+    );
+
+    // Avoid `is` checks between JS interop types.
+    final JSObject mm;
+    try {
+      mm = mmAny as JSObject;
+    } catch (_) {
+      return false;
+    }
+
+    final matchesAny = mm.getProperty('matches'.toJS);
+
+    // Convert JS boolean to Dart bool (avoid comparing JSAny? to `true`).
+    try {
+      return (matchesAny as JSBoolean).toDart;
+    } catch (_) {
+      // Fallback for odd browsers/values
+      return matchesAny?.toString() == 'true';
+    }
+  }
+
+
   Future<void> enableFromButtonClick() async {
     final win = web.window as JSObject;
+
     debugPrint('secureContext=${web.window.isSecureContext}');
     debugPrint('Notification in window=${win.getProperty('Notification'.toJS) != null}');
     debugPrint('SW in navigator=${_serviceWorkerContainer() != null}');
+    debugPrint('displayModeStandalone=${_isStandalone()}');
+
+
+    // Log current permission state (does NOT request)
+    debugPrint('Notification.permission (before) = ${_getNotificationPermission()}');
 
     if (!authStore.isLoggedIn) return;
     if (!_supportsWebPush()) return;
 
     // IMPORTANT: do permission first, before any awaited work
     final perm = await _requestNotificationPermission();
+
+    debugPrint('Notification.requestPermission() result = $perm');
+    debugPrint('Notification.permission (after) = ${_getNotificationPermission()}');
+
     if (perm != 'granted') return;
 
     await _registerServiceWorkerBestEffort();
@@ -76,18 +114,19 @@ class WebPushRegistrar {
     final authBytes = _arrayBufferToBytes(authBufAny);
     if (p256dhBytes == null || authBytes == null) return;
 
-    final p256dhB64 = base64Encode(p256dhBytes);
-    final authB64 = base64Encode(authBytes);
+    // IMPORTANT: use base64url without padding (matches backend Base64.getUrlDecoder())
+    final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
+    final authB64Url = _b64UrlNoPad(authBytes);
 
     final raw = <String, dynamic>{
       'endpoint': endpoint,
-      'keys': {'p256dh': p256dhB64, 'auth': authB64},
+      'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
     };
 
     await api.registerWebPush(
       endpoint: endpoint,
-      p256dh: p256dhB64,
-      auth: authB64,
+      p256dh: p256dhB64Url,
+      auth: authB64Url,
       raw: raw,
     );
   }
@@ -106,6 +145,18 @@ class WebPushRegistrar {
     } catch (_) {
       // ignore
     }
+  }
+
+  // ---- Read current permission state without prompting ----
+  String _getNotificationPermission() {
+    final win = web.window as JSObject;
+
+    final notificationCtorAny = win.getProperty('Notification'.toJS);
+    if (notificationCtorAny == null) return 'missing';
+
+    final ctor = notificationCtorAny as JSObject;
+    final p = ctor.getProperty('permission'.toJS); // "default" | "granted" | "denied"
+    return p?.toString() ?? 'unknown';
   }
 
   // ---- Notifications permission (no dart:html) ----
@@ -154,6 +205,12 @@ class WebPushRegistrar {
     }
   }
 
+  // ---- Base64url without padding (RFC 4648) ----
+  String _b64UrlNoPad(Uint8List bytes) {
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
+
+  // ---- VAPID public key: base64url -> bytes ----
   Uint8List _urlBase64ToUint8List(String base64Url) {
     var s = base64Url.replaceAll('-', '+').replaceAll('_', '/');
     switch (s.length % 4) {
