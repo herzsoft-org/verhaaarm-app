@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'push/push_fcm.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
@@ -16,11 +18,13 @@ Future<void> main() async {
 
   if (!kIsWeb) {
     await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
 
   final router = await buildRouter();
   runApp(VerhaaarmApp(router: router));
 }
+
 
 class VerhaaarmApp extends StatelessWidget {
   final RouterConfig<Object> router;

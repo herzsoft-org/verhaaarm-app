@@ -2,16 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../api/api_client.dart';
 import '../auth/auth_store.dart';
 import '../notifications/notification_center.dart';
 
+
 final FlutterLocalNotificationsPlugin _ln = FlutterLocalNotificationsPlugin();
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Background/terminated: show a system notification (works for data-only too)
+  await Firebase.initializeApp(); // required in background isolate
   await _ensureLocalNotificationsInitialized();
 
   final title = message.notification?.title ?? message.data['title']?.toString() ?? 'Notification';
@@ -37,16 +39,20 @@ Future<void> _ensureLocalNotificationsInitialized() async {
   const init = InitializationSettings(android: androidInit);
   await _ln.initialize(init);
 
-  if (Platform.isAndroid) {
+  final androidPlugin =
+  _ln.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+  if (androidPlugin != null) {
     const channel = AndroidNotificationChannel(
       'verhaarm_push',
       'Push notifications',
       description: 'Verhåårm push notifications',
       importance: Importance.max,
     );
-    await _ln
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    await androidPlugin.createNotificationChannel(channel);
+
+    // Android 13+ runtime permission (this is the important one)
+    await androidPlugin.requestNotificationsPermission();
   }
 }
 
