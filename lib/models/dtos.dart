@@ -220,8 +220,13 @@ class TaskDto {
   final String creatorUserId;
   final String title;
   final String description;
+
+  /// Interpretiert als "für mich erledigt" (Status aus /tasks für den eingeloggten Nutzer)
   final bool solved;
+
+  /// Interpretiert als "für mich erledigt um ..." (optional)
   final String? solvedAt;
+
   final List<UserPickerDto> assignees;
   final String createdAt;
 
@@ -654,7 +659,7 @@ String _attendanceStatusToJson(AttendanceStatus s) => (s == AttendanceStatus.abs
 class AttendanceDto {
   final String id;
   final String eventId;
-  final String periodId;
+  final String? periodId;
   final String userId;
   final AttendanceStatus status;
   final int? lateMinutes;
@@ -675,7 +680,7 @@ class AttendanceDto {
   factory AttendanceDto.fromJson(Map<String, dynamic> json) => AttendanceDto(
     id: _reqString(json, 'id'),
     eventId: _reqString(json, 'eventId'),
-    periodId: _reqString(json, 'periodId'),
+    periodId: _optString(json, 'periodId'),
     userId: _reqString(json, 'userId'),
     status: _attendanceStatusFromJson(_reqString(json, 'status')),
     lateMinutes: json['lateMinutes'] == null ? null : _optInt(json, 'lateMinutes'),

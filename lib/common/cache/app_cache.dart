@@ -57,6 +57,7 @@ class AppCache {
     final fetchedAtRaw = obj['fetchedAt'];
     final data = obj['data'];
     if (fetchedAtRaw is! String) return null;
+    if (data == null) return null;
 
     final fetchedAt = DateTime.tryParse(fetchedAtRaw);
     if (fetchedAt == null) return null;

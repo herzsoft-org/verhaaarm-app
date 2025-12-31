@@ -126,7 +126,7 @@ class _FinesListPageState extends State<FinesListPage> {
             if (grouped.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('Keine Prioden gefunden.'),
+                child: Text('Keine Perioden gefunden.'),
               ),
             for (final sem in grouped)
               _SemesterSection(
@@ -135,7 +135,7 @@ class _FinesListPageState extends State<FinesListPage> {
                 fineTitle: _fineTitle,
                 userLabel: _userLabel,
                 onTapFine: (id) => context.push('/fines/$id'),
-                isAttendanceFine: _isAttendanceFine, // CHANGED
+                isAttendanceFine: _isAttendanceFine,
               ),
           ],
         ),
@@ -146,8 +146,6 @@ class _FinesListPageState extends State<FinesListPage> {
   List<_SemesterGroup> _buildGrouped() {
     final periodsSorted = [..._periods]
       ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));
-
-    final periodById = {for (final p in _periods) p.id: p};
 
     // group fines by computed period id (from fineDate)
     final Map<String, List<FineDto>> finesByPeriodId = {};
@@ -185,12 +183,10 @@ class _FinesListPageState extends State<FinesListPage> {
 
       final periodGroups = <_PeriodGroup>[];
       for (final p in ps) {
-        final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])]
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         periodGroups.add(_PeriodGroup(period: p, fines: fines));
       }
 
-      // also show "unknown" bucket at bottom if needed (fines that do not map)
       final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
       if (unknownFines.isNotEmpty) {
         unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -212,11 +208,9 @@ class _FinesListPageState extends State<FinesListPage> {
       result.add(_SemesterGroup(semester: sem, periods: periodGroups));
     }
 
-    // If there are only unknown fines and no periods, show a fallback semester bucket
     if (result.isEmpty && (finesByPeriodId['unknown']?.isNotEmpty ?? false)) {
-      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])]
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
+      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
+      unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       result.add(
         _SemesterGroup(
           semester: 'Unbekannt',
@@ -236,11 +230,6 @@ class _FinesListPageState extends State<FinesListPage> {
         ),
       );
     }
-
-    // remove fake periodById variable warning if unused
-    // (kept as local for easy debug)
-    // ignore: unused_local_variable
-    final _ = periodById;
 
     return result;
   }
@@ -267,7 +256,7 @@ class _SemesterSection extends StatelessWidget {
   final String Function(FineDto) fineTitle;
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
-  final bool Function(FineDto) isAttendanceFine; // CHANGED
+  final bool Function(FineDto) isAttendanceFine;
 
   const _SemesterSection({
     required this.semester,
@@ -275,7 +264,7 @@ class _SemesterSection extends StatelessWidget {
     required this.fineTitle,
     required this.userLabel,
     required this.onTapFine,
-    required this.isAttendanceFine, // CHANGED
+    required this.isAttendanceFine,
   });
 
   @override
@@ -296,7 +285,7 @@ class _SemesterSection extends StatelessWidget {
                 fineTitle: fineTitle,
                 userLabel: userLabel,
                 onTapFine: onTapFine,
-                isAttendanceFine: isAttendanceFine, // CHANGED
+                isAttendanceFine: isAttendanceFine,
               ),
           ],
         ),
@@ -312,7 +301,7 @@ class _PeriodSection extends StatelessWidget {
   final String Function(FineDto) fineTitle;
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
-  final bool Function(FineDto) isAttendanceFine; // CHANGED
+  final bool Function(FineDto) isAttendanceFine;
 
   const _PeriodSection({
     required this.period,
@@ -320,7 +309,7 @@ class _PeriodSection extends StatelessWidget {
     required this.fineTitle,
     required this.userLabel,
     required this.onTapFine,
-    required this.isAttendanceFine, // CHANGED
+    required this.isAttendanceFine,
   });
 
   @override

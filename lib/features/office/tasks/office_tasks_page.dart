@@ -65,20 +65,32 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
 
     for (final t in _all) {
       if (t.assignees.isEmpty) {
-        map.putIfAbsent('__NONE__', () => _UserGroup(
-          key: '__NONE__',
-          displayName: 'Ohne Empfänger',
-          username: '',
-        )).tasks.add(t);
+        map
+            .putIfAbsent(
+          '__NONE__',
+              () => _UserGroup(
+            key: '__NONE__',
+            displayName: 'Ohne Empfänger',
+            username: '',
+          ),
+        )
+            .tasks
+            .add(t);
         continue;
       }
 
       for (final u in t.assignees) {
-        map.putIfAbsent(u.id, () => _UserGroup(
-          key: u.id,
-          displayName: u.displayName,
-          username: u.username,
-        )).tasks.add(t);
+        map
+            .putIfAbsent(
+          u.id,
+              () => _UserGroup(
+            key: u.id,
+            displayName: u.displayName,
+            username: u.username,
+          ),
+        )
+            .tasks
+            .add(t);
       }
     }
 
@@ -176,10 +188,7 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
                   child: ExpansionTile(
                     leading: const Icon(Icons.person_rounded),
                     title: Text(g.displayName),
-
-                    // CHANGED: always "x offen · x gesamt"
                     subtitle: Text('$unsolved offen · ${tasks.length} gesamt'),
-
                     children: [
                       for (final t in tasks)
                         ListTile(

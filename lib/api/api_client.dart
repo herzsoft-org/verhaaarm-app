@@ -17,24 +17,28 @@ class ApiClient {
   static const String baseUrlProd = 'https://verhaarmapi.herz.moe';
 
   ApiClient({required this.authStore}) {
-    dio = Dio(BaseOptions(
-      baseUrl: baseUrlProd,
-      connectTimeout: const Duration(seconds: 12),
-      receiveTimeout: const Duration(seconds: 20),
-      sendTimeout: const Duration(seconds: 20),
-      // no global Content-Type; Dio will set it per request
-      headers: {},
-    ));
+    dio = Dio(
+      BaseOptions(
+        baseUrl: baseUrlProd,
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 20),
+        sendTimeout: const Duration(seconds: 20),
+        // no global Content-Type; Dio will set it per request
+        headers: const {},
+      ),
+    );
 
     auth = AuthApi(dio);
 
     dio.interceptors.add(AuthInterceptor(authStore: authStore, authApi: auth));
-    dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
-        options.extra['_dio_instance'] = dio;
-        handler.next(options);
-      },
-    ));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          options.extra['_dio_instance'] = dio;
+          handler.next(options);
+        },
+      ),
+    );
   }
 
   // --- AUTH convenience (used by ProfilePage)
@@ -55,7 +59,9 @@ class ApiClient {
   Future<List<NotificationDto>> listNotifications({int limit = 50}) async {
     final r = await dio.get('/notifications', queryParameters: {'limit': limit});
     final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => NotificationDto.fromJson((e as Map).cast<String, dynamic>())).toList(growable: false);
+    return list
+        .map((e) => NotificationDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
   }
 
   Future<UnreadCountDto> getUnreadCount() async {
@@ -393,23 +399,28 @@ class ApiClient {
     await dio.delete('/live-events/$id');
   }
 
-  // --- USERS (admin/senior)
-  Future<List<UserDto>> listUsersFull({required bool active}) async {
-    // /users returns only {id, username, displayName}
-    final r = await dio.get('/users', queryParameters: {'active': active});
-    final list = (r.data as List).cast<dynamic>();
+  // --- USERS (admin list: includes disabled)
+  Future<List<UserDto>> listUsersAdmin() async {
+    final res = await dio.get('/users');
+    final data = (res.data as List).cast<dynamic>();
+    return data.map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
 
-    // Extract ids from the lightweight list
-    final ids = list
-        .map((e) => (e as Map).cast<String, dynamic>())
-        .map((m) => (m['id'] as String?)?.trim())
-        .whereType<String>()
-        .where((id) => id.isNotEmpty)
-        .toList();
+  Future<List<UserDto>> listUsersFull({required bool active, String? query}) async {
+    final res = await dio.get(
+      '/users',
+      queryParameters: {
+        'active': active,
+        if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
+      },
+    );
 
-    // Fetch full user objects in parallel via /users/{id}
-    final full = await Future.wait(ids.map(getUser));
-    return full;
+    final data = (res.data as List).cast<dynamic>();
+    return data.map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
+  Future<void> deleteUserHard(String userId) async {
+    await dio.delete('/users/$userId');
   }
 
   Future<UserDto> createUser(CreateUserRequest req) async {

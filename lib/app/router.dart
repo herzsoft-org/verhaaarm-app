@@ -45,15 +45,12 @@ Future<GoRouter> buildRouter() async {
 
   final api = ApiClient(authStore: authStore);
 
-  // On app start: if we have refresh token but no access token (or it expired earlier), try refresh.
   if (!authStore.isLoggedIn) {
     await authStore.tryRefresh(api);
   }
 
-  // Global notifications badge + polling
   NotificationCenter.I.init(api: api, authStore: authStore);
 
-  // Push auto-registration whenever auth flips to logged-in
   final push = PushManager(api: api, authStore: authStore);
   authStore.addListener(() {
     if (authStore.isLoggedIn) {
@@ -62,7 +59,6 @@ Future<GoRouter> buildRouter() async {
     }
   });
 
-  // If already logged in after refresh attempt, register now
   if (authStore.isLoggedIn) {
     push.initAndRegisterBestEffort();
     NotificationCenter.I.refreshUnreadCount();
@@ -94,13 +90,11 @@ Future<GoRouter> buildRouter() async {
         builder: (context, state) => ProfilePage(api: api, authStore: authStore),
       ),
 
-      // --- Notifications
       GoRoute(
         path: '/notifications',
         builder: (context, state) => NotificationsPage(api: api, authStore: authStore),
       ),
 
-      // --- Tasks (my)
       GoRoute(
         path: '/tasks',
         builder: (context, state) => TasksPage(api: api, authStore: authStore),
@@ -115,7 +109,6 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
 
-      // --- Events (scheduled)
       GoRoute(
         path: '/events',
         builder: (context, state) => EventsPage(api: api, authStore: authStore),
@@ -137,7 +130,6 @@ Future<GoRouter> buildRouter() async {
         path: '/my-fines',
         builder: (context, state) => MyFinesPage(api: api),
       ),
-
       GoRoute(
         path: '/fines',
         builder: (context, state) => FinesListPage(api: api),
@@ -158,7 +150,6 @@ Future<GoRouter> buildRouter() async {
           mode: FineFormMode.suggestion,
         ),
       ),
-
       GoRoute(
         path: '/fines/:id',
         builder: (context, state) => FineDetailPage(
@@ -192,13 +183,11 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
 
-      // --- Office
       GoRoute(
         path: '/office',
         builder: (context, state) => OfficePage(api: api, authStore: authStore),
       ),
 
-      // Office: Tasks (ADMIN)
       GoRoute(
         path: '/office/tasks',
         builder: (context, state) => OfficeTasksPage(api: api, authStore: authStore),
@@ -211,7 +200,6 @@ Future<GoRouter> buildRouter() async {
             return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
           }
 
-          // We pass TaskDto as extra from OfficeTasksPage for instant edit.
           final TaskDto? t = state.extra is TaskDto ? state.extra as TaskDto : null;
 
           return TaskFormPage(
@@ -241,7 +229,6 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
 
-      // Users
       GoRoute(
         path: '/office/users',
         builder: (context, state) => UsersPage(api: api, authStore: authStore),
@@ -267,7 +254,6 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
 
-      // Catalog
       GoRoute(
         path: '/office/catalog',
         builder: (context, state) => CatalogPage(api: api, authStore: authStore),

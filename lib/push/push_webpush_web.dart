@@ -83,7 +83,7 @@ class WebPushRegistrar {
 
     // IMPORTANT: use ready registration, not controller
     debugPrint('Awaiting serviceWorker.ready...');
-    final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS) as JSAny?);
+    final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS));
     final reg = _asJsObject(readyRegAny);
     if (reg == null) {
       debugPrint('ABORT: serviceWorker.ready returned null');
@@ -226,7 +226,7 @@ class WebPushRegistrar {
       final sw = _serviceWorkerContainer();
       if (sw == null) return;
       // Actually touch ready so Flutter’s SW is ensured active
-      await _awaitPromiseThen(sw.getProperty('ready'.toJS) as JSAny?);
+      await _awaitPromiseThen(sw.getProperty('ready'.toJS));
     } catch (_) {
       // ignore
     }

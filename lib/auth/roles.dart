@@ -11,7 +11,6 @@ class Roles {
 
       // expecting something like: roles: ["ADMIN","SENIOR",...]
       final raw = payload['roles'];
-
       final List<dynamic> rolesList = (raw is List) ? raw : (raw is String ? [raw] : const []);
 
       return rolesList.map((e) => _mapRole(e.toString())).whereType<AppRole>().toSet();
@@ -63,7 +62,6 @@ class Roles {
   }
 
   static bool canManageAnyEvent(Set<AppRole> roles) {
-    // SENIOR manages any; ADMIN manages any
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
   }
 
@@ -84,12 +82,10 @@ class Roles {
   }
 
   static bool canManageFines(Set<AppRole> roles) {
-    // anpassen, falls du andere Rollen dafür zulassen willst
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
   }
 
   static bool canManagePeriods(Set<AppRole> roles) {
-    // laut Wunsch: nur ADMIN (nicht SENIOR/Sprecher)
     return roles.contains(AppRole.admin);
   }
 

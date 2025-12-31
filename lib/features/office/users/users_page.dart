@@ -19,9 +19,6 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   bool _loading = true;
-
-  // Backend currently crashes on /users?active=false (500).
-  // Until backend supports listing disabled users properly, we always request active=true.
   List<UserDto> _users = const [];
 
   @override
@@ -42,10 +39,9 @@ class _UsersPageState extends State<UsersPage> {
         return;
       }
 
-      // IMPORTANT: Always request active users (Swagger requires active param; backend should treat it as "active=true").
-      final users = await widget.api.listUsersFull(active: true);
+      // Correct admin endpoint: GET /users (no query params)
+      final users = await widget.api.listUsersAdmin();
 
-      // Sort alphabetically by display name (fallback to username if needed)
       users.sort((a, b) {
         final ad = a.displayName.trim().toLowerCase();
         final bd = b.displayName.trim().toLowerCase();
@@ -71,7 +67,6 @@ class _UsersPageState extends State<UsersPage> {
 
   String _singleRoleLabel(UserDto u) {
     if (u.roles.isEmpty) return '—';
-    // Backend is now "exactly one", but be defensive if older data exists.
     return u.roles.first;
   }
 

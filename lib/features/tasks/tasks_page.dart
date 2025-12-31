@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
-
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 
@@ -43,7 +42,6 @@ class _TasksPageState extends State<TasksPage> {
     try {
       final tasks = await widget.api.listMyTasks();
       tasks.sort((a, b) {
-        // unsolved first, then newest first
         if (a.solved != b.solved) return a.solved ? 1 : -1;
         return b.createdAt.compareTo(a.createdAt);
       });
@@ -65,7 +63,6 @@ class _TasksPageState extends State<TasksPage> {
         });
       }
     }
-
   }
 
   Future<void> _toggleSolved(TaskDto t) async {
@@ -96,7 +93,7 @@ class _TasksPageState extends State<TasksPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Arbeitsauftrag löschen'),
-        content: Text('„${t.title}“ wirklich löschen?'),
+        content: Text('„${t.title}“ löschen?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Löschen')),
@@ -180,8 +177,6 @@ class _TasksPageState extends State<TasksPage> {
                 child: LinearProgressIndicator(),
               ),
             ],
-
-            // Disclaimer
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -202,7 +197,6 @@ class _TasksPageState extends State<TasksPage> {
               ),
             ),
             const SizedBox(height: 12),
-
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -225,7 +219,6 @@ class _TasksPageState extends State<TasksPage> {
               ),
             ),
             const SizedBox(height: 12),
-
             if (_tasks.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
@@ -257,6 +250,38 @@ class _TaskCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  void _showAssigneesDialog(BuildContext context) {
+    final names = task.assignees.map((u) => u.displayName.trim()).where((s) => s.isNotEmpty).toList();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Beauftragte Bbr. (${names.length})'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: names.isEmpty
+              ? const Text('Keine Empfänger.')
+              : SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final n in names)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_outline_rounded),
+                    title: Text(n),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Schließen')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -271,6 +296,8 @@ class _TaskCard extends StatelessWidget {
       decoration: task.solved ? TextDecoration.lineThrough : null,
     );
 
+    final assigneeCount = task.assignees.length;
+
     return Card(
       color: task.solved ? cs.surfaceContainerLowest : cs.surfaceContainerLow,
       child: Padding(
@@ -278,22 +305,26 @@ class _TaskCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top row: indicator + title + overflow actions
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // keep the circle->check idea, but make it feel like a "status badge"
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
-                    task.solved
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    size: 22,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: onToggleSolved, // circle icon toggles solved
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        task.solved
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 22,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,10 +347,7 @@ class _TaskCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(width: 6),
-
-                // actions menu keeps the header balanced (instead of a big delete button)
                 PopupMenuButton<_TaskMenuAction>(
                   tooltip: 'Aktionen',
                   onSelected: (a) {
@@ -363,45 +391,38 @@ class _TaskCard extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 10),
-
-            // Assignees: smaller "chips row" with label for structure
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.people_outline_rounded, size: 18, color: cs.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      if (task.assignees.isEmpty)
-                        Chip(
-                          label: const Text('Keine Empfänger'),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                        )
-                      else
-                        for (final u in task.assignees)
-                          Chip(
-                            label: Text(u.displayName),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                          ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
             const SizedBox(height: 12),
 
-            // Bottom row: primary action button aligned left, with subtle timestamp on the right (optional)
+            // Bottom row: assignees summary + erledigt button
             Row(
               children: [
+                if (assigneeCount == 0)
+                  Chip(
+                    label: const Text('Keine Empfänger'),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  )
+                else
+                  InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: () => _showAssigneesDialog(context),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.people_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$assigneeCount',
+                            style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const Spacer(),
                 FilledButton.tonalIcon(
                   onPressed: onToggleSolved,
                   icon: Icon(task.solved ? Icons.undo_rounded : Icons.check_rounded),
@@ -409,7 +430,6 @@ class _TaskCard extends StatelessWidget {
                 ),
               ],
             ),
-
           ],
         ),
       ),

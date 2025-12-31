@@ -19,22 +19,22 @@ class MyFinesPage extends StatefulWidget {
 class _MyFinesPageState extends State<MyFinesPage> {
   static const _ttlMyFines = Duration(minutes: 3);
 
-  static const _kMyFinesActivePeriod = 'myfines.activePeriod';
   static const _kMyFinesBalance = 'myfines.balance';
   static const _kMyFinesFines = 'myfines.fines';
   static const _kMyFinesPeriods = 'myfines.periods';
   static const _kMyFinesUsers = 'myfines.users';
+  static const _kMyFinesCatalog = 'myfines.catalog';
 
   bool _loading = true;
   bool _refreshing = false;
 
   String? _myUserId;
-  ConventPeriodDto? _activePeriod;
 
   List<FineDto> _mine = const [];
   List<ConventPeriodDto> _periods = const [];
   Map<String, ConventPeriodDto> _periodById = const {};
   Map<String, UserPickerDto> _userById = const {};
+  Map<String, FineCatalogItemDto> _catalogById = const {};
 
   Map<String, dynamic> _encodePeriod(ConventPeriodDto p) => {
     'id': p.id,
@@ -73,9 +73,21 @@ class _MyFinesPageState extends State<MyFinesPage> {
     'catalogItemId': f.catalogItemId,
     'fineDate': f.fineDate,
     'createdAt': f.createdAt,
+    'type': f.type.name,
   };
 
   FineDto _decodeFine(Object json) => FineDto.fromJson((json as Map).cast<String, dynamic>());
+
+  // NOTE: FineCatalogItemDto in your project apparently does NOT have amountCents.
+  // Keep cache minimal: only fields that exist.
+  Map<String, dynamic> _encodeCatalogItem(FineCatalogItemDto c) => {
+    'id': c.id,
+    'title': c.title,
+    'active': c.active,
+  };
+
+  FineCatalogItemDto _decodeCatalogItem(Object json) =>
+      FineCatalogItemDto.fromJson((json as Map).cast<String, dynamic>());
 
   @override
   void initState() {
@@ -99,18 +111,22 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
   String _userLabel(String id) => _userById[id]?.displayName ?? id;
 
-  // 2) show actual fine title instead of hardcoded "Beihängung"
+  // Title resolution:
+  // 1) Catalog fine -> catalog item title
+  // 2) reason
+  // 3) fallback
   String _fineTitle(FineDto f) {
-    final title = (f.reason ?? '').trim();
-    return title.isEmpty ? 'Beihängung' : title;
+    if (f.type == FineType.catalog && f.catalogItemId != null) {
+      final item = _catalogById[f.catalogItemId!];
+      if (item != null && item.title.trim().isNotEmpty) return item.title.trim();
+    }
+    final r = (f.reason ?? '').trim();
+    if (r.isNotEmpty) return r;
+    return 'Beihängung';
   }
 
   Future<void> _load({bool force = false}) async {
     try {
-      final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
-        _kMyFinesActivePeriod,
-        decode: _decodePeriod,
-      );
       final cBal = await AppCache.I.entryOrLoadPersisted<UserBalanceDto>(
         _kMyFinesBalance,
         decode: _decodeBalance,
@@ -121,23 +137,29 @@ class _MyFinesPageState extends State<MyFinesPage> {
       );
       final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
         _kMyFinesPeriods,
-        decode: (json) =>
-            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
+        decode: (json) => (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
       );
       final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
         _kMyFinesUsers,
         decode: (json) => (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
       );
+      final cCatalog = await AppCache.I.entryOrLoadPersisted<List<FineCatalogItemDto>>(
+        _kMyFinesCatalog,
+        decode: (json) =>
+            (json as List).map((e) => _decodeCatalogItem(e as Object)).toList(growable: false),
+      );
 
       final hasAnyCache =
-          (cPeriod != null) || (cBal != null) || (cFines != null) || (cPeriods != null) || (cUsers != null);
+          (cBal != null) || (cFines != null) || (cPeriods != null) || (cUsers != null) || (cCatalog != null);
 
       if (hasAnyCache && mounted) {
         final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[]);
         final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
+        final catalog = List<FineCatalogItemDto>.from(cCatalog?.value ?? const <FineCatalogItemDto>[]);
 
         final periodById = {for (final p in periods) p.id: p};
         final userById = {for (final u in users) u.id: u};
+        final catalogById = {for (final c in catalog) c.id: c};
 
         final myUserId = cBal?.value.userId;
         final mine = (myUserId == null)
@@ -145,21 +167,21 @@ class _MyFinesPageState extends State<MyFinesPage> {
             : (cFines?.value ?? const <FineDto>[]).where((f) => f.targetUserIds.contains(myUserId)).toList();
 
         setState(() {
-          _activePeriod = cPeriod?.value;
           _myUserId = myUserId;
           _mine = mine;
           _periods = periods;
           _periodById = periodById;
           _userById = userById;
+          _catalogById = catalogById;
           _loading = false;
         });
       }
 
-      final cacheFresh = (cPeriod != null && cPeriod.isFresh(_ttlMyFines)) &&
-          (cBal != null && cBal.isFresh(_ttlMyFines)) &&
+      final cacheFresh = (cBal != null && cBal.isFresh(_ttlMyFines)) &&
           (cFines != null && cFines.isFresh(_ttlMyFines)) &&
           (cPeriods != null && cPeriods.isFresh(_ttlMyFines)) &&
-          (cUsers != null && cUsers.isFresh(_ttlMyFines));
+          (cUsers != null && cUsers.isFresh(_ttlMyFines)) &&
+          (cCatalog != null && cCatalog.isFresh(_ttlMyFines));
 
       if (!force && cacheFresh) return;
 
@@ -174,15 +196,12 @@ class _MyFinesPageState extends State<MyFinesPage> {
       try {
         final period = await widget.api.getActivePeriod();
         final bal = await widget.api.getMyBalance(periodId: period.id);
+
         final fines = await widget.api.listFines();
         final periods = await widget.api.listPeriods();
         final users = await widget.api.pickerUsers();
+        final catalog = await widget.api.listFineCatalog(active: null);
 
-        await AppCache.I.setPersisted<ConventPeriodDto>(
-          _kMyFinesActivePeriod,
-          period,
-          encode: _encodePeriod,
-        );
         await AppCache.I.setPersisted<UserBalanceDto>(
           _kMyFinesBalance,
           bal,
@@ -203,20 +222,26 @@ class _MyFinesPageState extends State<MyFinesPage> {
           List<UserPickerDto>.unmodifiable(users),
           encode: (v) => v.map(_encodeUser).toList(growable: false),
         );
+        await AppCache.I.setPersisted<List<FineCatalogItemDto>>(
+          _kMyFinesCatalog,
+          List<FineCatalogItemDto>.unmodifiable(catalog),
+          encode: (v) => v.map(_encodeCatalogItem).toList(growable: false),
+        );
 
         final periodById = {for (final p in periods) p.id: p};
         final userById = {for (final u in users) u.id: u};
+        final catalogById = {for (final c in catalog) c.id: c};
 
         final mine = fines.where((f) => f.targetUserIds.contains(bal.userId)).toList();
 
         if (!mounted) return;
         setState(() {
-          _activePeriod = period;
           _myUserId = bal.userId;
           _mine = mine;
           _periods = periods;
           _periodById = periodById;
           _userById = userById;
+          _catalogById = catalogById;
         });
       } catch (e) {
         if (!mounted) return;
@@ -267,9 +292,6 @@ class _MyFinesPageState extends State<MyFinesPage> {
                 padding: EdgeInsets.only(bottom: 12),
                 child: LinearProgressIndicator(),
               ),
-
-            // 1) removed "Aktive Conventsperiode: ..." text
-
             if (myId == null)
               const Padding(
                 padding: EdgeInsets.all(8),
@@ -484,9 +506,7 @@ class _PeriodSection extends StatelessWidget {
   }
 
   String _subtitleForFine(FineDto f) {
-    // 3) remove "Creator: ..."
     final amount = f.amountCents ?? 0;
-
     return 'Betrag: ${Format.centsToEur(amount)}\n'
         'Beihängungsdatum: ${Format.dateOnlyShort(f.fineDate)}';
   }
