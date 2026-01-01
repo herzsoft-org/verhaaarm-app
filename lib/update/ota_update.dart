@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -78,6 +79,9 @@ class OtaUpdateState {
   final String? cachedApkVersion;
   final String? downloadedPath;
 
+  /// Verified integrity of `downloadedPath` against `latest.sha1` (only meaningful if sha1 is provided).
+  final bool integrityOk;
+
   /// Highest available version we can offer (network latest vs cached apk)
   String get effectiveAvailableVersion {
     final c = cachedApkVersion;
@@ -95,6 +99,7 @@ class OtaUpdateState {
     required this.error,
     required this.cachedApkVersion,
     required this.downloadedPath,
+    required this.integrityOk,
   });
 
   OtaUpdateState copyWith({
@@ -105,6 +110,7 @@ class OtaUpdateState {
     String? error,
     String? cachedApkVersion,
     String? downloadedPath,
+    bool? integrityOk,
   }) {
     return OtaUpdateState(
       latest: latest ?? this.latest,
@@ -114,6 +120,7 @@ class OtaUpdateState {
       error: error,
       cachedApkVersion: cachedApkVersion ?? this.cachedApkVersion,
       downloadedPath: downloadedPath ?? this.downloadedPath,
+      integrityOk: integrityOk ?? this.integrityOk,
     );
   }
 }
@@ -187,6 +194,25 @@ class OtaUpdateController extends ChangeNotifier {
       }
     } catch (_) {
       // ignore
+    }
+  }
+
+  /// Compute SHA1 (lowercase hex) for a file using streaming.
+  Future<String> _sha1OfFile(String path) async {
+    final f = File(path);
+    final digest = await crypto.sha1.bind(f.openRead()).first;
+    return digest.toString().toLowerCase();
+  }
+
+  /// Returns true if expected is empty OR file hash matches expected (case-insensitive).
+  Future<bool> _verifySha1IfProvided({required String path, required String expectedSha1}) async {
+    final expected = expectedSha1.trim().toLowerCase();
+    if (expected.isEmpty) return true;
+    try {
+      final actual = await _sha1OfFile(path);
+      return actual == expected;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -287,6 +313,18 @@ class OtaUpdateController extends ChangeNotifier {
         bestCached = null;
       }
 
+      // If cached APK is supposed to match network-latest and we have a sha1, verify it before enabling install.
+      var integrityOk = true;
+      if (bestCached != null &&
+          latest.sha1.trim().isNotEmpty &&
+          compareAppVersions(bestCached.version, latest.version) == 0) {
+        integrityOk = await _verifySha1IfProvided(path: bestCached.path, expectedSha1: latest.sha1);
+        if (!integrityOk) {
+          await _deleteFileQuietly(bestCached.path);
+          bestCached = null;
+        }
+      }
+
       final newState = OtaUpdateState(
         latest: latest,
         currentVersion: current,
@@ -295,6 +333,7 @@ class OtaUpdateController extends ChangeNotifier {
         error: null,
         cachedApkVersion: bestCached?.version,
         downloadedPath: bestCached?.path,
+        integrityOk: bestCached == null ? true : integrityOk,
       );
 
       _state = newState;
@@ -333,6 +372,7 @@ class OtaUpdateController extends ChangeNotifier {
         error: null,
         cachedApkVersion: null,
         downloadedPath: null,
+        integrityOk: true,
       );
       notifyListeners();
 
@@ -357,7 +397,23 @@ class OtaUpdateController extends ChangeNotifier {
       final cur = _state;
       if (cur == null) return;
 
-      // After download: keep only this one APK in cache.
+      // After download: verify SHA1 (if provided). If it fails, delete the file and show error.
+      final ok = await _verifySha1IfProvided(path: outPath, expectedSha1: st.latest.sha1);
+      if (!ok) {
+        await _deleteFileQuietly(outPath);
+        _state = cur.copyWith(
+          downloading: false,
+          progress: 0,
+          cachedApkVersion: null,
+          downloadedPath: null,
+          integrityOk: false,
+          error: 'APK checksum mismatch (SHA1). Please retry download.',
+        );
+        notifyListeners();
+        return;
+      }
+
+      // Keep only this one APK in cache.
       await _purgeCachedApks(keepPath: outPath);
 
       _state = cur.copyWith(
@@ -365,6 +421,7 @@ class OtaUpdateController extends ChangeNotifier {
         progress: 1.0,
         cachedApkVersion: targetVersion,
         downloadedPath: outPath,
+        integrityOk: true,
       );
       notifyListeners();
     } catch (e) {
@@ -381,6 +438,9 @@ class OtaUpdateController extends ChangeNotifier {
     final path = st.downloadedPath;
     if (path == null) return;
     if (kIsWeb || !Platform.isAndroid) return;
+
+    // Safety: don't install if integrity isn't OK (when sha1 provided)
+    if (!st.integrityOk) return;
 
     // If the file vanished (Android cache purge), clear state
     final f = File(path);

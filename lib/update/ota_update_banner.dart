@@ -19,10 +19,14 @@ class OtaUpdateBanner extends StatelessWidget {
 
         final effective = st.effectiveAvailableVersion;
 
-        // Only show "Install" if the cached APK is for the current network-latest (or newer fallback),
-        // and it's actually newer than what's installed.
+        // Only show "Install" if:
+        // - there is a downloaded APK
+        // - it's newer than what's installed
+        // - it's for current network-latest (or newer fallback)
+        // - integrityOk (sha1 matches if provided)
         final canInstallCached = st.downloadedPath != null &&
             st.cachedApkVersion != null &&
+            st.integrityOk &&
             compareAppVersions(st.cachedApkVersion!, st.currentVersion) > 0 &&
             compareAppVersions(st.cachedApkVersion!, st.latest.version) >= 0;
 
@@ -60,7 +64,7 @@ class OtaUpdateBanner extends StatelessWidget {
                 if (st.error != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Download failed: ${st.error}',
+                    st.error!,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.error),
                   ),
                 ],
@@ -78,24 +82,31 @@ class OtaUpdateBanner extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Only one of these is shown at a time:
-                    if (!canInstallCached)
-                      FilledButton.icon(
-                        onPressed: st.downloading ? null : () => controller.downloadLatest(),
-                        icon: const Icon(Icons.download_rounded),
-                        label: const Text('Download'),
-                      )
-                    else
+                    if (canInstallCached) ...[
                       FilledButton.icon(
                         onPressed: st.downloading ? null : () => controller.installDownloaded(),
                         icon: const Icon(Icons.install_mobile_rounded),
                         label: const Text('Install'),
                       ),
+                      FilledButton.tonalIcon(
+                        onPressed: st.downloading ? null : () => controller.downloadLatest(),
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('Retry download'),
+                      ),
+                    ] else ...[
+                      // If not installable (no download yet OR sha1 mismatch), offer download/retry download.
+                      FilledButton.icon(
+                        onPressed: st.downloading ? null : () => controller.downloadLatest(),
+                        icon: const Icon(Icons.download_rounded),
+                        label: Text(st.error != null ? 'Retry download' : 'Download'),
+                      ),
+                    ],
 
+                    // Keep a lightweight "check again" button as before.
                     FilledButton.tonalIcon(
                       onPressed: st.downloading ? null : () => controller.checkNow(),
                       icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Retry'),
+                      label: const Text('Check'),
                     ),
                   ],
                 ),

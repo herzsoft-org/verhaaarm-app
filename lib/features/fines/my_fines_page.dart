@@ -222,12 +222,19 @@ class _MyFinesPageState extends State<MyFinesPage> {
           .toList(growable: false);
       if (periods.isEmpty) return DateTime.fromMillisecondsSinceEpoch(1 << 62);
 
-      final starts = periods.map((p) => p.startDateLocal).toList(growable: false);
-      final futureStarts = starts.where((d) => !d.isBefore(now)).toList(growable: false)..sort();
+      final starts =
+      periods.map((p) => p.startDateLocal).toList(growable: false);
+      final futureStarts = starts.where((d) => !d.isBefore(now)).toList(
+        growable: false,
+      )..sort();
       if (futureStarts.isNotEmpty) return futureStarts.first;
 
-      final pastStarts = starts.where((d) => d.isBefore(now)).toList(growable: false)..sort();
-      return pastStarts.isNotEmpty ? pastStarts.last : DateTime.fromMillisecondsSinceEpoch(1 << 62);
+      final pastStarts =
+      starts.where((d) => d.isBefore(now)).toList(growable: false)
+        ..sort();
+      return pastStarts.isNotEmpty
+          ? pastStarts.last
+          : DateTime.fromMillisecondsSinceEpoch(1 << 62);
     }
 
     int semesterIsFuture(String sem) {
@@ -268,13 +275,19 @@ class _MyFinesPageState extends State<MyFinesPage> {
           final pa = _periodById[a];
           final pb = _periodById[b];
 
-          final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : pa.startDateLocal;
-          final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : pb.startDateLocal;
+          final da = pa == null
+              ? DateTime.fromMillisecondsSinceEpoch(0)
+              : pa.startDateLocal;
+          final db = pb == null
+              ? DateTime.fromMillisecondsSinceEpoch(0)
+              : pb.startDateLocal;
 
           final aCurrentOrFuture = pa != null && !pa.endDateLocal.isBefore(now);
           final bCurrentOrFuture = pb != null && !pb.endDateLocal.isBefore(now);
 
-          if (aCurrentOrFuture != bCurrentOrFuture) return aCurrentOrFuture ? -1 : 1;
+          if (aCurrentOrFuture != bCurrentOrFuture) {
+            return aCurrentOrFuture ? -1 : 1;
+          }
           if (aCurrentOrFuture && bCurrentOrFuture) return da.compareTo(db);
           return db.compareTo(da);
         });
@@ -353,7 +366,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
       if (hasAnyCache && mounted) {
         final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
-        final catalog = List<FineCatalogItemDto>.from(cCatalog?.value ?? const <FineCatalogItemDto>[]);
+        final catalog =
+        List<FineCatalogItemDto>.from(cCatalog?.value ?? const <FineCatalogItemDto>[]);
         final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
           ..sort((a, b) => a.startAt.compareTo(b.startAt));
 
@@ -560,9 +574,16 @@ class _MyFinesPageState extends State<MyFinesPage> {
   @override
   Widget build(BuildContext context) {
     final p = _activePeriod;
-    final balanceText = (_balance?.balanceFormatted ?? '').trim();
 
-    final grouped = _showAllPeriods ? _buildGroupedBySemesterAndPeriod(_visibleFines) : const <_SemesterGroup>[];
+    // CHANGED: show total balance as a negative number (always prefixed with "-")
+    final rawBalanceText = (_balance?.balanceFormatted ?? '').trim();
+    final balanceText = rawBalanceText.isEmpty
+        ? ''
+        : (rawBalanceText.startsWith('-') ? rawBalanceText : '-$rawBalanceText');
+
+    final grouped = _showAllPeriods
+        ? _buildGroupedBySemesterAndPeriod(_visibleFines)
+        : const <_SemesterGroup>[];
 
     final canOpenDetails = _canOpenFineDetails();
 
@@ -575,8 +596,11 @@ class _MyFinesPageState extends State<MyFinesPage> {
           onPressed: _loading ? null : () => _load(force: true),
         ),
         IconButton(
-          tooltip: _showAllPeriods ? 'Nur aktuelle Periode' : 'Alle Perioden anzeigen',
-          icon: Icon(_showAllPeriods ? Icons.history_toggle_off_rounded : Icons.history_rounded),
+          tooltip:
+          _showAllPeriods ? 'Nur aktuelle Periode' : 'Alle Perioden anzeigen',
+          icon: Icon(_showAllPeriods
+              ? Icons.history_toggle_off_rounded
+              : Icons.history_rounded),
           onPressed: _loading ? null : () => _setShowAllPeriods(!_showAllPeriods),
         ),
       ],
@@ -599,7 +623,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
               child: Row(
                 children: [
                   Icon(
-                    _showAllPeriods ? Icons.history_rounded : Icons.event_available_rounded,
+                    _showAllPeriods
+                        ? Icons.history_rounded
+                        : Icons.event_available_rounded,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
@@ -622,7 +648,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Aktuelle Conventsperiode', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Aktuelle Conventsperiode',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 6),
                     Text(
                       p == null
@@ -631,11 +658,17 @@ class _MyFinesPageState extends State<MyFinesPage> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 10),
-                    Text('Saldo', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Saldo',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 6),
                     Text(
-                      balanceText.isNotEmpty ? balanceText : (p == null ? '—' : '…'),
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                      balanceText.isNotEmpty
+                          ? balanceText
+                          : (p == null ? '—' : '…'),
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -664,15 +697,21 @@ class _MyFinesPageState extends State<MyFinesPage> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Card(
                       elevation: 0,
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
                       child: ListTile(
                         titleAlignment: ListTileTitleAlignment.center,
                         leading: const Icon(Icons.gavel_rounded),
                         title: Text(_fineTitle(f)),
                         subtitle: Text(_subtitleForFine(f)),
                         isThreeLine: true,
-                        trailing: canOpenDetails ? const Icon(Icons.chevron_right_rounded) : null,
-                        onTap: canOpenDetails ? () => context.push('/fines/${f.id}') : null,
+                        trailing: canOpenDetails
+                            ? const Icon(Icons.chevron_right_rounded)
+                            : null,
+                        onTap: canOpenDetails
+                            ? () => context.push('/fines/${f.id}')
+                            : null,
                       ),
                     ),
                   )
@@ -694,7 +733,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
   }
 
   DateTime _parseLocalDateOnly(String s) {
-    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s.trim());
+    final m =
+    RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s.trim());
     if (m == null) return DateTime.fromMillisecondsSinceEpoch(0);
     final y = int.parse(m.group(1)!);
     final mo = int.parse(m.group(2)!);
@@ -806,12 +846,18 @@ class _PeriodSectionFines extends StatelessWidget {
     final p = period;
 
     final header = (p == null)
-        ? (pg.periodId == 'unknown' ? 'Conventsperiode: Unbekannt' : 'Conventsperiode: ${pg.periodId}')
+        ? (pg.periodId == 'unknown'
+        ? 'Conventsperiode: Unbekannt'
+        : 'Conventsperiode: ${pg.periodId}')
         : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
     final flags = <Widget>[];
-    if (p?.active == true) flags.add(const _Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
-    if (p?.locked == true) flags.add(const _Chip(text: 'Locked', icon: Icons.lock_rounded));
+    if (p?.active == true) {
+      flags.add(const _Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
+    }
+    if (p?.locked == true) {
+      flags.add(const _Chip(text: 'Locked', icon: Icons.lock_rounded));
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -820,7 +866,9 @@ class _PeriodSectionFines extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(header, style: Theme.of(context).textTheme.titleSmall)),
+              Expanded(
+                child: Text(header, style: Theme.of(context).textTheme.titleSmall),
+              ),
               ...flags,
             ],
           ),

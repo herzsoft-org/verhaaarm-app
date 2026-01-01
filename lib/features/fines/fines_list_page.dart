@@ -156,7 +156,7 @@ class _FinesListPageState extends State<FinesListPage> {
       finesByPeriodId[pid]!.add(f);
     }
 
-    // group periods by semester (includes empty periods)
+    // group periods by semester (includes empty periods initially)
     final Map<String, List<ConventPeriodDto>> periodsBySemester = {};
     for (final p in _periods) {
       periodsBySemester.putIfAbsent(p.semester, () => <ConventPeriodDto>[]);
@@ -183,10 +183,16 @@ class _FinesListPageState extends State<FinesListPage> {
 
       final periodGroups = <_PeriodGroup>[];
       for (final p in ps) {
-        final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])]
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // hide empty periods
+        if (fines.isEmpty) continue;
+
         periodGroups.add(_PeriodGroup(period: p, fines: fines));
       }
 
+      // unknown fines only if any
       final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
       if (unknownFines.isNotEmpty) {
         unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -205,12 +211,16 @@ class _FinesListPageState extends State<FinesListPage> {
         );
       }
 
+      // hide empty semesters (no periods with fines, and no unknown fines)
+      if (periodGroups.isEmpty) continue;
+
       result.add(_SemesterGroup(semester: sem, periods: periodGroups));
     }
 
+    // keep fallback if there are only unknown fines and no periods/semesters
     if (result.isEmpty && (finesByPeriodId['unknown']?.isNotEmpty ?? false)) {
-      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
-      unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])]
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       result.add(
         _SemesterGroup(
           semester: 'Unbekannt',
@@ -334,14 +344,6 @@ class _PeriodSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          if (fines.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Keine Beihängungen in dieser Conventsperiode.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
           for (final f in fines)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),

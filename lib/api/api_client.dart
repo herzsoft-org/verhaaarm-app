@@ -102,7 +102,13 @@ class ApiClient {
     );
   }
 
-  Future<List<UserDto>> listUsersAdmin() => listUsersFull(active: false);
+  Future<List<UserDto>> listUsersAdmin() async {
+    final r = await dio.get('/users'); // admin endpoint
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
 
   Future<UserDto> createUser(CreateUserRequest req) async {
     final r = await dio.post('/users', data: req.toJson());
