@@ -492,7 +492,7 @@ class _AdminTaskCard extends StatelessWidget {
                             Icon(Icons.autorenew_rounded, size: 18, color: cs.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Text(
-                              'Wöchentlich',
+                              'Wiederk.',
                               style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant),
                             ),
                             if (recurringDays.isNotEmpty) ...[
