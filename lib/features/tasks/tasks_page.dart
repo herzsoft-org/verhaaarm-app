@@ -183,7 +183,6 @@ class _TasksPageState extends State<TasksPage> {
   @override
   Widget build(BuildContext context) {
     final unsolved = _tasks.where((t) => !t.solved).length;
-    final solved = _tasks.where((t) => t.solved).length;
 
     final solvedNonRecurring = _tasks.where((t) => t.solved && !t.recurringEnabled).length;
 
@@ -407,10 +406,6 @@ class _TaskCard extends StatelessWidget {
     );
   }
 
-  String _ddMm(DateTime dt) {
-    final d = dt.toLocal();
-    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}';
-  }
 
   String _ddMmHm(DateTime dt) {
     final d = dt.toLocal();

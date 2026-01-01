@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
@@ -27,6 +28,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
   static const _kMyFinesCatalog = 'myfines.catalog';
   static const _kMyFinesPeriods = 'myfines.periods'; // NEW (for grouping)
 
+  // NEW: current user id (for filtering)
+  static const _kMyFinesMeUserId = 'myfines.me.userId';
+
   bool _loading = true;
   bool _refreshing = false;
 
@@ -46,6 +50,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
   Map<String, UserPickerDto> _userById = const {};
   Map<String, FineCatalogItemDto> _catalogById = const {};
+
+  // NEW: "me" user id for filtering
+  String? _meUserId;
 
   bool _isNoActivePeriodError(Object e) {
     if (e is DioException) {
@@ -150,12 +157,23 @@ class _MyFinesPageState extends State<MyFinesPage> {
     return null;
   }
 
+  // NEW: strict filter to "my" fines only (targetUserIds contains me)
+  bool _isMyFine(FineDto f, String? meUserId) {
+    final me = (meUserId ?? '').trim();
+    if (me.isEmpty) return false;
+    return f.targetUserIds.contains(me);
+  }
+
   List<FineDto> _computeVisibleFines({
     required ConventPeriodDto? activePeriod,
     required List<FineDto> all,
     required bool showAllPeriods,
+    required String? meUserId,
   }) {
     Iterable<FineDto> it = all;
+
+    // NEW: always filter to "my fines"
+    it = it.where((f) => _isMyFine(f, meUserId));
 
     if (!showAllPeriods) {
       if (activePeriod == null) {
@@ -285,6 +303,15 @@ class _MyFinesPageState extends State<MyFinesPage> {
   // ---------- load ----------
   Future<void> _load({bool force = false}) async {
     try {
+      // NEW: load cached me user id first (prevents showing "all fines" for admins)
+      final cMe = await AppCache.I.entryOrLoadPersisted<String>(
+        _kMyFinesMeUserId,
+        decode: (json) => json.toString(),
+      );
+      if (cMe != null && (cMe.value).trim().isNotEmpty) {
+        _meUserId = cMe.value.trim();
+      }
+
       final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
         _kMyFinesActivePeriod,
         decode: _decodePeriod,
@@ -315,7 +342,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
             (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
       );
 
-      final hasAnyCache = (cPeriod != null) ||
+      final hasAnyCache = (cMe != null) ||
+          (cPeriod != null) ||
           (cBal != null) ||
           (cFines != null) ||
           (cUsers != null) ||
@@ -339,6 +367,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
           activePeriod: activePeriod,
           all: allFines,
           showAllPeriods: _showAllPeriods,
+          meUserId: _meUserId,
         );
 
         setState(() {
@@ -357,7 +386,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
       final cacheFresh = (cFines != null && cFines.isFresh(_ttlMyFines)) &&
           (cUsers != null && cUsers.isFresh(_ttlMyFines)) &&
           (cCatalog != null && cCatalog.isFresh(_ttlMyFines)) &&
-          (cPeriods != null && cPeriods.isFresh(_ttlMyFines));
+          (cPeriods != null && cPeriods.isFresh(_ttlMyFines)) &&
+          (cMe != null && cMe.isFresh(_ttlMyFines));
 
       if (!force && cacheFresh) return;
 
@@ -370,6 +400,22 @@ class _MyFinesPageState extends State<MyFinesPage> {
       }
 
       try {
+        // NEW: fetch "me" (authoritative id) and persist it
+        try {
+          final me = await widget.api.getMe();
+          final id = me.id.trim();
+          if (id.isNotEmpty) {
+            _meUserId = id;
+            await AppCache.I.setPersisted<String>(
+              _kMyFinesMeUserId,
+              id,
+              encode: (v) => v,
+            );
+          }
+        } catch (_) {
+          // keep existing cached _meUserId if any
+        }
+
         ConventPeriodDto? activePeriod;
         try {
           activePeriod = await widget.api.getActivePeriod();
@@ -440,7 +486,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
           await AppCache.I.removePersisted(_kMyFinesBalance);
         }
 
-        final periodsSorted = List<ConventPeriodDto>.from(periods)..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodsSorted = List<ConventPeriodDto>.from(periods)
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
         final periodById = {for (final p in periodsSorted) p.id: p};
 
         final userById = {for (final u in users) u.id: u};
@@ -450,6 +497,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
           activePeriod: activePeriod,
           all: fines,
           showAllPeriods: _showAllPeriods,
+          meUserId: _meUserId,
         );
 
         if (!mounted) return;
@@ -494,8 +542,18 @@ class _MyFinesPageState extends State<MyFinesPage> {
         activePeriod: _activePeriod,
         all: _allFines,
         showAllPeriods: _showAllPeriods,
+        meUserId: _meUserId,
       );
     });
+  }
+
+  // NEW: who may open fine details from "my fines"
+  bool _canOpenFineDetails() {
+    final token = widget.api.authStore.accessToken;
+    final roles = Roles.fromAccessToken(token);
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
   }
 
   @override
@@ -504,6 +562,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
     final balanceText = (_balance?.balanceFormatted ?? '').trim();
 
     final grouped = _showAllPeriods ? _buildGroupedBySemesterAndPeriod(_visibleFines) : const <_SemesterGroup>[];
+
+    final canOpenDetails = _canOpenFineDetails();
 
     return AppScaffold(
       title: 'Meine Beihängungen',
@@ -610,8 +670,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
                         title: Text(_fineTitle(f)),
                         subtitle: Text(_subtitleForFine(f)),
                         isThreeLine: true,
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: () => context.push('/fines/${f.id}'),
+                        trailing: canOpenDetails ? const Icon(Icons.chevron_right_rounded) : null,
+                        onTap: canOpenDetails ? () => context.push('/fines/${f.id}') : null,
                       ),
                     ),
                   )
@@ -623,6 +683,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
                     periodById: _periodById,
                     fineTitle: _fineTitle,
                     subtitleForFine: _subtitleForFine,
+                    canOpenFine: canOpenDetails,
                     onOpenFine: (id) => context.push('/fines/$id'),
                   ),
           ],
@@ -675,6 +736,10 @@ class _SemesterSectionFines extends StatelessWidget {
 
   final String Function(FineDto f) fineTitle;
   final String Function(FineDto f) subtitleForFine;
+
+  // NEW: permissions for opening details
+  final bool canOpenFine;
+
   final void Function(String fineId) onOpenFine;
 
   const _SemesterSectionFines({
@@ -683,6 +748,7 @@ class _SemesterSectionFines extends StatelessWidget {
     required this.periodById,
     required this.fineTitle,
     required this.subtitleForFine,
+    required this.canOpenFine,
     required this.onOpenFine,
   });
 
@@ -703,6 +769,7 @@ class _SemesterSectionFines extends StatelessWidget {
                 period: periodById[pg.periodId],
                 fineTitle: fineTitle,
                 subtitleForFine: subtitleForFine,
+                canOpenFine: canOpenFine,
                 onOpenFine: onOpenFine,
               ),
           ],
@@ -718,6 +785,10 @@ class _PeriodSectionFines extends StatelessWidget {
 
   final String Function(FineDto f) fineTitle;
   final String Function(FineDto f) subtitleForFine;
+
+  // NEW: permissions for opening details
+  final bool canOpenFine;
+
   final void Function(String fineId) onOpenFine;
 
   const _PeriodSectionFines({
@@ -725,6 +796,7 @@ class _PeriodSectionFines extends StatelessWidget {
     required this.period,
     required this.fineTitle,
     required this.subtitleForFine,
+    required this.canOpenFine,
     required this.onOpenFine,
   });
 
@@ -764,8 +836,8 @@ class _PeriodSectionFines extends StatelessWidget {
                   title: Text(fineTitle(f)),
                   subtitle: Text(subtitleForFine(f)),
                   isThreeLine: true,
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => onOpenFine(f.id),
+                  trailing: canOpenFine ? const Icon(Icons.chevron_right_rounded) : null,
+                  onTap: canOpenFine ? () => onOpenFine(f.id) : null,
                 ),
               ),
             ),

@@ -156,10 +156,6 @@ class _TaskFormPageState extends State<TaskFormPage> {
     _recomputeCanSubmit();
   }
 
-  void _clearNormalDueAt() {
-    setState(() => _dueLocal = null);
-    _recomputeCanSubmit();
-  }
 
   Future<void> _pickRecurringDueTime() async {
     final initial = _recurringDueTime ?? TimeOfDay.fromDateTime(DateTime.now());
@@ -173,10 +169,6 @@ class _TaskFormPageState extends State<TaskFormPage> {
     _recomputeCanSubmit();
   }
 
-  void _clearRecurringDueTime() {
-    setState(() => _recurringDueTime = null);
-    _recomputeCanSubmit();
-  }
 
   // ----------------------------
   // Helpers
