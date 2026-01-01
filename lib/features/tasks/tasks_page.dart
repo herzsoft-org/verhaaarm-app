@@ -243,7 +243,7 @@ class _TasksPageState extends State<TasksPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Unerledigt: $unsolved · Erledigt: $solved',
+                        'Unerledigt: $unsolved',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
@@ -353,8 +353,30 @@ class _TaskCard extends StatelessWidget {
     }
   }
 
+  int _weekdayOrder(String w) {
+    switch (w) {
+      case 'MON':
+        return 1;
+      case 'TUE':
+        return 2;
+      case 'WED':
+        return 3;
+      case 'THU':
+        return 4;
+      case 'FRI':
+        return 5;
+      case 'SAT':
+        return 6;
+      case 'SUN':
+        return 7;
+      default:
+        return 99;
+    }
+  }
+
   void _showWeekdaysDialog(BuildContext context) {
-    final days = task.recurringWeekdays.toList(growable: false)..sort((a, b) => a.compareTo(b));
+    final days = task.recurringWeekdays.toList(growable: false)
+      ..sort((a, b) => _weekdayOrder(a).compareTo(_weekdayOrder(b)));
 
     showDialog<void>(
       context: context,
@@ -422,7 +444,8 @@ class _TaskCard extends StatelessWidget {
 
     final assigneeCount = task.assignees.length;
 
-    final recurringDays = task.recurringWeekdays.toList(growable: false)..sort((a, b) => a.compareTo(b));
+    final recurringDays = task.recurringWeekdays.toList(growable: false)
+      ..sort((a, b) => _weekdayOrder(a).compareTo(_weekdayOrder(b)));
 
     return Card(
       color: task.solved ? cs.surfaceContainerLowest : cs.surfaceContainerLow,
@@ -599,7 +622,7 @@ class _TaskCard extends StatelessWidget {
                             Icon(Icons.autorenew_rounded, size: 18, color: cs.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Text(
-                              'Wöchentlich',
+                              'Wiederkehrend',
                               style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant),
                             ),
                             if (recurringDays.isNotEmpty) ...[
@@ -635,7 +658,7 @@ class _TaskCard extends StatelessWidget {
                 const Spacer(),
                 FilledButton.tonal(
                   onPressed: onToggleSolved,
-                  child: Text(task.solved ? 'Wieder offen' : 'Erledigt'),
+                  child: Text(task.solved ? 'Öffnen' : 'Erledigt'),
                 ),
               ],
             ),

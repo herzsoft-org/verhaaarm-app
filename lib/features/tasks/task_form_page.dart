@@ -134,7 +134,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
     if (pickedDate == null) return;
     if (!mounted) return;
 
-    final initialTime = _dueLocal != null ? TimeOfDay.fromDateTime(_dueLocal!) : TimeOfDay.fromDateTime(now);
+    final initialTime =
+    _dueLocal != null ? TimeOfDay.fromDateTime(_dueLocal!) : TimeOfDay.fromDateTime(now);
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -453,7 +454,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
 
                       const SizedBox(height: 12),
 
-                      // Mode toggle: Normal vs Recurring (one line)
+                      // Mode toggle: Normal vs Recurring (one line) — no "Typ" icon/text anymore
                       Card(
                         elevation: 0,
                         child: Padding(
@@ -463,26 +464,23 @@ class _TaskFormPageState extends State<TaskFormPage> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.tune_rounded),
-                                  const SizedBox(width: 10),
                                   Expanded(
-                                    child: Text('Typ', style: theme.textTheme.titleSmall),
-                                  ),
-                                  SegmentedButton<bool>(
-                                    segments: const [
-                                      ButtonSegment<bool>(
-                                        value: false,
-                                        label: Text('Normal'),
-                                        icon: Icon(Icons.event_rounded),
-                                      ),
-                                      ButtonSegment<bool>(
-                                        value: true,
-                                        label: Text('Wiederkehrend'),
-                                        icon: Icon(Icons.autorenew_rounded),
-                                      ),
-                                    ],
-                                    selected: {_recurringEnabled},
-                                    onSelectionChanged: (s) => _setMode(s.first),
+                                    child: SegmentedButton<bool>(
+                                      segments: const [
+                                        ButtonSegment<bool>(
+                                          value: false,
+                                          label: Text('Normal'),
+                                          icon: Icon(Icons.event_rounded),
+                                        ),
+                                        ButtonSegment<bool>(
+                                          value: true,
+                                          label: Text('Wiederkehrend'),
+                                          icon: Icon(Icons.autorenew_rounded),
+                                        ),
+                                      ],
+                                      selected: {_recurringEnabled},
+                                      onSelectionChanged: (s) => _setMode(s.first),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -513,31 +511,20 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
-                                        'Fällig: ${_formatDueLocal(_dueLocal)}',
+                                        _formatDueLocal(_dueLocal),
                                         style: theme.textTheme.bodyMedium,
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: FilledButton.icon(
-                                        onPressed: _pickNormalDueAt,
-                                        icon: const Icon(Icons.edit_calendar_rounded),
-                                        label: Text(_dueLocal == null ? 'Datum/Uhrzeit wählen' : 'Ändern'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: TextButton.icon(
-                                        onPressed: _dueLocal != null ? _clearNormalDueAt : null,
-                                        icon: const Icon(Icons.delete_outline_rounded),
-                                        label: const Text('Entfernen'),
-                                      ),
-                                    ),
-                                  ],
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: _pickNormalDueAt,
+                                    icon: const Icon(Icons.edit_calendar_rounded),
+                                    label: const Text('Fälligkeit'),
+                                  ),
                                 ),
                               ],
                             ),
@@ -596,21 +583,21 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                       const Icon(Icons.access_time_rounded),
                                       const SizedBox(width: 10),
                                       Expanded(
-                                        child: Text('Uhrzeit: ${_formatRecurringTime(_recurringDueTime)}'),
-                                      ),
-                                      TextButton(
-                                        onPressed: _pickRecurringDueTime,
-                                        child: Text(_recurringDueTime == null ? 'Wählen' : 'Ändern'),
-                                      ),
-                                      if (_recurringDueTime != null) ...[
-                                        const SizedBox(width: 6),
-                                        IconButton(
-                                          tooltip: 'Entfernen',
-                                          onPressed: _clearRecurringDueTime,
-                                          icon: const Icon(Icons.close_rounded),
+                                        child: Text(
+                                          _formatRecurringTime(_recurringDueTime),
+                                          style: theme.textTheme.bodyMedium,
                                         ),
-                                      ],
+                                      ),
                                     ],
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: _pickRecurringDueTime,
+                                    icon: const Icon(Icons.access_time_rounded),
+                                    label: const Text('Fälligkeit'),
                                   ),
                                 ),
                               ],
