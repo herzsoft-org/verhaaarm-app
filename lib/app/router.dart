@@ -108,6 +108,20 @@ Future<GoRouter> buildRouter() async {
           isAdminEdit: false,
         ),
       ),
+      GoRoute(
+        path: '/tasks/:id/edit',
+        builder: (context, state) {
+          final TaskDto? t = state.extra is TaskDto ? state.extra as TaskDto : null;
+
+          return TaskFormPage(
+            api: api,
+            authStore: authStore,
+            initial: t,
+            isEdit: true,
+            isAdminEdit: false,
+          );
+        },
+      ),
 
       GoRoute(
         path: '/events',

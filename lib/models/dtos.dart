@@ -31,6 +31,18 @@ List<String> _optStringList(Map<String, dynamic> j, String k) {
   return const [];
 }
 
+List<Map<String, dynamic>> _optList(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v is List) {
+    return v
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+  return const <Map<String, dynamic>>[];
+}
+
+
 DateTime? _optDateTime(Map<String, dynamic> j, String k) {
   final s = _optString(j, k);
   if (s == null) return null;
@@ -38,9 +50,17 @@ DateTime? _optDateTime(Map<String, dynamic> j, String k) {
 }
 
 DateTime _reqDateTime(Map<String, dynamic> j, String k) {
-  final s = _reqString(j, k);
-  return DateTime.parse(s);
+  final s = _reqString(j, k).trim();
+  final dt = DateTime.tryParse(s);
+  if (dt != null) return dt;
+  throw FormatException('Invalid datetime for "$k": "$s"');
 }
+
+DateTime _optDateTimeOrEpoch(Map<String, dynamic> j, String k) {
+  final dt = _optDateTime(j, k);
+  return dt ?? DateTime.fromMillisecondsSinceEpoch(0);
+}
+
 
 // ---- date-only helpers (YYYY-MM-DD) ----
 // IMPORTANT: Do NOT DateTime.parse("YYYY-MM-DD").toLocal() because that can shift the day.
@@ -162,13 +182,11 @@ class UserBalanceDto {
 class LiveEventDto {
   final String id;
   final String title;
-
-  /// place/description können realistisch null sein -> nullable machen
   final String? place;
   final String? description;
 
   final String createdByUserId;
-  final String createdAt;
+  final String createdAt;   // bleibt String
   final String expiresAt;
 
   LiveEventDto({
@@ -187,10 +205,11 @@ class LiveEventDto {
     place: _optString(json, 'place'),
     description: _optString(json, 'description'),
     createdByUserId: _reqString(json, 'createdByUserId'),
-    createdAt: _reqString(json, 'createdAt'),
+    createdAt: _reqString(json, 'createdAt'), // <-- FIX
     expiresAt: _reqString(json, 'expiresAt'),
   );
 }
+
 
 // ---------- Users (Picker) ----------
 class UserPickerDto {
@@ -276,25 +295,17 @@ class TaskDto {
   final String creatorUserId;
   final String title;
   final String description;
-
-  /// Interpretiert als "für mich erledigt" (Status aus /tasks für den eingeloggten Nutzer)
   final bool solved;
+  final DateTime? solvedAt;
 
-  /// Interpretiert als "für mich erledigt um ..." (optional)
-  final String? solvedAt;
+  final DateTime? dueAt;
 
-  /// date-time
-  final String? dueAt;
-
-  /// recurring weekly
   final bool recurringEnabled;
-  final List<String> recurringWeekdays;
-
-  /// time-only string (backend-defined format; treat as opaque for now, UI parses)
-  final String? recurringDueTime;
+  final List<String> recurringWeekdays; // ["MON","WED",...]
+  final String? recurringDueTime; // "20:15" or "20:15:00"
 
   final List<UserPickerDto> assignees;
-  final String createdAt;
+  final DateTime createdAt;
 
   TaskDto({
     required this.id,
@@ -316,33 +327,35 @@ class TaskDto {
     creatorUserId: _reqString(json, 'creatorUserId'),
     title: _reqString(json, 'title'),
     description: _reqString(json, 'description'),
-    solved: _optBool(json, 'solved', fallback: false),
-    solvedAt: _optString(json, 'solvedAt'),
-    dueAt: _optString(json, 'dueAt'),
-    recurringEnabled: _optBool(json, 'recurringEnabled', fallback: false),
+    solved: _optBool(json, 'solved'),
+    solvedAt: _optDateTime(json, 'solvedAt'),
+    dueAt: _optDateTime(json, 'dueAt'),
+    recurringEnabled: _optBool(json, 'recurringEnabled'),
     recurringWeekdays: _optStringList(json, 'recurringWeekdays'),
     recurringDueTime: _optString(json, 'recurringDueTime'),
-    assignees: (json['assignees'] is List)
-        ? (json['assignees'] as List)
-        .whereType<Map>()
-        .map((m) => UserPickerDto.fromJson(m.cast<String, dynamic>()))
-        .toList(growable: false)
-        : const <UserPickerDto>[],
-    createdAt: _reqString(json, 'createdAt'),
+    assignees: _optList(json, 'assignees')
+        .map((e) => UserPickerDto.fromJson(e))
+        .toList(growable: false),
+    createdAt: _optDateTimeOrEpoch(json, 'createdAt'),
   );
 }
+
+// ---------- TASKS: requests ----------
 
 class CreateTaskRequest {
   final String title;
   final String description;
   final List<String> assigneeUserIds;
 
-  /// date-time (ISO string). Backend expects it now.
-  final String? dueAt;
+  /// OffsetDateTime on backend
+  /// Normal task: required.
+  /// Recurring task: must be omitted/null.
+  final DateTime? dueAt;
 
+  /// Recurring task fields
   final bool? recurringEnabled;
-  final List<String>? recurringWeekdays;
-  final String? recurringDueTime;
+  final List<String>? recurringWeekdays; // ["MON","WED",...]
+  final String? recurringDueTime; // "HH:mm:ss" (LocalTime)
 
   CreateTaskRequest({
     required this.title,
@@ -354,15 +367,29 @@ class CreateTaskRequest {
     this.recurringDueTime,
   });
 
-  Map<String, dynamic> toJson() => {
-    'title': title,
-    'description': description,
-    'assigneeUserIds': assigneeUserIds,
-    if (dueAt != null) 'dueAt': dueAt,
-    if (recurringEnabled != null) 'recurringEnabled': recurringEnabled,
-    if (recurringWeekdays != null) 'recurringWeekdays': recurringWeekdays,
-    if (recurringDueTime != null) 'recurringDueTime': recurringDueTime,
-  };
+  Map<String, dynamic> toJson() {
+    final recurring = recurringEnabled == true;
+
+    final m = <String, dynamic>{
+      'title': title,
+      'description': description,
+      'assigneeUserIds': assigneeUserIds,
+    };
+
+    if (!recurring) {
+      // Normal task: dueAt must be present.
+      if (dueAt != null) {
+        m['dueAt'] = dueAt!.toUtc().toIso8601String();
+      }
+      return m; // omit recurring keys
+    }
+
+    // Recurring task: omit dueAt; backend derives it.
+    m['recurringEnabled'] = true;
+    if (recurringWeekdays != null) m['recurringWeekdays'] = recurringWeekdays;
+    if (recurringDueTime != null) m['recurringDueTime'] = recurringDueTime;
+    return m;
+  }
 }
 
 class UpdateTaskRequest {
@@ -370,7 +397,7 @@ class UpdateTaskRequest {
   final String? description;
   final List<String>? assigneeUserIds;
 
-  final String? dueAt;
+  final DateTime? dueAt;
 
   final bool? recurringEnabled;
   final List<String>? recurringWeekdays;
@@ -386,15 +413,23 @@ class UpdateTaskRequest {
     this.recurringDueTime,
   });
 
-  Map<String, dynamic> toJson() => {
-    if (title != null) 'title': title,
-    if (description != null) 'description': description,
-    if (assigneeUserIds != null) 'assigneeUserIds': assigneeUserIds,
-    if (dueAt != null) 'dueAt': dueAt,
-    if (recurringEnabled != null) 'recurringEnabled': recurringEnabled,
-    if (recurringWeekdays != null) 'recurringWeekdays': recurringWeekdays,
-    if (recurringDueTime != null) 'recurringDueTime': recurringDueTime,
-  };
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{};
+
+    if (title != null) m['title'] = title;
+    if (description != null) m['description'] = description;
+    if (assigneeUserIds != null) m['assigneeUserIds'] = assigneeUserIds;
+
+    if (dueAt != null) {
+      m['dueAt'] = dueAt!.toUtc().toIso8601String();
+    }
+
+    if (recurringEnabled != null) m['recurringEnabled'] = recurringEnabled;
+    if (recurringWeekdays != null) m['recurringWeekdays'] = recurringWeekdays;
+    if (recurringDueTime != null) m['recurringDueTime'] = recurringDueTime;
+
+    return m;
+  }
 }
 
 // ---------- Fine Catalog ----------
