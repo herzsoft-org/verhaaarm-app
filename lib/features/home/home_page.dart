@@ -143,8 +143,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'locked': p.locked,
   };
 
-  ConventPeriodDto _decodePeriod(Object json) =>
-      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+  ConventPeriodDto _decodePeriod(Object json) => ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
     'userId': b.userId,
@@ -493,6 +492,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return Format.centsToEur(cents);
   }
 
+  String _formatPayableBalanceForHome(UserBalanceDto? balance) {
+    final s = _formatBalanceForHome(balance).trim();
+    if (s.isEmpty) return s;
+    return s.startsWith('-') ? s : '-$s';
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -605,7 +610,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
               ),
               const SizedBox(height: 10),
               Text(
-                _formatBalanceForHome(_balance),
+                _formatPayableBalanceForHome(_balance),
                 style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
@@ -737,24 +742,42 @@ class _HomePageState extends State<HomePage> with RouteAware {
           ),
           const SizedBox(height: 12),
         ],
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.tonalIcon(
-                onPressed: () => GoRouter.of(context).push('/suggestions/new'),
-                icon: const Icon(Icons.add_comment_rounded),
-                label: const Text('Beihängung vorschlagen'),
+
+        // CHANGED: make both buttons same height by letting the Row take the max height
+        // and stretching the other child to match.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => GoRouter.of(context).push('/suggestions/new'),
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.add_comment_rounded),
+                      SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Beihängung vorschlagen',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: canOfficial ? () => GoRouter.of(context).push('/fines/new') : null,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Beihängen'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: canOfficial ? () => GoRouter.of(context).push('/fines/new') : null,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Beihängen'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

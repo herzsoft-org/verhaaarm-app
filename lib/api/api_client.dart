@@ -95,6 +95,13 @@ class ApiClient {
         .toList(growable: false);
   }
 
+  Future<void> patchUserPassword({required String userId, required String newPassword}) async {
+    await dio.patch(
+      '/users/$userId/password',
+      data: {'password': newPassword},
+    );
+  }
+
   Future<List<UserDto>> listUsersAdmin() => listUsersFull(active: false);
 
   Future<UserDto> createUser(CreateUserRequest req) async {

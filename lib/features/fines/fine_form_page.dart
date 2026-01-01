@@ -201,12 +201,37 @@ class _FineFormPageState extends State<FineFormPage> {
   }
 
   String _periodLabelForFineDate() {
-    final periodsSorted = [..._periods]
-      ..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
+    final periodsSorted = [..._periods]..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
 
     final p = Format.findPeriodForFineDate(fineDate: _fineDate, periods: periodsSorted);
     if (p == null) return 'Unbekannt';
     return '${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
+  }
+
+  // NEW: searchable catalog picker (bottom sheet)
+  Future<void> _pickCatalogItem() async {
+    if (_saving) return;
+
+    final picked = await showModalBottomSheet<FineCatalogItemDto?>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _CatalogPickerSheet(
+        title: 'Katalogeintrag suchen',
+        items: _catalog,
+        initial: _selectedCatalogItem,
+      ),
+    );
+
+    if (!mounted) return;
+    if (picked != null) {
+      setState(() {
+        _selectedCatalogItem = picked;
+        _multiplier = 1;
+      });
+      // If the dropdown was the only missing field, revalidate.
+      _formKey.currentState?.validate();
+    }
   }
 
   Future<void> _submit() async {
@@ -389,9 +414,20 @@ class _FineFormPageState extends State<FineFormPage> {
                     children: [
                       Expanded(
                         child: SegmentedButton<bool>(
+                          showSelectedIcon: false, // <- fixes the extra width from the ✓
+                          style: const ButtonStyle(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
                           segments: const [
-                            ButtonSegment(value: true, label: Text('Katalog')),
-                            ButtonSegment(value: false, label: Text('Custom')),
+                            ButtonSegment(
+                              value: true,
+                              label: Text('Katalog', overflow: TextOverflow.ellipsis),
+                            ),
+                            ButtonSegment(
+                              value: false,
+                              label: Text('Custom', overflow: TextOverflow.ellipsis),
+                            ),
                           ],
                           selected: {_useCatalog},
                           onSelectionChanged: (s) {
@@ -410,32 +446,16 @@ class _FineFormPageState extends State<FineFormPage> {
                     child: Column(
                       children: [
                         if (_useCatalog) ...[
-                          DropdownButtonFormField<FineCatalogItemDto>(
-                            initialValue: _selectedCatalogItem,
-                            items: [
-                              const DropdownMenuItem<FineCatalogItemDto>(
-                                value: null,
-                                child: Text('Beihängung auswählen'),
-                              ),
-                              ..._catalog.map(
-                                    (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(c.title),
-                                ),
-                              ),
-                            ],
-                            onChanged: (v) {
-                              setState(() {
-                                _selectedCatalogItem = v;
-                                _multiplier = 1;
-                              });
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Katalogeintrag',
-                              prefixIcon: Icon(Icons.list_rounded),
-                            ),
-                            validator: (v) {
-                              if (_useCatalog && v == null) return 'Bitte Beihängung auswählen.';
+                          // NEW: searchable picker field (instead of DropdownButtonFormField)
+                          _CatalogPickerField(
+                            enabled: !_saving,
+                            value: _selectedCatalogItem,
+                            onTap: _pickCatalogItem,
+                            validator: (_) {
+                              if (_useCatalog && _selectedCatalogItem == null) {
+                                return 'Bitte Beihängung auswählen.';
+                              }
+                              final v = _selectedCatalogItem;
                               if (v != null && _isAttendanceSystemTitle(v.title)) {
                                 return 'Dieser Eintrag ist ein Systemeintrag (Anwesenheit).';
                               }
@@ -489,6 +509,15 @@ class _FineFormPageState extends State<FineFormPage> {
                         ),
 
                         const SizedBox(height: 12),
+
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            'Mehrfach beihängen?',
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
 
                         _MultiplierRow(
                           value: _multiplier,
@@ -546,6 +575,191 @@ class _FineFormPageState extends State<FineFormPage> {
           ),
           const SizedBox(height: 12),
         ],
+      ),
+    );
+  }
+}
+
+class _CatalogPickerField extends FormField<FineCatalogItemDto?> {
+  _CatalogPickerField({
+    required bool enabled,
+    required FineCatalogItemDto? value,
+    required VoidCallback onTap,
+    String? Function(FineCatalogItemDto?)? validator,
+  }) : super(
+    initialValue: value,
+    validator: validator,
+    builder: (state) {
+      final theme = Theme.of(state.context);
+      final text = value?.title ?? 'Beihängungsgrund';
+
+      return InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: enabled ? onTap : null,
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Katalogeintrag',
+            prefixIcon: const Icon(Icons.search_rounded),
+            errorText: state.errorText,
+            enabled: enabled,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: value == null
+                      ? theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  )
+                      : theme.textTheme.bodyLarge,
+                ),
+              ),
+              Icon(
+                Icons.expand_more_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _CatalogPickerSheet extends StatefulWidget {
+  final String title;
+  final List<FineCatalogItemDto> items;
+  final FineCatalogItemDto? initial;
+
+  const _CatalogPickerSheet({
+    required this.title,
+    required this.items,
+    required this.initial,
+  });
+
+  @override
+  State<_CatalogPickerSheet> createState() => _CatalogPickerSheetState();
+}
+
+class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    final query = _search.text.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? widget.items
+        : widget.items
+        .where((c) => c.title.toLowerCase().contains(query))
+        .toList(growable: false);
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.85,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search_rounded),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Schließen',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: TextField(
+                  controller: _search,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Suchen…',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                      tooltip: 'Leeren',
+                      onPressed: () {
+                        _search.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.clear_rounded),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? const Center(child: Text('Keine Treffer.'))
+                    : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) {
+                    final c = filtered[i];
+                    final selected = widget.initial?.id == c.id;
+
+                    return Material(
+                      color: selected
+                          ? Theme.of(context).colorScheme.surfaceContainerHighest
+                          : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => Navigator.of(context).pop(c),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  c.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

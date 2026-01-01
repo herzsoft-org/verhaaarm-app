@@ -195,8 +195,6 @@ class _ProfilePageState extends State<ProfilePage> {
     // 2) Authoritative fallback: GET /users/me (works for all authenticated users)
     if (token.isNotEmpty && (displayName == '—' || username == '—')) {
       try {
-        // Expect ApiClient to have a method for this endpoint.
-        // If your ApiClient doesn't yet, add: getMe() -> GET /users/me
         final me = await widget.api.getMe();
 
         final dn2 = me.displayName.trim();
@@ -241,6 +239,163 @@ class _ProfilePageState extends State<ProfilePage> {
     if (roles.contains(AppRole.treasurer)) return 'Treasurer';
     if (roles.contains(AppRole.housekeeping)) return 'Housekeeping';
     return 'Member';
+  }
+
+  static bool _isStrongEnoughPassword(String s) {
+    if (s.length < 8) return false;
+    final hasUpper = RegExp(r'[A-Z]').hasMatch(s);
+    final hasLower = RegExp(r'[a-z]').hasMatch(s);
+    final hasDigit = RegExp(r'\d').hasMatch(s);
+    return hasUpper && hasLower && hasDigit;
+  }
+
+  Future<void> _openChangePasswordDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final newPwCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+
+    bool submitting = false;
+    bool showNew = false;
+    bool showConfirm = false;
+
+    Future<void> submit(StateSetter setStateDialog) async {
+      if (submitting) return;
+      if (!(formKey.currentState?.validate() ?? false)) return;
+
+      setStateDialog(() => submitting = true);
+
+      try {
+        // Need userId for PATCH /users/{id}/password
+        final me = await widget.api.getMe();
+        await widget.api.patchUserPassword(userId: me.id, newPassword: newPwCtrl.text);
+
+        if (!mounted) return;
+        Navigator.of(context).pop(true);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Passwort geändert.')),
+        );
+      } catch (_) {
+        if (!mounted) return;
+        Navigator.of(context).pop(false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Passwort konnte nicht geändert werden.')),
+        );
+      } finally {
+        if (Navigator.of(context).canPop()) {
+          // dialog already popped in both paths
+        } else {
+          setStateDialog(() => submitting = false);
+        }
+      }
+    }
+
+    await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) => AlertDialog(
+            title: const Text('Passwort ändern'),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Das Passwort sollte nur zu einem sicheren Passwort geändert werden.',
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: newPwCtrl,
+                      obscureText: !showNew,
+                      autofillHints: const [AutofillHints.newPassword],
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: 'Neues Passwort',
+                        helperText:
+                        'Mind. 8 Zeichen, Groß + Kleinbuchstaben, mind. eine Zahl.',
+                        helperMaxLines: 3, // wrap on phones
+                        suffixIcon: IconButton(
+                          tooltip: showNew ? 'Verbergen' : 'Anzeigen',
+                          onPressed: () => setStateDialog(() => showNew = !showNew),
+                          icon: Icon(
+                            showNew ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                          ),
+                        ),
+                      ),
+                      validator: (v) {
+                        final s = (v ?? '').trim();
+                        if (s.isEmpty) return 'Bitte Passwort eingeben.';
+                        if (!_isStrongEnoughPassword(s)) {
+                          return 'Zu schwach: mind. 8 Zeichen, Groß + Kleinbuchstaben, mind. eine Zahl.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: confirmCtrl,
+                      obscureText: !showConfirm,
+                      autofillHints: const [AutofillHints.newPassword],
+                      textInputAction: TextInputAction.done,
+                      decoration: InputDecoration(
+                        labelText: 'Passwort wiederholen',
+                        suffixIcon: IconButton(
+                          tooltip: showConfirm ? 'Verbergen' : 'Anzeigen',
+                          onPressed: () => setStateDialog(() => showConfirm = !showConfirm),
+                          icon: Icon(
+                            showConfirm ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                          ),
+                        ),
+                      ),
+                      validator: (v) {
+                        final s = (v ?? '');
+                        if (s != newPwCtrl.text) {
+                          return 'Passwörter stimmen nicht überein.';
+                        }
+                        return null;
+                      },
+                      onFieldSubmitted: (_) => submit(setStateDialog),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: submitting ? null : () => Navigator.pop(ctx, false),
+                child: const Text('Abbrechen'),
+              ),
+              FilledButton(
+                onPressed: submitting ? null : () => submit(setStateDialog),
+                child: submitting
+                    ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Text('Ändern'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    newPwCtrl.dispose();
+    confirmCtrl.dispose();
   }
 
   Future<void> _logout() async {
@@ -350,6 +505,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ),
+
           const SizedBox(height: 12),
           Card(
             child: Column(
@@ -380,6 +536,18 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           ),
+
+          // MOVED: Change password button right above logout button
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: (_loading || !widget.authStore.isLoggedIn) ? null : _openChangePasswordDialog,
+              icon: const Icon(Icons.password_rounded),
+              label: const Text('Passwort ändern'),
+            ),
+          ),
+
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,

@@ -140,19 +140,20 @@ class _MyFinesPageState extends State<MyFinesPage> {
   }
 
   bool _isFineInPeriod(FineDto f, ConventPeriodDto p) {
-    // backend semantics: [startAt, endAt) (end exclusive)
+    // backend semantics (now): inclusive range
+    // startAt <= fineDate <= endAt
     final d = _parseLocalDateOnly(f.fineDate);
     final start = p.startDateLocal;
     final end = p.endDateLocal;
-    return !d.isBefore(start) && d.isBefore(end);
+    return !d.isBefore(start) && !d.isAfter(end);
   }
 
   ConventPeriodDto? _periodForFine(FineDto f) {
     final d = _parseLocalDateOnly(f.fineDate);
     for (final p in _periodsSorted) {
       final start = p.startDateLocal;
-      final end = p.endDateLocal; // end exclusive
-      if (!d.isBefore(start) && d.isBefore(end)) return p;
+      final end = p.endDateLocal; // inclusive
+      if (!d.isBefore(start) && !d.isAfter(end)) return p;
     }
     return null;
   }
