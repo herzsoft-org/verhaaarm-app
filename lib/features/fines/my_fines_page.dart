@@ -25,14 +25,24 @@ class _MyFinesPageState extends State<MyFinesPage> {
   static const _kMyFinesFines = 'myfines.fines';
   static const _kMyFinesUsers = 'myfines.users';
   static const _kMyFinesCatalog = 'myfines.catalog';
+  static const _kMyFinesPeriods = 'myfines.periods'; // NEW (for grouping)
 
   bool _loading = true;
   bool _refreshing = false;
 
+  // false => current active period only (default)
+  // true  => all fines across all periods (past + future), grouped
+  bool _showAllPeriods = false;
+
   ConventPeriodDto? _activePeriod;
   UserBalanceDto? _balance;
 
-  List<FineDto> _currentPeriodFines = const [];
+  List<FineDto> _allFines = const [];
+  List<FineDto> _visibleFines = const [];
+
+  // NEW: periods for grouping
+  Map<String, ConventPeriodDto> _periodById = const {};
+  List<ConventPeriodDto> _periodsSorted = const [];
 
   Map<String, UserPickerDto> _userById = const {};
   Map<String, FineCatalogItemDto> _catalogById = const {};
@@ -45,6 +55,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
     return false;
   }
 
+  // ---------- cache encode/decode ----------
   Map<String, dynamic> _encodePeriod(ConventPeriodDto p) => {
     'id': p.id,
     'semester': p.semester,
@@ -64,7 +75,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
     'balanceFormatted': b.balanceFormatted,
   };
 
-  UserBalanceDto _decodeBalance(Object json) => UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
+  UserBalanceDto _decodeBalance(Object json) =>
+      UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeUser(UserPickerDto u) => {
     'id': u.id,
@@ -72,7 +84,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
     'displayName': u.displayName,
   };
 
-  UserPickerDto _decodeUser(Object json) => UserPickerDto.fromJson((json as Map).cast<String, dynamic>());
+  UserPickerDto _decodeUser(Object json) =>
+      UserPickerDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeFine(FineDto f) => {
     'id': f.id,
@@ -88,7 +101,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
     'acceptedFromSuggestionId': f.acceptedFromSuggestionId,
   };
 
-  FineDto _decodeFine(Object json) => FineDto.fromJson((json as Map).cast<String, dynamic>());
+  FineDto _decodeFine(Object json) =>
+      FineDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeCatalogItem(FineCatalogItemDto c) => {
     'id': c.id,
@@ -118,14 +132,157 @@ class _MyFinesPageState extends State<MyFinesPage> {
     return 'Beihängung';
   }
 
-  bool _isFineInActivePeriod(FineDto f, ConventPeriodDto p) {
+  bool _isFineInPeriod(FineDto f, ConventPeriodDto p) {
     // backend semantics: [startAt, endAt) (end exclusive)
-    final d = _parseLocalDateOnly(f.fineDate); // local date at midnight
+    final d = _parseLocalDateOnly(f.fineDate);
     final start = p.startDateLocal;
-    final end = p.endDateLocal; // NOTE: endAt is exclusive semantically
+    final end = p.endDateLocal;
     return !d.isBefore(start) && d.isBefore(end);
   }
 
+  ConventPeriodDto? _periodForFine(FineDto f) {
+    final d = _parseLocalDateOnly(f.fineDate);
+    for (final p in _periodsSorted) {
+      final start = p.startDateLocal;
+      final end = p.endDateLocal; // end exclusive
+      if (!d.isBefore(start) && d.isBefore(end)) return p;
+    }
+    return null;
+  }
+
+  List<FineDto> _computeVisibleFines({
+    required ConventPeriodDto? activePeriod,
+    required List<FineDto> all,
+    required bool showAllPeriods,
+  }) {
+    Iterable<FineDto> it = all;
+
+    if (!showAllPeriods) {
+      if (activePeriod == null) {
+        it = const <FineDto>[];
+      } else {
+        it = it.where((f) => _isFineInPeriod(f, activePeriod));
+      }
+    }
+
+    final list = it.toList(growable: false);
+
+    // Sort: fineDate desc, then createdAt desc
+    list.sort((a, b) {
+      final da = _parseLocalDateOnly(a.fineDate);
+      final db = _parseLocalDateOnly(b.fineDate);
+      final c1 = db.compareTo(da);
+      if (c1 != 0) return c1;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+
+    return list;
+  }
+
+  // ---------- grouping ----------
+  List<_SemesterGroup> _buildGroupedBySemesterAndPeriod(List<FineDto> fines) {
+    final Map<String, Map<String, List<FineDto>>> map = {};
+
+    for (final f in fines) {
+      final p = _periodForFine(f);
+      final semester = p?.semester ?? 'Unbekannt';
+      final pid = p?.id ?? 'unknown';
+
+      map.putIfAbsent(semester, () => {});
+      map[semester]!.putIfAbsent(pid, () => []);
+      map[semester]![pid]!.add(f);
+    }
+
+    final now = DateTime.now();
+
+    DateTime semesterSortKey(String sem) {
+      final periodMap = map[sem]!;
+      final periods = periodMap.keys
+          .map((pid) => _periodById[pid])
+          .whereType<ConventPeriodDto>()
+          .toList(growable: false);
+      if (periods.isEmpty) return DateTime.fromMillisecondsSinceEpoch(1 << 62);
+
+      final starts = periods.map((p) => p.startDateLocal).toList(growable: false);
+      final futureStarts = starts.where((d) => !d.isBefore(now)).toList(growable: false)..sort();
+      if (futureStarts.isNotEmpty) return futureStarts.first;
+
+      final pastStarts = starts.where((d) => d.isBefore(now)).toList(growable: false)..sort();
+      return pastStarts.isNotEmpty ? pastStarts.last : DateTime.fromMillisecondsSinceEpoch(1 << 62);
+    }
+
+    int semesterIsFuture(String sem) {
+      final periodMap = map[sem]!;
+      final periods = periodMap.keys
+          .map((pid) => _periodById[pid])
+          .whereType<ConventPeriodDto>()
+          .toList(growable: false);
+      if (periods.isEmpty) return 2;
+
+      final anyFutureOrCurrent = periods.any((p) => !p.endDateLocal.isBefore(now));
+      return anyFutureOrCurrent ? 0 : 1;
+    }
+
+    final semesters = map.keys.toList()
+      ..sort((a, b) {
+        final fa = semesterIsFuture(a);
+        final fb = semesterIsFuture(b);
+        final c0 = fa.compareTo(fb);
+        if (c0 != 0) return c0;
+
+        final da = semesterSortKey(a);
+        final db = semesterSortKey(b);
+        final c1 = da.compareTo(db);
+        if (c1 != 0) return c1;
+
+        return a.compareTo(b);
+      });
+
+    final result = <_SemesterGroup>[];
+    for (final sem in semesters) {
+      final periodMap = map[sem]!;
+      final periodIds = periodMap.keys.toList()
+        ..sort((a, b) {
+          if (a == 'unknown' && b != 'unknown') return 1;
+          if (b == 'unknown' && a != 'unknown') return -1;
+
+          final pa = _periodById[a];
+          final pb = _periodById[b];
+
+          final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : pa.startDateLocal;
+          final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : pb.startDateLocal;
+
+          final aCurrentOrFuture = pa != null && !pa.endDateLocal.isBefore(now);
+          final bCurrentOrFuture = pb != null && !pb.endDateLocal.isBefore(now);
+
+          if (aCurrentOrFuture != bCurrentOrFuture) return aCurrentOrFuture ? -1 : 1;
+          if (aCurrentOrFuture && bCurrentOrFuture) return da.compareTo(db);
+          return db.compareTo(da);
+        });
+
+      final periods = <_PeriodGroup>[];
+      for (final pid in periodIds) {
+        final list = [...periodMap[pid]!];
+
+        // inside each period: latest first
+        list.sort((a, b) {
+          final da = _parseLocalDateOnly(a.fineDate);
+          final db = _parseLocalDateOnly(b.fineDate);
+          final c1 = db.compareTo(da);
+          if (c1 != 0) return c1;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+
+        periods.add(_PeriodGroup(periodId: pid, fines: list));
+      }
+
+      result.add(_SemesterGroup(semester: sem, periods: periods));
+    }
+
+    return result;
+  }
+
+  // ---------- load ----------
   Future<void> _load({bool force = false}) async {
     try {
       final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
@@ -138,40 +295,61 @@ class _MyFinesPageState extends State<MyFinesPage> {
       );
       final cFines = await AppCache.I.entryOrLoadPersisted<List<FineDto>>(
         _kMyFinesFines,
-        decode: (json) => (json as List).map((e) => _decodeFine(e as Object)).toList(growable: false),
+        decode: (json) =>
+            (json as List).map((e) => _decodeFine(e as Object)).toList(growable: false),
       );
       final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
         _kMyFinesUsers,
-        decode: (json) => (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
+        decode: (json) =>
+            (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
       );
       final cCatalog = await AppCache.I.entryOrLoadPersisted<List<FineCatalogItemDto>>(
         _kMyFinesCatalog,
-        decode: (json) => (json as List).map((e) => _decodeCatalogItem(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodeCatalogItem(e as Object))
+            .toList(growable: false),
+      );
+      final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
+        _kMyFinesPeriods,
+        decode: (json) =>
+            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
       );
 
-      final hasAnyCache = (cPeriod != null) || (cBal != null) || (cFines != null) || (cUsers != null) || (cCatalog != null);
+      final hasAnyCache = (cPeriod != null) ||
+          (cBal != null) ||
+          (cFines != null) ||
+          (cUsers != null) ||
+          (cCatalog != null) ||
+          (cPeriods != null);
 
       if (hasAnyCache && mounted) {
         final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
         final catalog = List<FineCatalogItemDto>.from(cCatalog?.value ?? const <FineCatalogItemDto>[]);
+        final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
 
         final userById = {for (final u in users) u.id: u};
         final catalogById = {for (final c in catalog) c.id: c};
+        final periodById = {for (final p in periods) p.id: p};
 
-        final period = cPeriod?.value;
+        final activePeriod = cPeriod?.value;
         final allFines = cFines?.value ?? const <FineDto>[];
 
-        final filtered = (period == null)
-            ? const <FineDto>[]
-            : allFines.where((f) => _isFineInActivePeriod(f, period)).toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final visible = _computeVisibleFines(
+          activePeriod: activePeriod,
+          all: allFines,
+          showAllPeriods: _showAllPeriods,
+        );
 
         setState(() {
-          _activePeriod = period;
+          _activePeriod = activePeriod;
           _balance = cBal?.value;
-          _currentPeriodFines = filtered;
+          _allFines = allFines;
+          _visibleFines = visible;
           _userById = userById;
           _catalogById = catalogById;
+          _periodsSorted = periods;
+          _periodById = periodById;
           _loading = false;
         });
       }
@@ -179,8 +357,7 @@ class _MyFinesPageState extends State<MyFinesPage> {
       final cacheFresh = (cFines != null && cFines.isFresh(_ttlMyFines)) &&
           (cUsers != null && cUsers.isFresh(_ttlMyFines)) &&
           (cCatalog != null && cCatalog.isFresh(_ttlMyFines)) &&
-          // period/balance are also cached, but can be absent (no active period). Treat absence as OK.
-          true;
+          (cPeriods != null && cPeriods.isFresh(_ttlMyFines));
 
       if (!force && cacheFresh) return;
 
@@ -193,19 +370,17 @@ class _MyFinesPageState extends State<MyFinesPage> {
       }
 
       try {
-        // Active period can be 404 (no active period)
-        ConventPeriodDto? period;
+        ConventPeriodDto? activePeriod;
         try {
-          period = await widget.api.getActivePeriod();
+          activePeriod = await widget.api.getActivePeriod();
         } catch (e) {
           if (_isNoActivePeriodError(e)) {
-            period = null;
+            activePeriod = null;
           } else {
             rethrow;
           }
         }
 
-        // Balance can be 404 too (same reason); keep nullable
         UserBalanceDto? bal;
         try {
           bal = await widget.api.getMyBalance();
@@ -217,9 +392,12 @@ class _MyFinesPageState extends State<MyFinesPage> {
           }
         }
 
-        final fines = await widget.api.listFines(); // visible fines (member: already "mine")
+        final fines = await widget.api.listFines();
         final users = await widget.api.pickerUsers();
         final catalog = await widget.api.listFineCatalog(active: null);
+
+        // NEW: load periods (for grouping)
+        final periods = await widget.api.listPeriods();
 
         await AppCache.I.setPersisted<List<FineDto>>(
           _kMyFinesFines,
@@ -236,11 +414,16 @@ class _MyFinesPageState extends State<MyFinesPage> {
           List<FineCatalogItemDto>.unmodifiable(catalog),
           encode: (v) => v.map(_encodeCatalogItem).toList(growable: false),
         );
+        await AppCache.I.setPersisted<List<ConventPeriodDto>>(
+          _kMyFinesPeriods,
+          List<ConventPeriodDto>.unmodifiable(periods),
+          encode: (v) => v.map(_encodePeriod).toList(growable: false),
+        );
 
-        if (period != null) {
+        if (activePeriod != null) {
           await AppCache.I.setPersisted<ConventPeriodDto>(
             _kMyFinesActivePeriod,
-            period,
+            activePeriod,
             encode: _encodePeriod,
           );
         } else {
@@ -257,21 +440,28 @@ class _MyFinesPageState extends State<MyFinesPage> {
           await AppCache.I.removePersisted(_kMyFinesBalance);
         }
 
+        final periodsSorted = List<ConventPeriodDto>.from(periods)..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodById = {for (final p in periodsSorted) p.id: p};
+
         final userById = {for (final u in users) u.id: u};
         final catalogById = {for (final c in catalog) c.id: c};
 
-        final filtered = (period == null)
-            ? const <FineDto>[]
-            : fines.where((f) => _isFineInActivePeriod(f, period!)).toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final visible = _computeVisibleFines(
+          activePeriod: activePeriod,
+          all: fines,
+          showAllPeriods: _showAllPeriods,
+        );
 
         if (!mounted) return;
         setState(() {
-          _activePeriod = period;
+          _activePeriod = activePeriod;
           _balance = bal;
-          _currentPeriodFines = filtered;
+          _allFines = List<FineDto>.unmodifiable(fines);
+          _visibleFines = visible;
           _userById = userById;
           _catalogById = catalogById;
+          _periodsSorted = periodsSorted;
+          _periodById = periodById;
         });
       } catch (e) {
         if (!mounted) return;
@@ -296,10 +486,24 @@ class _MyFinesPageState extends State<MyFinesPage> {
     }
   }
 
+  void _setShowAllPeriods(bool v) {
+    if (_showAllPeriods == v) return;
+    setState(() {
+      _showAllPeriods = v;
+      _visibleFines = _computeVisibleFines(
+        activePeriod: _activePeriod,
+        all: _allFines,
+        showAllPeriods: _showAllPeriods,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = _activePeriod;
     final balanceText = (_balance?.balanceFormatted ?? '').trim();
+
+    final grouped = _showAllPeriods ? _buildGroupedBySemesterAndPeriod(_visibleFines) : const <_SemesterGroup>[];
 
     return AppScaffold(
       title: 'Meine Beihängungen',
@@ -308,6 +512,11 @@ class _MyFinesPageState extends State<MyFinesPage> {
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
           onPressed: _loading ? null : () => _load(force: true),
+        ),
+        IconButton(
+          tooltip: _showAllPeriods ? 'Nur aktuelle Periode' : 'Alle Perioden anzeigen',
+          icon: Icon(_showAllPeriods ? Icons.history_toggle_off_rounded : Icons.history_rounded),
+          onPressed: _loading ? null : () => _setShowAllPeriods(!_showAllPeriods),
         ),
       ],
       body: _loading
@@ -323,7 +532,29 @@ class _MyFinesPageState extends State<MyFinesPage> {
                 child: LinearProgressIndicator(),
               ),
 
-            // Header card: active period + balance (if available)
+            // top info row (small icon) like EventsPage pattern
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Icon(
+                    _showAllPeriods ? Icons.history_rounded : Icons.event_available_rounded,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _showAllPeriods
+                          ? 'Alle Beihängungen (gruppiert nach Semester/Periode)'
+                          : 'Beihängungen in der aktuellen Periode',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // header card (active period + balance)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -351,34 +582,49 @@ class _MyFinesPageState extends State<MyFinesPage> {
             ),
             const SizedBox(height: 12),
 
-            if (p == null)
+            if (!_showAllPeriods && p == null)
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('Keine Beihängungen: Es gibt aktuell keine aktive Conventsperiode.'),
-              )
-            else if (_currentPeriodFines.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text('Keine Beihängungen in der aktuellen Conventsperiode gefunden.'),
-              )
-            else
-              for (final f in _currentPeriodFines)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Card(
-                    elevation: 0,
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    child: ListTile(
-                      titleAlignment: ListTileTitleAlignment.center,
-                      leading: const Icon(Icons.gavel_rounded),
-                      title: Text(_fineTitle(f)),
-                      subtitle: Text(_subtitleForFine(f)),
-                      isThreeLine: true,
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => context.push('/fines/${f.id}'),
-                    ),
-                  ),
+                child: Text(
+                  'Keine Beihängungen: Es gibt aktuell keine aktive Conventsperiode.\n'
+                      'Tippe oben auf das Verlauf-Icon, um alle Beihängungen zu sehen.',
                 ),
+              )
+            else if (_visibleFines.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(_showAllPeriods
+                    ? 'Keine Beihängungen gefunden.'
+                    : 'Keine Beihängungen in der aktuellen Conventsperiode gefunden.'),
+              )
+            else if (!_showAllPeriods)
+                for (final f in _visibleFines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Card(
+                      elevation: 0,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: ListTile(
+                        titleAlignment: ListTileTitleAlignment.center,
+                        leading: const Icon(Icons.gavel_rounded),
+                        title: Text(_fineTitle(f)),
+                        subtitle: Text(_subtitleForFine(f)),
+                        isThreeLine: true,
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => context.push('/fines/${f.id}'),
+                      ),
+                    ),
+                  )
+              else
+                for (final sem in grouped)
+                  _SemesterSectionFines(
+                    semester: sem.semester,
+                    periods: sem.periods,
+                    periodById: _periodById,
+                    fineTitle: _fineTitle,
+                    subtitleForFine: _subtitleForFine,
+                    onOpenFine: (id) => context.push('/fines/$id'),
+                  ),
           ],
         ),
       ),
@@ -391,18 +637,169 @@ class _MyFinesPageState extends State<MyFinesPage> {
     final y = int.parse(m.group(1)!);
     final mo = int.parse(m.group(2)!);
     final d = int.parse(m.group(3)!);
-    return DateTime(y, mo, d); // local midnight
+    return DateTime(y, mo, d);
   }
-
 
   String _subtitleForFine(FineDto f) {
     final amount = f.amountCents ?? 0;
 
-    final creator = (f.creatorUserId ?? '').toString();
-    final creatorLabel = creator.isEmpty ? '' : _userLabel(creator);
+    // creatorUserId is non-nullable => no ?? and no toString()
+    final creatorId = f.creatorUserId;
+    final creatorLabel = creatorId.isEmpty ? '' : _userLabel(creatorId);
 
     return 'Betrag: ${Format.centsToEur(amount)}\n'
         'Beihängungsdatum: ${Format.dateOnlyShort(f.fineDate)}'
-        '${creator.isEmpty ? '' : '\nErstellt von: $creatorLabel'}';
+        '${creatorId.isEmpty ? '' : '\nErstellt von: $creatorLabel'}';
+  }
+}
+
+// ---------- grouping models/widgets ----------
+class _SemesterGroup {
+  final String semester;
+  final List<_PeriodGroup> periods;
+
+  _SemesterGroup({required this.semester, required this.periods});
+}
+
+class _PeriodGroup {
+  final String periodId;
+  final List<FineDto> fines;
+
+  _PeriodGroup({required this.periodId, required this.fines});
+}
+
+class _SemesterSectionFines extends StatelessWidget {
+  final String semester;
+  final List<_PeriodGroup> periods;
+  final Map<String, ConventPeriodDto> periodById;
+
+  final String Function(FineDto f) fineTitle;
+  final String Function(FineDto f) subtitleForFine;
+  final void Function(String fineId) onOpenFine;
+
+  const _SemesterSectionFines({
+    required this.semester,
+    required this.periods,
+    required this.periodById,
+    required this.fineTitle,
+    required this.subtitleForFine,
+    required this.onOpenFine,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(semester, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            for (final pg in periods)
+              _PeriodSectionFines(
+                pg: pg,
+                period: periodById[pg.periodId],
+                fineTitle: fineTitle,
+                subtitleForFine: subtitleForFine,
+                onOpenFine: onOpenFine,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PeriodSectionFines extends StatelessWidget {
+  final _PeriodGroup pg;
+  final ConventPeriodDto? period;
+
+  final String Function(FineDto f) fineTitle;
+  final String Function(FineDto f) subtitleForFine;
+  final void Function(String fineId) onOpenFine;
+
+  const _PeriodSectionFines({
+    required this.pg,
+    required this.period,
+    required this.fineTitle,
+    required this.subtitleForFine,
+    required this.onOpenFine,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = period;
+
+    final header = (p == null)
+        ? (pg.periodId == 'unknown' ? 'Conventsperiode: Unbekannt' : 'Conventsperiode: ${pg.periodId}')
+        : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
+
+    final flags = <Widget>[];
+    if (p?.active == true) flags.add(const _Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
+    if (p?.locked == true) flags.add(const _Chip(text: 'Locked', icon: Icons.lock_rounded));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(header, style: Theme.of(context).textTheme.titleSmall)),
+              ...flags,
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final f in pg.fines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                elevation: 0,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: ListTile(
+                  titleAlignment: ListTileTitleAlignment.center,
+                  leading: const Icon(Icons.gavel_rounded),
+                  title: Text(fineTitle(f)),
+                  subtitle: Text(subtitleForFine(f)),
+                  isThreeLine: true,
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => onOpenFine(f.id),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String text;
+  final IconData icon;
+
+  const _Chip({required this.text, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16),
+            const SizedBox(width: 6),
+            Text(text, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
   }
 }

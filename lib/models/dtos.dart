@@ -45,16 +45,6 @@ DateTime _reqDateTime(Map<String, dynamic> j, String k) {
 // ---- date-only helpers (YYYY-MM-DD) ----
 // IMPORTANT: Do NOT DateTime.parse("YYYY-MM-DD").toLocal() because that can shift the day.
 // Treat backend date-only values as a LocalDate, i.e. local midnight.
-DateTime? _tryParseLocalDate(String? s) {
-  if (s == null) return null;
-  final parts = s.split('-');
-  if (parts.length != 3) return null;
-  final y = int.tryParse(parts[0]);
-  final m = int.tryParse(parts[1]);
-  final d = int.tryParse(parts[2]);
-  if (y == null || m == null || d == null) return null;
-  return DateTime(y, m, d);
-}
 
 DateTime _parseLocalDate(String s) {
   // Expected: YYYY-MM-DD (backend sends DATE-only)
@@ -69,12 +59,6 @@ DateTime _parseLocalDate(String s) {
 }
 
 
-String _fmtLocalDate(DateTime d) {
-  final y = d.year.toString().padLeft(4, '0');
-  final m = d.month.toString().padLeft(2, '0');
-  final day = d.day.toString().padLeft(2, '0');
-  return '$y-$m-$day';
-}
 
 // ---------------- DTOs ----------------
 
@@ -173,31 +157,7 @@ class UserBalanceDto {
   };
 }
 
-DateTime? _optDateOnlyUtc(Map<String, dynamic> j, String k) {
-  final v = j[k];
-  if (v == null) return null;
-  final s = v.toString().trim();
-  if (s.isEmpty) return null;
 
-  // Backend now returns LocalDate as "YYYY-MM-DD"
-  if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) {
-    final parts = s.split('-');
-    final y = int.parse(parts[0]);
-    final m = int.parse(parts[1]);
-    final d = int.parse(parts[2]);
-    // Treat as UTC midnight to avoid timezone shifting
-    return DateTime.utc(y, m, d);
-  }
-
-  // Fallback: try regular ISO parse
-  return DateTime.tryParse(s);
-}
-
-String _fmtDateOnlyUtc(DateTime dt) {
-  final u = dt.toUtc();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${u.year}-${two(u.month)}-${two(u.day)}';
-}
 
 class LiveEventDto {
   final String id;
