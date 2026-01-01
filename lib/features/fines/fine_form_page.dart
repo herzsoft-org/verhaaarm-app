@@ -202,7 +202,7 @@ class _FineFormPageState extends State<FineFormPage> {
 
   String _periodLabelForFineDate() {
     final periodsSorted = [..._periods]
-      ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));
+      ..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
 
     final p = Format.findPeriodForFineDate(fineDate: _fineDate, periods: periodsSorted);
     if (p == null) return 'Unbekannt';

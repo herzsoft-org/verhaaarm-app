@@ -145,7 +145,7 @@ class _FinesListPageState extends State<FinesListPage> {
 
   List<_SemesterGroup> _buildGrouped() {
     final periodsSorted = [..._periods]
-      ..sort((a, b) => Format.parseIsoToLocal(b.startAt).compareTo(Format.parseIsoToLocal(a.startAt)));
+      ..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
 
     // group fines by computed period id (from fineDate)
     final Map<String, List<FineDto>> finesByPeriodId = {};

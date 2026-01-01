@@ -40,17 +40,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
   static const _kHomeBalance = 'home.balance';
   static const _kHomeLiveEvents = 'home.liveEvents';
   static const _kHomeEvents = 'home.events';
-
   static const _kHomeQuote = 'home.quote';
-  static const _quoteUrl = 'https://verhaarmapi.herz.moe/public/quotes';
-
   static const _kHomeTasksUnsolved = 'home.tasks.unsolved';
+
+  static const _quoteUrl = 'https://verhaarmapi.herz.moe/public/quotes';
 
   ConventPeriodDto? _activePeriod;
   UserBalanceDto? _balance;
   List<LiveEventDto> _liveEvents = const [];
   EventDto? _nextEvent;
-
   QuoteDto? _quote;
 
   int _unsolvedTasks = 0;
@@ -73,16 +71,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
       receiveTimeout: const Duration(seconds: 6),
       sendTimeout: const Duration(seconds: 6),
       responseType: ResponseType.plain,
-      headers: const {
-        'Accept': 'application/json',
-      },
+      headers: const {'Accept': 'application/json'},
     ),
   );
 
-  void _checkOtaIfAndroid() {
-    if (_isAndroidApp) {
-      _ota.checkNow();
+  bool _isNoActivePeriodError(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      return code == 404;
     }
+    return false;
+  }
+
+  void _checkOtaIfAndroid() {
+    if (_isAndroidApp) _ota.checkNow();
   }
 
   @override
@@ -97,7 +99,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     _startLiveTimer();
 
     if (_isAndroidApp) {
-      // one quick check after landing on Home
       Future.delayed(const Duration(seconds: 2), () {
         if (!mounted) return;
         _ota.checkNow();
@@ -109,9 +110,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      routeObserver.subscribe(this, route);
-    }
+    if (route is PageRoute) routeObserver.subscribe(this, route);
   }
 
   @override
@@ -127,10 +126,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     _load();
     _loadQuote();
     _startLiveTimer();
-
-    if (_isAndroidApp) {
-      _ota.checkNow();
-    }
+    if (_isAndroidApp) _ota.checkNow();
   }
 
   @override
@@ -147,10 +143,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'locked': p.locked,
   };
 
-  ConventPeriodDto _decodePeriod(Object json) => ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+  ConventPeriodDto _decodePeriod(Object json) =>
+      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
     'userId': b.userId,
+    'id': b.userId, // legacy callers
     'balanceCents': b.balanceCents,
     'balanceFormatted': b.balanceFormatted,
   };
@@ -271,7 +269,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       if (mounted) setState(() => _quote = picked);
     } catch (_) {
-      // silent by design (empty placeholder)
+      // silent by design
     }
   }
 
@@ -303,14 +301,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       if (hasAnyCache && mounted) {
         final events = List<EventDto>.from(cEvents?.value ?? const <EventDto>[]);
-        final next = _pickNextEvent(events);
+        final next = _pickNextEvent(events, period: cPeriod?.value);
 
         setState(() {
           _activePeriod = cPeriod?.value;
           _balance = cBalance?.value;
           _liveEvents = List<LiveEventDto>.unmodifiable(cLive?.value ?? const <LiveEventDto>[]);
           _nextEvent = next;
-          _quote = _quote; // keep
           _unsolvedTasks = cTasks?.value ?? 0;
           _loading = false;
         });
@@ -325,10 +322,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
       if (!force && baseFresh && liveFresh) return;
 
-      // OTA: tie checks to the same refresh trigger as the rest of Home content
       _checkOtaIfAndroid();
-
-      // Quote refresh: same trigger + TTL as base Home content
       unawaited(_loadQuote(force: force));
 
       final showFullSpinner = !hasAnyCache;
@@ -340,6 +334,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       }
 
       try {
+        // If only live events are stale, refresh just those.
         if (!force && baseFresh && !liveFresh) {
           final live = await widget.api.listLiveEvents();
           final frozenLive = List<LiveEventDto>.unmodifiable(live);
@@ -355,12 +350,35 @@ class _HomePageState extends State<HomePage> with RouteAware {
           return;
         }
 
-        final period = await widget.api.getActivePeriod();
-        final balance = await widget.api.getMyBalance(periodId: period.id);
+        // --- Active period (can be 404 if none) ---
+        ConventPeriodDto? period;
+        try {
+          period = await widget.api.getActivePeriod();
+        } catch (e) {
+          // If no active period exists, that's OK.
+          if (_isNoActivePeriodError(e)) {
+            period = null;
+          } else {
+            period = null;
+          }
+        }
+
+        // --- Balance (can be 404 if no active period today) ---
+        UserBalanceDto? balance;
+        try {
+          // Backend resolves by today if periodId omitted; keep it omitted to match semantics.
+          balance = await widget.api.getMyBalance();
+        } catch (e) {
+          if (_isNoActivePeriodError(e)) {
+            balance = null;
+          } else {
+            rethrow;
+          }
+        }
 
         final live = await widget.api.listLiveEvents();
         final events = await widget.api.listEvents();
-        final next = _pickNextEvent(events);
+        final next = _pickNextEvent(events, period: period);
 
         final tasks = await widget.api.listMyTasks();
         final unsolved = tasks.where((t) => !t.solved).length;
@@ -368,16 +386,26 @@ class _HomePageState extends State<HomePage> with RouteAware {
         final frozenLive = List<LiveEventDto>.unmodifiable(live);
         final frozenEvents = List<EventDto>.unmodifiable(events);
 
-        await AppCache.I.setPersisted<ConventPeriodDto>(
-          _kHomeActivePeriod,
-          period,
-          encode: _encodePeriod,
-        );
-        await AppCache.I.setPersisted<UserBalanceDto>(
-          _kHomeBalance,
-          balance,
-          encode: _encodeBalance,
-        );
+        if (period != null) {
+          await AppCache.I.setPersisted<ConventPeriodDto>(
+            _kHomeActivePeriod,
+            period,
+            encode: _encodePeriod,
+          );
+        } else {
+          await AppCache.I.removePersisted(_kHomeActivePeriod);
+        }
+
+        if (balance != null) {
+          await AppCache.I.setPersisted<UserBalanceDto>(
+            _kHomeBalance,
+            balance,
+            encode: _encodeBalance,
+          );
+        } else {
+          await AppCache.I.removePersisted(_kHomeBalance);
+        }
+
         await AppCache.I.setPersisted<List<LiveEventDto>>(
           _kHomeLiveEvents,
           frozenLive,
@@ -425,25 +453,44 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
-  EventDto? _pickNextEvent(List<EventDto> events) {
+  EventDto? _pickNextEvent(List<EventDto> events, {ConventPeriodDto? period}) {
     final now = DateTime.now();
+
+    bool inActivePeriod(EventDto e) {
+      if (period == null) return true;
+      final d = Format.dateOnlyFromIsoDateTimeLocal(e.startsAt);
+      return Format.isDateWithinPeriodInclusive(dateLocalMidnight: d, period: period);
+    }
 
     final upcoming = events.where((e) {
       final dt = Format.parseIsoToLocal(e.startsAt);
-      return !dt.isBefore(now);
+      return !dt.isBefore(now) && inActivePeriod(e);
     }).toList();
 
-    if (upcoming.isEmpty) return null;
+    if (upcoming.isEmpty) {
+      if (period != null) {
+        final anyUpcoming = events.where((e) {
+          final dt = Format.parseIsoToLocal(e.startsAt);
+          return !dt.isBefore(now);
+        }).toList();
+        if (anyUpcoming.isEmpty) return null;
+        anyUpcoming.sort((a, b) => a.startsAt.compareTo(b.startsAt));
+        return anyUpcoming.first;
+      }
+      return null;
+    }
 
     upcoming.sort((a, b) => a.startsAt.compareTo(b.startsAt));
     return upcoming.first;
   }
 
   String _formatBalanceForHome(UserBalanceDto? balance) {
+    // New backend already provides a formatted string; use it directly.
+    final s = (balance?.balanceFormatted ?? '').trim();
+    if (s.isNotEmpty) return s;
+
     final cents = balance?.balanceCents ?? 0;
-    if (cents == 0) return Format.centsToEur(0);
-    final absText = Format.centsToEur(cents.abs());
-    return '-$absText';
+    return Format.centsToEur(cents);
   }
 
   @override
@@ -469,27 +516,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 padding: EdgeInsets.only(bottom: 12),
                 child: LinearProgressIndicator(),
               ),
-
-            // OTA banner (Android app only, never on web)
             if (_isAndroidApp) ...[
               OtaUpdateBanner(controller: _ota),
               const SizedBox(height: 12),
             ],
-
             _buildLiveEventsCard(context),
             const SizedBox(height: 12),
             _buildBalanceCard(context),
             const SizedBox(height: 12),
             _buildNextEventCard(context),
             const SizedBox(height: 12),
-
-            // NEW: Arbeitsaufträge card (below "Nächster Termin")
             _buildTasksCard(context),
             const SizedBox(height: 12),
-
             _buildQuickActions(context),
-
-            // Quote of the day (silent placeholder if null)
             if (_quote != null) ...[
               const SizedBox(height: 12),
               QuoteOfTheDayCard(quote: _quote!),
@@ -515,10 +554,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               Icon(Icons.assignment_rounded, color: cs.primary),
               const SizedBox(width: 10),
-              Text(
-                'Arbeitsaufträge',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Arbeitsaufträge', style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               if (n > 0)
                 Container(
@@ -562,10 +598,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 children: [
                   Icon(Icons.account_balance_wallet_rounded, color: cs.primary),
                   const SizedBox(width: 10),
-                  Text(
-                    'Aktueller Beihängungssaldo',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text('Aktueller Beihängungssaldo', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
                   const Icon(Icons.chevron_right_rounded),
                 ],
@@ -573,15 +606,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
               const SizedBox(height: 10),
               Text(
                 _formatBalanceForHome(_balance),
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(
                 period == null
                     ? 'Keine aktive Conventsperiode'
-                    : 'Conventsperiode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}',
+                    : 'Conventsperiode: ${Format.dateOnlyShort(period.startAt)} – ${Format.dateOnlyShort(period.endAt)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -608,20 +639,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 children: [
                   Icon(Icons.groups_2_rounded, color: cs.primary),
                   const SizedBox(width: 10),
-                  Text(
-                    'Wo geht was?',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text('Wo geht was?', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
                   const Icon(Icons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 10),
               if (_liveEvents.isEmpty)
-                Text(
-                  'Gerade geht leider nichts :(',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                )
+                Text('Gerade geht leider nichts :(', style: Theme.of(context).textTheme.bodyMedium)
               else
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -633,9 +658,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           margin: const EdgeInsets.only(bottom: 8),
                           color: cs.surfaceContainerHighest,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: _LiveEventPreviewTile(e: e),
@@ -669,20 +692,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 children: [
                   Icon(Icons.event_rounded, color: cs.primary),
                   const SizedBox(width: 10),
-                  Text(
-                    'Nächster Termin',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  Text('Nächster Termin', style: Theme.of(context).textTheme.titleMedium),
                   const Spacer(),
                   const Icon(Icons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 10),
               if (e == null)
-                Text(
-                  'Keine zukünftigen Termine.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                )
+                Text('Keine zukünftigen Termine.', style: Theme.of(context).textTheme.bodyMedium)
               else
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,8 +707,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     Text(e.title, style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 6),
                     Text(
-                      '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}'
-                          '${e.mandatory ? ' · Pflicht' : ''}',
+                      '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}${e.mandatory ? ' · Pflicht' : ''}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -705,7 +721,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   Widget _buildQuickActions(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
-
     final canOffice = Roles.canAccessOffice(roles);
     final canOfficial = Roles.canCreateOfficialFine(roles);
 

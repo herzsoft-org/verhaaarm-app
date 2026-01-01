@@ -251,7 +251,16 @@ class _TaskCard extends StatelessWidget {
   });
 
   void _showAssigneesDialog(BuildContext context) {
-    final names = task.assignees.map((u) => u.displayName.trim()).where((s) => s.isNotEmpty).toList();
+    String _display(UserPickerDto u) {
+      final dn = u.displayName.trim();
+      if (dn.isNotEmpty) return dn;
+      final un = u.username.trim();
+      if (un.isNotEmpty) return un;
+      return '(unbekannt)';
+    }
+
+    final names = task.assignees.map(_display).toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -316,9 +325,7 @@ class _TaskCard extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(2),
                       child: Icon(
-                        task.solved
-                            ? Icons.check_circle_rounded
-                            : Icons.radio_button_unchecked_rounded,
+                        task.solved ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
                         size: 22,
                       ),
                     ),
@@ -390,7 +397,6 @@ class _TaskCard extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 12),
 
             // Bottom row: assignees summary + erledigt button
@@ -404,21 +410,24 @@ class _TaskCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                   )
                 else
-                  InkWell(
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: () => _showAssigneesDialog(context),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.people_outline_rounded, size: 18, color: cs.onSurfaceVariant),
-                          const SizedBox(width: 6),
-                          Text(
-                            '$assigneeCount',
-                            style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                        ],
+                  Tooltip(
+                    message: 'Empfänger anzeigen',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(999),
+                      onTap: () => _showAssigneesDialog(context),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.people_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$assigneeCount',
+                              style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

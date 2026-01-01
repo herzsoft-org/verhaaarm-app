@@ -54,8 +54,8 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
     if (_myUserIdLoading) return;
     _myUserIdLoading = true;
     try {
-      final p = await widget.api.getActivePeriod();
-      final bal = await widget.api.getMyBalance(periodId: p.id);
+      await widget.api.getActivePeriod(); // optional
+      final bal = await widget.api.getMyBalance();
       if (!mounted) return;
       setState(() => _myUserId = bal.userId);
     } catch (_) {

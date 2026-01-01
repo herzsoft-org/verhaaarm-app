@@ -42,6 +42,40 @@ DateTime _reqDateTime(Map<String, dynamic> j, String k) {
   return DateTime.parse(s);
 }
 
+// ---- date-only helpers (YYYY-MM-DD) ----
+// IMPORTANT: Do NOT DateTime.parse("YYYY-MM-DD").toLocal() because that can shift the day.
+// Treat backend date-only values as a LocalDate, i.e. local midnight.
+DateTime? _tryParseLocalDate(String? s) {
+  if (s == null) return null;
+  final parts = s.split('-');
+  if (parts.length != 3) return null;
+  final y = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  final d = int.tryParse(parts[2]);
+  if (y == null || m == null || d == null) return null;
+  return DateTime(y, m, d);
+}
+
+DateTime _parseLocalDate(String s) {
+  // Expected: YYYY-MM-DD (backend sends DATE-only)
+  // We construct a *local* DateTime at midnight to avoid timezone shifts.
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s.trim());
+  if (m == null) return DateTime.fromMillisecondsSinceEpoch(0);
+
+  final y = int.tryParse(m.group(1)!) ?? 1970;
+  final mo = int.tryParse(m.group(2)!) ?? 1;
+  final d = int.tryParse(m.group(3)!) ?? 1;
+  return DateTime(y, mo, d); // local midnight
+}
+
+
+String _fmtLocalDate(DateTime d) {
+  final y = d.year.toString().padLeft(4, '0');
+  final m = d.month.toString().padLeft(2, '0');
+  final day = d.day.toString().padLeft(2, '0');
+  return '$y-$m-$day';
+}
+
 // ---------------- DTOs ----------------
 
 class TokenResponse {
@@ -59,9 +93,16 @@ class TokenResponse {
 class ConventPeriodDto {
   final String id;
   final String semester;
+
+  /// date-only: YYYY-MM-DD
   final String startAt;
+
+  /// date-only: YYYY-MM-DD
   final String endAt;
+
+  /// backend can still expose this, but it is now derived from today server-side
   final bool active;
+
   final bool locked;
 
   ConventPeriodDto({
@@ -73,6 +114,9 @@ class ConventPeriodDto {
     required this.locked,
   });
 
+  DateTime get startDateLocal => _parseLocalDate(startAt);
+  DateTime get endDateLocal => _parseLocalDate(endAt);
+
   factory ConventPeriodDto.fromJson(Map<String, dynamic> json) => ConventPeriodDto(
     id: _reqString(json, 'id'),
     semester: _reqString(json, 'semester'),
@@ -83,24 +127,76 @@ class ConventPeriodDto {
   );
 }
 
+
+
 class UserBalanceDto {
   final String userId;
   final int balanceCents;
 
-  /// Backend liefert hier oft null -> deswegen nullable
+  // Optional/legacy (keep if your app still references it anywhere)
   final String? balanceFormatted;
 
   UserBalanceDto({
     required this.userId,
     required this.balanceCents,
-    required this.balanceFormatted,
+    this.balanceFormatted,
   });
 
-  factory UserBalanceDto.fromJson(Map<String, dynamic> json) => UserBalanceDto(
-    userId: _reqString(json, 'userId'),
-    balanceCents: _optInt(json, 'balanceCents', fallback: 0),
-    balanceFormatted: _optString(json, 'balanceFormatted'),
-  );
+  factory UserBalanceDto.fromJson(Map<String, dynamic> j) {
+    final idRaw = j['userId'] ?? j['id']; // accept both
+    final userId = (idRaw ?? '').toString();
+
+    int cents;
+    final v = j['balanceCents'];
+    if (v is num) {
+      cents = v.toInt();
+    } else {
+      cents = int.tryParse((v ?? 0).toString()) ?? 0;
+    }
+
+    final bf = j['balanceFormatted'];
+    final balanceFormatted = (bf == null) ? null : bf.toString();
+
+    return UserBalanceDto(
+      userId: userId,
+      balanceCents: cents,
+      balanceFormatted: balanceFormatted,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    // write both for cache compatibility across versions
+    'userId': userId,
+    'id': userId,
+    'balanceCents': balanceCents,
+    if (balanceFormatted != null) 'balanceFormatted': balanceFormatted,
+  };
+}
+
+DateTime? _optDateOnlyUtc(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v == null) return null;
+  final s = v.toString().trim();
+  if (s.isEmpty) return null;
+
+  // Backend now returns LocalDate as "YYYY-MM-DD"
+  if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) {
+    final parts = s.split('-');
+    final y = int.parse(parts[0]);
+    final m = int.parse(parts[1]);
+    final d = int.parse(parts[2]);
+    // Treat as UTC midnight to avoid timezone shifting
+    return DateTime.utc(y, m, d);
+  }
+
+  // Fallback: try regular ISO parse
+  return DateTime.tryParse(s);
+}
+
+String _fmtDateOnlyUtc(DateTime dt) {
+  final u = dt.toUtc();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${u.year}-${two(u.month)}-${two(u.day)}';
 }
 
 class LiveEventDto {
@@ -227,6 +323,16 @@ class TaskDto {
   /// Interpretiert als "für mich erledigt um ..." (optional)
   final String? solvedAt;
 
+  /// date-time
+  final String? dueAt;
+
+  /// recurring weekly
+  final bool recurringEnabled;
+  final List<String> recurringWeekdays;
+
+  /// time-only string (backend-defined format; treat as opaque for now, UI parses)
+  final String? recurringDueTime;
+
   final List<UserPickerDto> assignees;
   final String createdAt;
 
@@ -237,6 +343,10 @@ class TaskDto {
     required this.description,
     required this.solved,
     required this.solvedAt,
+    required this.dueAt,
+    required this.recurringEnabled,
+    required this.recurringWeekdays,
+    required this.recurringDueTime,
     required this.assignees,
     required this.createdAt,
   });
@@ -248,6 +358,10 @@ class TaskDto {
     description: _reqString(json, 'description'),
     solved: _optBool(json, 'solved', fallback: false),
     solvedAt: _optString(json, 'solvedAt'),
+    dueAt: _optString(json, 'dueAt'),
+    recurringEnabled: _optBool(json, 'recurringEnabled', fallback: false),
+    recurringWeekdays: _optStringList(json, 'recurringWeekdays'),
+    recurringDueTime: _optString(json, 'recurringDueTime'),
     assignees: (json['assignees'] is List)
         ? (json['assignees'] as List)
         .whereType<Map>()
@@ -263,16 +377,31 @@ class CreateTaskRequest {
   final String description;
   final List<String> assigneeUserIds;
 
+  /// date-time (ISO string). Backend expects it now.
+  final String? dueAt;
+
+  final bool? recurringEnabled;
+  final List<String>? recurringWeekdays;
+  final String? recurringDueTime;
+
   CreateTaskRequest({
     required this.title,
     required this.description,
     required this.assigneeUserIds,
+    this.dueAt,
+    this.recurringEnabled,
+    this.recurringWeekdays,
+    this.recurringDueTime,
   });
 
   Map<String, dynamic> toJson() => {
     'title': title,
     'description': description,
     'assigneeUserIds': assigneeUserIds,
+    if (dueAt != null) 'dueAt': dueAt,
+    if (recurringEnabled != null) 'recurringEnabled': recurringEnabled,
+    if (recurringWeekdays != null) 'recurringWeekdays': recurringWeekdays,
+    if (recurringDueTime != null) 'recurringDueTime': recurringDueTime,
   };
 }
 
@@ -281,16 +410,30 @@ class UpdateTaskRequest {
   final String? description;
   final List<String>? assigneeUserIds;
 
+  final String? dueAt;
+
+  final bool? recurringEnabled;
+  final List<String>? recurringWeekdays;
+  final String? recurringDueTime;
+
   UpdateTaskRequest({
     this.title,
     this.description,
     this.assigneeUserIds,
+    this.dueAt,
+    this.recurringEnabled,
+    this.recurringWeekdays,
+    this.recurringDueTime,
   });
 
   Map<String, dynamic> toJson() => {
     if (title != null) 'title': title,
     if (description != null) 'description': description,
     if (assigneeUserIds != null) 'assigneeUserIds': assigneeUserIds,
+    if (dueAt != null) 'dueAt': dueAt,
+    if (recurringEnabled != null) 'recurringEnabled': recurringEnabled,
+    if (recurringWeekdays != null) 'recurringWeekdays': recurringWeekdays,
+    if (recurringDueTime != null) 'recurringDueTime': recurringDueTime,
   };
 }
 
@@ -739,6 +882,63 @@ class AttendanceFineConfigDto {
   );
 }
 
+// ---------- Attendance fines: requests/results ----------
+
+class SetAttendanceFineConfigRequest {
+  final String? lateCatalogItemId;
+  final String? lateReason;
+  final int? lateAmountCents;
+
+  final String? absentCatalogItemId;
+  final String? absentReason;
+  final int? absentAmountCents;
+
+  SetAttendanceFineConfigRequest({
+    this.lateCatalogItemId,
+    this.lateReason,
+    this.lateAmountCents,
+    this.absentCatalogItemId,
+    this.absentReason,
+    this.absentAmountCents,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (lateCatalogItemId != null) 'lateCatalogItemId': lateCatalogItemId,
+    if (lateReason != null) 'lateReason': lateReason,
+    if (lateAmountCents != null) 'lateAmountCents': lateAmountCents,
+    if (absentCatalogItemId != null) 'absentCatalogItemId': absentCatalogItemId,
+    if (absentReason != null) 'absentReason': absentReason,
+    if (absentAmountCents != null) 'absentAmountCents': absentAmountCents,
+  };
+}
+
+class GenerateAttendanceFinesRequest {
+  final bool dryRun;
+
+  GenerateAttendanceFinesRequest({required this.dryRun});
+
+  Map<String, dynamic> toJson() => {'dryRun': dryRun};
+}
+
+class GenerateAttendanceFinesResultDto {
+  final int createdCount;
+  final List<String> fineIds;
+
+  GenerateAttendanceFinesResultDto({
+    required this.createdCount,
+    required this.fineIds,
+  });
+
+  factory GenerateAttendanceFinesResultDto.fromJson(Map<String, dynamic> json) =>
+      GenerateAttendanceFinesResultDto(
+        createdCount: _optInt(json, 'createdCount', fallback: 0),
+        fineIds: (json['fineIds'] is List)
+            ? (json['fineIds'] as List).map((e) => e.toString()).toList(growable: false)
+            : const <String>[],
+      );
+}
+
+
 // ---------- Live Events ----------
 class CreateLiveEventRequest {
   final String title;
@@ -778,7 +978,11 @@ class UpdateLiveEventRequest {
 
 class CreateConventPeriodRequest {
   final String semester;
+
+  /// date-only: YYYY-MM-DD
   final String startAt;
+
+  /// date-only: YYYY-MM-DD
   final String endAt;
 
   CreateConventPeriodRequest({
@@ -796,16 +1000,20 @@ class CreateConventPeriodRequest {
 
 class UpdateConventPeriodRequest {
   final String? semester;
+
+  /// date-only: YYYY-MM-DD
   final String? startAt;
+
+  /// date-only: YYYY-MM-DD
   final String? endAt;
-  final bool? active;
+
+  /// active is derived on backend now -> do not send from frontend
   final bool? locked;
 
   UpdateConventPeriodRequest({
     this.semester,
     this.startAt,
     this.endAt,
-    this.active,
     this.locked,
   });
 
@@ -813,7 +1021,6 @@ class UpdateConventPeriodRequest {
     if (semester != null) 'semester': semester,
     if (startAt != null) 'startAt': startAt,
     if (endAt != null) 'endAt': endAt,
-    if (active != null) 'active': active,
     if (locked != null) 'locked': locked,
   };
 }

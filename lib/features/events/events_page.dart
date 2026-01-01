@@ -206,11 +206,9 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   ConventPeriodDto? _periodForEvent(EventDto e) {
-    final dt = Format.parseIsoToLocal(e.startsAt);
+    final d = Format.dateOnlyFromIsoDateTimeLocal(e.startsAt);
     for (final p in _periodsSorted) {
-      final start = Format.parseIsoToLocal(p.startAt);
-      final end = Format.parseIsoToLocal(p.endAt);
-      if (!dt.isBefore(start) && !dt.isAfter(end)) return p;
+      if (Format.isDateWithinPeriodInclusive(dateLocalMidnight: d, period: p)) return p;
     }
     return null;
   }
@@ -295,7 +293,7 @@ class _EventsPageState extends State<EventsPage> {
       final periods = periodMap.keys.map((pid) => _periodById[pid]).whereType<ConventPeriodDto>().toList(growable: false);
       if (periods.isEmpty) return DateTime.fromMillisecondsSinceEpoch(1 << 62);
 
-      final starts = periods.map((p) => Format.parseIsoToLocal(p.startAt)).toList(growable: false);
+      final starts = periods.map((p) => p.startDateLocal).toList(growable: false);
 
       final futureStarts = starts.where((d) => !d.isBefore(now)).toList(growable: false)..sort();
       if (futureStarts.isNotEmpty) return futureStarts.first;
@@ -310,7 +308,7 @@ class _EventsPageState extends State<EventsPage> {
       if (periods.isEmpty) return 2;
 
       final anyFutureOrCurrent = periods.any((p) {
-        final end = Format.parseIsoToLocal(p.endAt);
+        final end = p.endDateLocal;
         return !end.isBefore(now);
       });
 
@@ -347,8 +345,8 @@ class _EventsPageState extends State<EventsPage> {
           final pa = _periodById[a];
           final pb = _periodById[b];
 
-          final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pa.startAt);
-          final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : Format.parseIsoToLocal(pb.startAt);
+          final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : pa.startDateLocal;
+          final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : pa!.startDateLocal;
 
           final aCurrentOrFuture = pa != null && !Format.parseIsoToLocal(pa.endAt).isBefore(now);
           final bCurrentOrFuture = pb != null && !Format.parseIsoToLocal(pb.endAt).isBefore(now);

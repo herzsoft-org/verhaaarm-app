@@ -34,11 +34,13 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
   bool _saving = false;
 
   String? _semesterValue;
-  DateTime? _startLocal;
-  DateTime? _endLocal;
+
+  /// date-only (local midnight)
+  DateTime? _startDateLocal;
+  DateTime? _endDateLocal;
 
   // --- Semester generation config ---
-  // Start at SS25 (as requested)
+  // Start at SS25
   static const int _startYear = 2025;
   static const bool _startIsSummer = true; // SS25
   static const int _count = 50;
@@ -80,10 +82,26 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
     _load();
   }
 
-  static String _guessSemesterFromDate(DateTime local) {
+  static DateTime _parseLocalDate(String s) {
+    final parts = s.split('-');
+    if (parts.length != 3) throw FormatException('Invalid date: $s');
+    final y = int.parse(parts[0]);
+    final m = int.parse(parts[1]);
+    final d = int.parse(parts[2]);
+    return DateTime(y, m, d);
+  }
+
+  static String _fmtLocalDate(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
+  }
+
+  static String _guessSemesterFromDate(DateTime localDate) {
     // SS = Apr-Sep, WS = Oct-Mar (WS label uses start year)
-    final y = local.year;
-    final m = local.month;
+    final y = localDate.year;
+    final m = localDate.month;
 
     if (m >= 4 && m <= 9) {
       return 'SS${(y % 100).toString().padLeft(2, '0')}';
@@ -117,19 +135,19 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
         if (!mounted) return;
         setState(() {
           _semesterValue = _closestSemesterOption(p.semester);
-          _startLocal = DateTime.parse(p.startAt).toLocal();
-          _endLocal = DateTime.parse(p.endAt).toLocal();
+          _startDateLocal = _parseLocalDate(p.startAt);
+          _endDateLocal = _parseLocalDate(p.endAt);
         });
       } else {
-        final now = DateTime.now().add(const Duration(hours: 2));
-        final start = DateTime(now.year, now.month, now.day, now.hour, now.minute);
-        final end = start.add(const Duration(days: 7));
-        final guess = _guessSemesterFromDate(start);
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final end = today.add(const Duration(days: 7));
+        final guess = _guessSemesterFromDate(today);
 
         if (!mounted) return;
         setState(() {
-          _startLocal = start;
-          _endLocal = end;
+          _startDateLocal = today;
+          _endDateLocal = end;
           _semesterValue = _closestSemesterOption(guess);
         });
       }
@@ -139,7 +157,7 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
         SnackBar(content: Text('Laden fehlgeschlagen: $e')),
       );
     } finally {
-      if (mounted) setState(() => _loading = false); // no return in finally
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -212,15 +230,13 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
     if (res != null) setState(() => _semesterValue = res);
   }
 
-  DateTime _stripSeconds(DateTime dt) => DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
-
-  Future<DateTime?> _pickDateTime({
+  Future<DateTime?> _pickDate({
     required DateTime? initial,
     DateTime? firstDate,
     DateTime? lastDate,
   }) async {
     final now = DateTime.now();
-    final init = initial ?? now.add(const Duration(hours: 2));
+    final init = initial ?? DateTime(now.year, now.month, now.day);
 
     final date = await showDatePicker(
       context: context,
@@ -230,21 +246,12 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
     );
     if (date == null) return null;
 
-    // Fix: avoid using BuildContext after an async gap without checking mounted.
-    if (!mounted) return null;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(init),
-    );
-    if (time == null) return null;
-
-    return _stripSeconds(DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    return DateTime(date.year, date.month, date.day);
   }
 
-  String _fmtLocal(DateTime? dt) {
-    if (dt == null) return '—';
-    return Format.dateTimeShort(dt.toIso8601String());
+  String _fmtLocal(DateTime? d) {
+    if (d == null) return '—';
+    return Format.dateShort(_fmtLocalDate(d));
   }
 
   Future<void> _submit() async {
@@ -253,18 +260,19 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
 
     final semester = (_semesterValue ?? '').trim();
     if (semester.isEmpty) {
-      setState(() {}); // show error
+      setState(() {});
       return;
     }
 
-    final start = _startLocal;
-    final end = _endLocal;
+    final start = _startDateLocal;
+    final end = _endDateLocal;
     if (start == null || end == null) return;
 
-    if (!end.isAfter(start)) {
+    // date-only: allow same day, forbid end < start
+    if (end.isBefore(start)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ende muss nach Start liegen.')),
+        const SnackBar(content: Text('Ende darf nicht vor Start liegen.')),
       );
       return;
     }
@@ -275,15 +283,15 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
       if (widget.periodId == null) {
         final req = CreateConventPeriodRequest(
           semester: semester,
-          startAt: start.toUtc().toIso8601String(),
-          endAt: end.toUtc().toIso8601String(),
+          startAt: _fmtLocalDate(start),
+          endAt: _fmtLocalDate(end),
         );
         await widget.api.createPeriod(req);
       } else {
         final req = UpdateConventPeriodRequest(
           semester: semester,
-          startAt: start.toUtc().toIso8601String(),
-          endAt: end.toUtc().toIso8601String(),
+          startAt: _fmtLocalDate(start),
+          endAt: _fmtLocalDate(end),
         );
         await widget.api.updatePeriod(widget.periodId!, req);
       }
@@ -305,7 +313,7 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
         SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
       );
     } finally {
-      if (mounted) setState(() => _saving = false); // no return in finally
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -369,59 +377,50 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.play_arrow_rounded),
-                      title: const Text('Start'),
-                      subtitle: Text(_fmtLocal(_startLocal)),
-                      trailing: const Icon(Icons.edit_calendar_rounded),
-                      onTap: _saving
-                          ? null
-                          : () async {
-                        final picked = await _pickDateTime(initial: _startLocal);
-                        if (!mounted || picked == null) return;
-
-                        setState(() {
-                          _startLocal = picked;
-                          final end = _endLocal;
-                          if (end == null || !end.isAfter(picked)) {
-                            _endLocal = picked.add(const Duration(days: 7));
-                          }
-                        });
-                      },
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.stop_rounded),
-                      title: const Text('Ende'),
-                      subtitle: Text(_fmtLocal(_endLocal)),
-                      trailing: const Icon(Icons.edit_calendar_rounded),
-                      onTap: _saving
-                          ? null
-                          : () async {
-                        final start = _startLocal;
-                        final picked = await _pickDateTime(
-                          initial: _endLocal ?? start?.add(const Duration(days: 7)),
-                          firstDate: start != null ? DateTime(start.year - 1) : null,
-                        );
-                        if (!mounted || picked == null) return;
-                        setState(() => _endLocal = picked);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _saving ? null : _submit,
-                        icon: _saving
-                            ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                            : const Icon(Icons.check_rounded),
-                        label: Text(_saving ? 'Speichern…' : 'Speichern'),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: _saving
+                                ? null
+                                : () async {
+                              final picked = await _pickDate(initial: _startDateLocal);
+                              if (!mounted || picked == null) return;
+                              setState(() => _startDateLocal = picked);
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Start (Datum)',
+                                prefixIcon: Icon(Icons.calendar_month_rounded),
+                                border: OutlineInputBorder(),
+                              ),
+                              child: Text(_fmtLocal(_startDateLocal)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: _saving
+                                ? null
+                                : () async {
+                              final picked = await _pickDate(initial: _endDateLocal);
+                              if (!mounted || picked == null) return;
+                              setState(() => _endDateLocal = picked);
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Ende (Datum)',
+                                prefixIcon: Icon(Icons.calendar_month_rounded),
+                                border: OutlineInputBorder(),
+                              ),
+                              child: Text(_fmtLocal(_endDateLocal)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

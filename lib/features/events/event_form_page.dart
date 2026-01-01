@@ -144,8 +144,8 @@ class _EventFormPageState extends State<EventFormPage> {
     // periods in DTO are ISO strings; compare in local time
     final dt = local;
     for (final p in _periods) {
-      final start = Format.parseIsoToLocal(p.startAt);
-      final end = Format.parseIsoToLocal(p.endAt);
+      final start = p.startDateLocal;
+      final end = p.endDateLocal;
       // inclusive start, inclusive end (adjust if your backend uses exclusive end)
       if (!dt.isBefore(start) && !dt.isAfter(end)) return p;
     }

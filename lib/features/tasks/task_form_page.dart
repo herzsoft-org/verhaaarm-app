@@ -63,11 +63,13 @@ class _TaskFormPageState extends State<TaskFormPage> {
       isScrollControlled: true,
       builder: (ctx) => _AssigneePickerSheet(
         api: widget.api,
+        initiallySelectedUsers: _assignees,
         initiallySelectedIds: selectedIds,
       ),
     );
 
     if (result == null) return;
+    if (!mounted) return; // FIX: avoid setState after dispose
     setState(() => _assignees = List<UserPickerDto>.unmodifiable(result));
   }
 
@@ -91,9 +93,14 @@ class _TaskFormPageState extends State<TaskFormPage> {
     try {
       if (widget.isEdit) {
         final id = widget.initial!.id;
-        await widget.api.updateTask(id, UpdateTaskRequest(title: title, description: desc, assigneeUserIds: assigneeIds));
+        await widget.api.updateTask(
+          id,
+          UpdateTaskRequest(title: title, description: desc, assigneeUserIds: assigneeIds),
+        );
       } else {
-        await widget.api.createTask(CreateTaskRequest(title: title, description: desc, assigneeUserIds: assigneeIds));
+        await widget.api.createTask(
+          CreateTaskRequest(title: title, description: desc, assigneeUserIds: assigneeIds),
+        );
       }
 
       if (!mounted) return;
@@ -213,9 +220,13 @@ class _AssigneePickerSheet extends StatefulWidget {
   final ApiClient api;
   final Set<String> initiallySelectedIds;
 
+  // NEW: damit wir beim Filtern/Neuladen keine Selektion verlieren
+  final List<UserPickerDto> initiallySelectedUsers;
+
   const _AssigneePickerSheet({
     required this.api,
     required this.initiallySelectedIds,
+    required this.initiallySelectedUsers,
   });
 
   @override
@@ -229,10 +240,19 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
   List<UserPickerDto> _users = const [];
   final Set<String> _selected = {};
 
+  // NEW: Cache für ausgewählte User-Objekte (damit OK nicht nur aus _users baut)
+  final Map<String, UserPickerDto> _selectedCache = {};
+
   @override
   void initState() {
     super.initState();
     _selected.addAll(widget.initiallySelectedIds);
+
+    // Seed cache with initial selections
+    for (final u in widget.initiallySelectedUsers) {
+      _selectedCache[u.id] = u;
+    }
+
     _load();
   }
 
@@ -247,6 +267,14 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
     try {
       final users = await widget.api.pickerUsers(query: query);
       users.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+
+      // NEW: update cache for currently visible selected users
+      for (final u in users) {
+        if (_selected.contains(u.id)) {
+          _selectedCache[u.id] = u;
+        }
+      }
+
       if (!mounted) return;
       setState(() => _users = List<UserPickerDto>.unmodifiable(users));
     } catch (_) {
@@ -256,19 +284,36 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
     }
   }
 
-  void _toggle(String id) {
+  void _toggle(UserPickerDto u) {
     setState(() {
-      if (_selected.contains(id)) {
-        _selected.remove(id);
+      if (_selected.contains(u.id)) {
+        _selected.remove(u.id);
+        // Cache behalten (optional), damit ein späteres OK weiterhin sauber zurückgibt
       } else {
-        _selected.add(id);
+        _selected.add(u.id);
+        _selectedCache[u.id] = u;
       }
     });
   }
 
   void _done() {
-    final selectedUsers = _users.where((u) => _selected.contains(u.id)).toList(growable: false);
-    Navigator.pop(context, selectedUsers);
+    // NEW: build result from selected IDs using cache first
+    final out = <UserPickerDto>[];
+
+    for (final id in _selected) {
+      final cached = _selectedCache[id];
+      if (cached != null) {
+        out.add(cached);
+        continue;
+      }
+
+      // Fallback: falls aus irgendeinem Grund nicht im Cache, aus aktueller Liste holen
+      final hit = _users.where((x) => x.id == id);
+      if (hit.isNotEmpty) out.add(hit.first);
+    }
+
+    out.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    Navigator.pop(context, List<UserPickerDto>.unmodifiable(out));
   }
 
   @override
@@ -315,9 +360,8 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                     final checked = _selected.contains(u.id);
                     return CheckboxListTile(
                       value: checked,
-                      onChanged: (_) => _toggle(u.id),
+                      onChanged: (_) => _toggle(u),
                       title: Text(u.displayName),
-                      // CHANGED: no username shown
                       subtitle: null,
                     );
                   },

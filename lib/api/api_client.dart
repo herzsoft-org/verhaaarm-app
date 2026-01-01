@@ -23,7 +23,7 @@ class ApiClient {
         connectTimeout: const Duration(seconds: 12),
         receiveTimeout: const Duration(seconds: 20),
         sendTimeout: const Duration(seconds: 20),
-        // no global Content-Type; Dio will set it per request
+        // don't set global Content-Type; Dio sets it per request
         headers: const {},
       ),
     );
@@ -34,6 +34,7 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          // allow AuthInterceptor / others to access the client
           options.extra['_dio_instance'] = dio;
           handler.next(options);
         },
@@ -41,21 +42,498 @@ class ApiClient {
     );
   }
 
-  // --- AUTH convenience (used by ProfilePage)
-  Future<TokenResponse> login({required String username, required String password}) {
-    return auth.login(username: username, password: password);
+  Future<ConventPeriodDto> unlockPeriod(String id) async {
+    // No dedicated /unlock endpoint in swagger; unlock via PATCH locked=false
+    final r = await dio.patch('/periods/$id', data: const {'locked': false});
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<UserDto> getMe() async {
-    final res = await dio.get('/users/me');
-    return UserDto.fromJson((res.data as Map).cast<String, dynamic>());
+
+  // ----------------------------
+  // AUTH convenience (swagger: /auth/login, /auth/refresh, /auth/logout)
+  // ----------------------------
+  Future<TokenResponse> login({required String username, required String password}) {
+    return auth.login(username: username, password: password);
   }
 
   Future<void> logoutOnServer(String refreshToken) async {
     await auth.logout(refreshToken: refreshToken);
   }
 
-  // --- NOTIFICATIONS
+  // ----------------------------
+  // USERS (swagger: /users, /users/{id}, /users/me, /users/*/balance, /users/{id}/password)
+  // ----------------------------
+
+  Future<List<UserPickerDto>> pickerUsers({String? query}) async {
+    // swagger: GET /users?active=true&query=...
+    final r = await dio.get(
+      '/users',
+      queryParameters: {
+        'active': true,
+        if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
+      },
+    );
+
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => UserPickerDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<List<UserDto>> listUsersFull({required bool active, String? query}) async {
+    final r = await dio.get(
+      '/users',
+      queryParameters: {
+        'active': active,
+        if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
+      },
+    );
+
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<List<UserDto>> listUsersAdmin() => listUsersFull(active: false);
+
+  Future<UserDto> createUser(CreateUserRequest req) async {
+    final r = await dio.post('/users', data: req.toJson());
+    return UserDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<UserDto> getUser(String id) async {
+    final r = await dio.get('/users/$id');
+    return UserDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<UserDto> updateUser(String id, UpdateUserRequest req) async {
+    final r = await dio.patch('/users/$id', data: req.toJson());
+    return UserDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteUserHard(String userId) async {
+    await dio.delete('/users/$userId');
+  }
+
+  Future<void> setUserPassword(String id, String newPassword) async {
+    await dio.patch('/users/$id/password', data: {'password': newPassword});
+  }
+
+  Future<UserDto> getMe() async {
+    final r = await dio.get('/users/me');
+    return UserDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<UserBalanceDto> getMyBalance({String? periodId}) async {
+    final r = await dio.get(
+      '/users/me/balance',
+      queryParameters: {
+        if (periodId != null && periodId.trim().isNotEmpty) 'periodId': periodId.trim(),
+      },
+    );
+    return UserBalanceDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<UserBalanceDto> getUserBalance(String userId, {String? periodId}) async {
+    final r = await dio.get(
+      '/users/$userId/balance',
+      queryParameters: {
+        if (periodId != null && periodId.trim().isNotEmpty) 'periodId': periodId.trim(),
+      },
+    );
+    return UserBalanceDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  // ----------------------------
+  // PERIODS (swagger: /periods, /periods/active, /periods/{id}, /lock, /activate)
+  // ----------------------------
+
+  Future<List<ConventPeriodDto>> listPeriods() async {
+    final r = await dio.get('/periods');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => ConventPeriodDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<ConventPeriodDto> getActivePeriod() async {
+    final r = await dio.get('/periods/active');
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<ConventPeriodDto> getPeriod(String id) async {
+    final r = await dio.get('/periods/$id');
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<ConventPeriodDto> createPeriod(CreateConventPeriodRequest req) async {
+    final r = await dio.post('/periods', data: req.toJson());
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<ConventPeriodDto> updatePeriod(String id, UpdateConventPeriodRequest req) async {
+    final r = await dio.patch('/periods/$id', data: req.toJson());
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<ConventPeriodDto> lockPeriod(String id) async {
+    final r = await dio.post('/periods/$id/lock');
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<ConventPeriodDto> activatePeriod(String id) async {
+    final r = await dio.post('/periods/$id/activate');
+    return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deletePeriod(String id) async {
+    await dio.delete('/periods/$id');
+  }
+
+  // ----------------------------
+  // EVENTS (swagger: /events, /events/{id})
+  // ----------------------------
+
+  Future<List<EventDto>> listEvents() async {
+    final r = await dio.get('/events');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => EventDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<EventDto> getEvent(String id) async {
+    final r = await dio.get('/events/$id');
+    return EventDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<EventDto> createEvent(CreateEventRequest req) async {
+    final r = await dio.post('/events', data: req.toJson());
+    return EventDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<EventDto> updateEvent(String id, UpdateEventRequest req) async {
+    final r = await dio.patch('/events/$id', data: req.toJson());
+    return EventDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteEvent(String id) async {
+    await dio.delete('/events/$id');
+  }
+
+  // ----------------------------
+  // ATTENDANCE (swagger: /events/{eventId}/attendance, generate-fines)
+  // ----------------------------
+
+  Future<List<AttendanceDto>> listAttendance(String eventId) async {
+    final r = await dio.get('/events/$eventId/attendance');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => AttendanceDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<AttendanceDto> upsertAttendance(String eventId, UpsertAttendanceRequest req) async {
+    final r = await dio.put('/events/$eventId/attendance', data: req.toJson());
+    return AttendanceDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteAttendance(String eventId, String userId) async {
+    await dio.delete('/events/$eventId/attendance/$userId');
+  }
+
+  Future<GenerateAttendanceFinesResultDto> generateAttendanceFines(
+      String eventId,
+      GenerateAttendanceFinesRequest req,
+      ) async {
+    final r = await dio.post('/events/$eventId/attendance/generate-fines', data: req.toJson());
+    return GenerateAttendanceFinesResultDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  // ----------------------------
+  // ATTENDANCE FINES CONFIG (swagger: GET/PUT /attendance-fines)
+  // ----------------------------
+
+  Future<AttendanceFineConfigDto> getAttendanceFineConfig() async {
+    final r = await dio.get('/attendance-fines');
+    return AttendanceFineConfigDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<AttendanceFineConfigDto> setAttendanceFineConfig(SetAttendanceFineConfigRequest req) async {
+    final r = await dio.put('/attendance-fines', data: req.toJson());
+    return AttendanceFineConfigDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  // ----------------------------
+  // FINES (swagger: /fines, /fines/{id}, /fines/export.csv)
+  // ----------------------------
+
+  Future<List<FineDto>> listFines() async {
+    final r = await dio.get('/fines');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => FineDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<FineDto> getFine(String id) async {
+    final r = await dio.get('/fines/$id');
+    return FineDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<FineDto> createFine(CreateFineRequest req) async {
+    final r = await dio.post('/fines', data: req.toJson());
+    return FineDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<FineDto> updateFine(String id, UpdateFineRequest req) async {
+    final r = await dio.patch('/fines/$id', data: req.toJson());
+    return FineDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteFine(String id) async {
+    await dio.delete('/fines/$id');
+  }
+
+  /// NOTE: Swagger confirms this exists:
+  /// GET /fines/export.csv
+  /// Your controller path uses query params (periodId/includeDeleted) in your client.
+  /// Keep it returning bytes.
+  Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {
+    return dio.get(
+      '/fines/export.csv',
+      queryParameters: {
+        if (periodId != null && periodId.trim().isNotEmpty) 'periodId': periodId.trim(),
+        if (includeDeleted) 'includeDeleted': true,
+      },
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: const {'Accept': 'text/csv'},
+      ),
+    );
+  }
+
+  // ----------------------------
+  // FINE PHOTOS (swagger: /fines/{fineId}/photos, /download)
+  // ----------------------------
+
+  Future<List<FinePhotoDto>> listFinePhotos(String fineId) async {
+    final r = await dio.get('/fines/$fineId/photos');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => FinePhotoDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<FinePhotoDto> uploadFinePhoto({
+    required String fineId,
+    String? filePath, // native
+    Uint8List? bytes, // web
+    required String filename,
+    String? contentType,
+  }) async {
+    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+      throw ArgumentError('Provide exactly one of filePath or bytes.');
+    }
+
+    final MultipartFile mf = (bytes != null)
+        ? MultipartFile.fromBytes(
+      bytes,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    )
+        : await MultipartFile.fromFile(
+      filePath!,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    );
+
+    final form = FormData.fromMap({'file': mf});
+
+    final r = await dio.post(
+      '/fines/$fineId/photos',
+      data: form,
+      // Dio sets boundary; specifying contentType explicitly is OK but not required.
+      options: Options(contentType: 'multipart/form-data'),
+    );
+
+    return FinePhotoDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<Uint8List> downloadFinePhotoBytes({
+    required String fineId,
+    required String photoId,
+  }) async {
+    final r = await dio.get(
+      '/fines/$fineId/photos/$photoId/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList((r.data as List<int>));
+  }
+
+  Future<void> deleteFinePhoto({
+    required String fineId,
+    required String photoId,
+  }) async {
+    await dio.delete('/fines/$fineId/photos/$photoId');
+  }
+
+  // ----------------------------
+  // FINE CATALOG (swagger: /fine-catalog, /fine-catalog/{id})
+  // ----------------------------
+
+  Future<List<FineCatalogItemDto>> listFineCatalog({bool? active, bool? forCreation}) async {
+    final r = await dio.get(
+      '/fine-catalog',
+      queryParameters: {
+        if (active != null) 'active': active,
+        if (forCreation != null) 'forCreation': forCreation,
+      },
+    );
+
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => FineCatalogItemDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<FineCatalogItemDto> createFineCatalogItem(CreateFineCatalogItemRequest req) async {
+    final r = await dio.post('/fine-catalog', data: req.toJson());
+    return FineCatalogItemDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<FineCatalogItemDto> getFineCatalogItem(String id) async {
+    final r = await dio.get('/fine-catalog/$id');
+    return FineCatalogItemDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<FineCatalogItemDto> updateFineCatalogItem(String id, UpdateFineCatalogItemRequest req) async {
+    final r = await dio.patch('/fine-catalog/$id', data: req.toJson());
+    return FineCatalogItemDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteFineCatalogItem(String id) async {
+    await dio.delete('/fine-catalog/$id');
+  }
+
+  // ----------------------------
+  // FINE SUGGESTIONS (swagger: /fine-suggestions, accept/reject)
+  // ----------------------------
+
+  Future<List<FineSuggestionDto>> listSuggestions({String? status, bool mine = false}) async {
+    final r = await dio.get(
+      '/fine-suggestions',
+      queryParameters: {
+        if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+        if (mine) 'mine': true,
+      },
+    );
+
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => FineSuggestionDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<FineSuggestionDto> getSuggestion(String id) async {
+    final r = await dio.get('/fine-suggestions/$id');
+    return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<FineSuggestionDto> createSuggestion(CreateFineSuggestionRequest req) async {
+    final r = await dio.post('/fine-suggestions', data: req.toJson());
+    return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> rejectSuggestion(String id) async {
+    await dio.post('/fine-suggestions/$id/reject');
+  }
+
+  Future<FineDtoAcceptResult> acceptSuggestion(String id) async {
+    final r = await dio.post('/fine-suggestions/$id/accept');
+    return FineDtoAcceptResult.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  // ----------------------------
+  // TASKS (swagger: /tasks, /tasks/{id}, /tasks/{id}/solved, /admin/tasks, /tasks/solved)
+  // ----------------------------
+
+  Future<List<TaskDto>> listMyTasks() async {
+    final r = await dio.get('/tasks');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => TaskDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<List<TaskDto>> listAdminTasks() async {
+    final r = await dio.get('/admin/tasks');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => TaskDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<TaskDto> createTask(CreateTaskRequest req) async {
+    final r = await dio.post('/tasks', data: req.toJson());
+    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<TaskDto> updateTask(String taskId, UpdateTaskRequest req) async {
+    final r = await dio.patch('/tasks/$taskId', data: req.toJson());
+    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<TaskDto> setTaskSolved(String taskId, {required bool solved}) async {
+    // swagger shows SetTaskSolvedRequest schema, but example is { solved: true }.
+    final r = await dio.post('/tasks/$taskId/solved', data: {'solved': solved});
+    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteTask(String taskId) async {
+    await dio.delete('/tasks/$taskId');
+  }
+
+  Future<void> deleteAllSolvedMyTasks() async {
+    await dio.delete('/tasks/solved');
+  }
+
+  // ----------------------------
+  // LIVE EVENTS (swagger: /live-events, /live-events/{id})
+  // ----------------------------
+
+  Future<List<LiveEventDto>> listLiveEvents() async {
+    final r = await dio.get('/live-events');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => LiveEventDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<LiveEventDto> getLiveEvent(String id) async {
+    final r = await dio.get('/live-events/$id');
+    return LiveEventDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<LiveEventDto> createLiveEvent(CreateLiveEventRequest req) async {
+    final r = await dio.post('/live-events', data: req.toJson());
+    return LiveEventDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<LiveEventDto> updateLiveEvent(String id, UpdateLiveEventRequest req) async {
+    final r = await dio.patch('/live-events/$id', data: req.toJson());
+    return LiveEventDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteLiveEvent(String id) async {
+    await dio.delete('/live-events/$id');
+  }
+
+  // ----------------------------
+  // NOTIFICATIONS (swagger: /notifications, /notifications/unread-count, /notifications/{id}/read)
+  // ----------------------------
+
   Future<List<NotificationDto>> listNotifications({int limit = 50}) async {
     final r = await dio.get('/notifications', queryParameters: {'limit': limit});
     final list = (r.data as List).cast<dynamic>();
@@ -81,7 +559,10 @@ class ApiClient {
     await dio.delete('/notifications');
   }
 
-  // --- PUSH REGISTRATION
+  // ----------------------------
+  // PUSH (swagger: /push/register/webpush, /push/register/fcm)
+  // ----------------------------
+
   Future<void> registerFcmToken(String token) async {
     await dio.post('/push/register/fcm', data: {'token': token});
   }
@@ -92,390 +573,17 @@ class ApiClient {
     required String auth,
     required Map<String, dynamic> raw,
   }) async {
-    await dio.post('/push/register/webpush', data: {
-      'endpoint': endpoint,
-      'keys': {'p256dh': p256dh, 'auth': auth},
-      'raw': raw,
-    });
-  }
-
-  // --- PERIODS / BALANCE
-  Future<ConventPeriodDto> getActivePeriod() async {
-    final r = await dio.get('/periods/active');
-    return ConventPeriodDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<UserBalanceDto> getMyBalance({String? periodId}) async {
-    final r = await dio.get('/users/me/balance', queryParameters: {
-      if (periodId != null) 'periodId': periodId,
-    });
-    return UserBalanceDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<List<ConventPeriodDto>> listPeriods() async {
-    final r = await dio.get('/periods');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => ConventPeriodDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<ConventPeriodDto> getPeriod(String id) async {
-    final res = await dio.get('/periods/$id');
-    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  Future<ConventPeriodDto> createPeriod(CreateConventPeriodRequest req) async {
-    final res = await dio.post('/periods', data: req.toJson());
-    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  /// Backend: PATCH /periods/{id}
-  Future<ConventPeriodDto> updatePeriod(String id, UpdateConventPeriodRequest req) async {
-    final res = await dio.patch('/periods/$id', data: req.toJson());
-    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  /// Backend: POST /periods/{id}/activate
-  Future<ConventPeriodDto> activatePeriod(String id) async {
-    final res = await dio.post('/periods/$id/activate');
-    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  /// Backend: POST /periods/{id}/lock
-  Future<ConventPeriodDto> lockPeriod(String id) async {
-    final res = await dio.post('/periods/$id/lock');
-    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  /// Backend (per your Swagger list): no /unlock endpoint -> PATCH locked=false
-  Future<ConventPeriodDto> unlockPeriod(String id) async {
-    final res = await dio.patch('/periods/$id', data: {'locked': false});
-    return ConventPeriodDto.fromJson(res.data as Map<String, dynamic>);
-  }
-
-  /// Backend: DELETE /periods/{id} (Swagger: 200 OK, no body)
-  Future<void> deletePeriod(String id) async {
-    await dio.delete('/periods/$id');
-  }
-
-  // --- USERS (picker)
-  Future<List<UserPickerDto>> pickerUsers({String? query}) async {
-    final r = await dio.get('/users', queryParameters: {
-      'active': true,
-      if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
-    });
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => UserPickerDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  // --- TASKS
-  Future<List<TaskDto>> listMyTasks() async {
-    final r = await dio.get('/tasks');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => TaskDto.fromJson((e as Map).cast<String, dynamic>())).toList();
-  }
-
-  Future<TaskDto> createTask(CreateTaskRequest req) async {
-    final r = await dio.post('/tasks', data: req.toJson());
-    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
-  }
-
-  Future<TaskDto> setTaskSolved(String taskId, {required bool solved}) async {
-    final r = await dio.post('/tasks/$taskId/solved', data: {'solved': solved});
-    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
-  }
-
-  Future<void> deleteTask(String taskId) async {
-    await dio.delete('/tasks/$taskId');
-  }
-
-  Future<TaskDto> updateTask(String taskId, UpdateTaskRequest req) async {
-    final r = await dio.patch('/tasks/$taskId', data: req.toJson());
-    return TaskDto.fromJson((r.data as Map).cast<String, dynamic>());
-  }
-
-  Future<void> deleteAllSolvedMyTasks() async {
-    await dio.delete('/tasks/solved');
-  }
-
-  Future<List<TaskDto>> listAdminTasks() async {
-    final r = await dio.get('/admin/tasks');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => TaskDto.fromJson((e as Map).cast<String, dynamic>())).toList();
-  }
-
-  // --- FINES
-  Future<List<FineDto>> listFines() async {
-    final r = await dio.get('/fines');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => FineDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<FineDto> getFine(String id) async {
-    final r = await dio.get('/fines/$id');
-    return FineDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<FineDto> createFine(CreateFineRequest req) async {
-    final r = await dio.post('/fines', data: req.toJson());
-    return FineDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<FineDto> updateFine(String id, UpdateFineRequest req) async {
-    final r = await dio.patch('/fines/$id', data: req.toJson());
-    return FineDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> deleteFine(String id) async {
-    await dio.delete('/fines/$id');
-  }
-
-  // --- FINES: PHOTOS
-  Future<List<FinePhotoDto>> listFinePhotos(String fineId) async {
-    final r = await dio.get('/fines/$fineId/photos');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => FinePhotoDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<FinePhotoDto> uploadFinePhoto({
-    required String fineId,
-    String? filePath, // native
-    Uint8List? bytes, // web
-    required String filename,
-    String? contentType, // optional
-  }) async {
-    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
-      throw ArgumentError('Provide exactly one of filePath or bytes.');
-    }
-
-    final MultipartFile mf = (bytes != null)
-        ? MultipartFile.fromBytes(
-      bytes,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    )
-        : await MultipartFile.fromFile(
-      filePath!,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    );
-
-    final form = FormData.fromMap({'file': mf});
-
-    final r = await dio.post(
-      '/fines/$fineId/photos',
-      data: form,
-      options: Options(contentType: 'multipart/form-data'),
-    );
-
-    return FinePhotoDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<Uint8List> downloadFinePhotoBytes({
-    required String fineId,
-    required String photoId,
-  }) async {
-    final r = await dio.get(
-      '/fines/$fineId/photos/$photoId/download',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return Uint8List.fromList((r.data as List<int>));
-  }
-
-  Future<void> deleteFinePhoto({
-    required String fineId,
-    required String photoId,
-  }) async {
-    await dio.delete('/fines/$fineId/photos/$photoId');
-  }
-
-  // --- Fine Catalog
-  Future<List<FineCatalogItemDto>> listFineCatalog({bool? active, bool? forCreation}) async {
-    final res = await dio.get(
-      '/fine-catalog',
-      queryParameters: {
-        if (active != null) 'active': active,
-        if (forCreation != null) 'forCreation': forCreation,
+    await dio.post(
+      '/push/register/webpush',
+      data: {
+        'endpoint': endpoint,
+        'keys': {'p256dh': p256dh, 'auth': auth},
+        'raw': raw,
       },
     );
-
-    final data = res.data as List;
-    return data.map((e) => FineCatalogItemDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<AttendanceFineConfigDto> getAttendanceFineConfig() async {
-    final r = await dio.get('/attendance-fines');
-    return AttendanceFineConfigDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  // --- Fine Suggestions
-  Future<List<FineSuggestionDto>> listSuggestions({String? status, bool mine = false}) async {
-    final r = await dio.get('/fine-suggestions', queryParameters: {
-      if (status != null) 'status': status,
-      if (mine) 'mine': true,
-    });
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => FineSuggestionDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<FineSuggestionDto> getSuggestion(String id) async {
-    final r = await dio.get('/fine-suggestions/$id');
-    return FineSuggestionDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<FineSuggestionDto> createSuggestion(CreateFineSuggestionRequest req) async {
-    final r = await dio.post('/fine-suggestions', data: req.toJson());
-    return FineSuggestionDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> rejectSuggestion(String id) async {
-    await dio.post('/fine-suggestions/$id/reject');
-  }
-
-  Future<FineDtoAcceptResult> acceptSuggestion(String id) async {
-    final r = await dio.post('/fine-suggestions/$id/accept');
-    return FineDtoAcceptResult.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  // --- EVENTS (scheduled events / calendar)
-  Future<List<EventDto>> listEvents() async {
-    final r = await dio.get('/events');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => EventDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<EventDto> getEvent(String id) async {
-    final r = await dio.get('/events/$id');
-    return EventDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<EventDto> createEvent(CreateEventRequest req) async {
-    final r = await dio.post('/events', data: req.toJson());
-    return EventDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<EventDto> updateEvent(String id, UpdateEventRequest req) async {
-    final r = await dio.patch('/events/$id', data: req.toJson());
-    return EventDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> deleteEvent(String id) async {
-    await dio.delete('/events/$id');
-  }
-
-  // --- ATTENDANCE
-  Future<List<AttendanceDto>> listAttendance(String eventId) async {
-    final r = await dio.get('/events/$eventId/attendance');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => AttendanceDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<AttendanceDto> upsertAttendance(String eventId, UpsertAttendanceRequest req) async {
-    final r = await dio.put('/events/$eventId/attendance', data: req.toJson());
-    return AttendanceDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> deleteAttendance(String eventId, String userId) async {
-    await dio.delete('/events/$eventId/attendance/$userId');
-  }
-
-  // --- LIVE EVENTS
-  Future<List<LiveEventDto>> listLiveEvents() async {
-    final r = await dio.get('/live-events');
-    final list = (r.data as List).cast<dynamic>();
-    return list.map((e) => LiveEventDto.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  Future<LiveEventDto> createLiveEvent(CreateLiveEventRequest req) async {
-    final r = await dio.post('/live-events', data: req.toJson());
-    return LiveEventDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<LiveEventDto> updateLiveEvent(String id, UpdateLiveEventRequest req) async {
-    final r = await dio.patch('/live-events/$id', data: req.toJson());
-    return LiveEventDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> deleteLiveEvent(String id) async {
-    await dio.delete('/live-events/$id');
-  }
-
-  // --- USERS (admin list: includes disabled)
-  Future<List<UserDto>> listUsersAdmin() async {
-    final res = await dio.get('/users');
-    final data = (res.data as List).cast<dynamic>();
-    return data.map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>())).toList();
-  }
-
-  Future<List<UserDto>> listUsersFull({required bool active, String? query}) async {
-    final res = await dio.get(
-      '/users',
-      queryParameters: {
-        'active': active,
-        if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
-      },
-    );
-
-    final data = (res.data as List).cast<dynamic>();
-    return data.map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>())).toList();
-  }
-
-  Future<void> deleteUserHard(String userId) async {
-    await dio.delete('/users/$userId');
-  }
-
-  Future<UserDto> createUser(CreateUserRequest req) async {
-    final r = await dio.post('/users', data: req.toJson());
-    return UserDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<UserDto> getUser(String id) async {
-    final r = await dio.get('/users/$id');
-    return UserDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<UserDto> updateUser(String id, UpdateUserRequest req) async {
-    final r = await dio.patch('/users/$id', data: req.toJson());
-    return UserDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> setUserPassword(String id, String newPassword) async {
-    await dio.patch('/users/$id/password', data: {'password': newPassword});
-  }
-
-  // --- Fine Catalog CRUD (admin)
-  Future<FineCatalogItemDto> createFineCatalogItem(CreateFineCatalogItemRequest req) async {
-    final r = await dio.post('/fine-catalog', data: req.toJson());
-    return FineCatalogItemDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<FineCatalogItemDto> getFineCatalogItem(String id) async {
-    final r = await dio.get('/fine-catalog/$id');
-    return FineCatalogItemDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<FineCatalogItemDto> updateFineCatalogItem(String id, UpdateFineCatalogItemRequest req) async {
-    final r = await dio.patch('/fine-catalog/$id', data: req.toJson());
-    return FineCatalogItemDto.fromJson(r.data as Map<String, dynamic>);
-  }
-
-  Future<void> deleteFineCatalogItem(String id) async {
-    await dio.delete('/fine-catalog/$id');
-  }
-
-  // --- EXPORT CSV
-  Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {
-    return dio.get(
-      '/fines/export.csv',
-      queryParameters: {
-        if (periodId != null) 'periodId': periodId,
-        if (includeDeleted) 'includeDeleted': true,
-      },
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: {
-          'Accept': 'text/csv',
-        },
-      ),
-    );
-  }
+// ----------------------------
+// ATTENDANCE: swagger includes DELETE returning 200 (no body). Keep void.
+// ----------------------------
 }

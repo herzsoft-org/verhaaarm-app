@@ -66,19 +66,6 @@ class _PeriodsPageState extends State<PeriodsPage> {
     }
   }
 
-  Future<void> _activate(String id) async {
-    try {
-      await widget.api.activatePeriod(id);
-      if (!mounted) return;
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode aktiviert.')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Aktivieren fehlgeschlagen: $e')));
-    }
-  }
-
   Future<void> _lock(String id) async {
     try {
       await widget.api.lockPeriod(id);
@@ -94,7 +81,6 @@ class _PeriodsPageState extends State<PeriodsPage> {
 
   Future<void> _unlock(String id) async {
     try {
-      // Backend has no POST /unlock in your Swagger list -> use PATCH locked=false
       await widget.api.unlockPeriod(id);
       if (!mounted) return;
       await _load();
@@ -148,7 +134,6 @@ class _PeriodsPageState extends State<PeriodsPage> {
   }
 
   Future<void> _onMenuSelected(String v, ConventPeriodDto p) async {
-    // Navigation without async-gap context usage
     if (v == 'edit') {
       if (!mounted) return;
       context.push('/office/periods/${p.id}/edit');
@@ -156,9 +141,6 @@ class _PeriodsPageState extends State<PeriodsPage> {
     }
 
     switch (v) {
-      case 'activate':
-        await _activate(p.id);
-        return;
       case 'lock':
         await _lock(p.id);
         return;
@@ -238,11 +220,6 @@ class _PeriodsPageState extends State<PeriodsPage> {
                     onSelected: (v) => _onMenuSelected(v, p),
                     itemBuilder: (ctx) => [
                       const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
-                      if (!p.active)
-                        const PopupMenuItem(
-                          value: 'activate',
-                          child: Text('Aktivieren (setzt andere inaktiv)'),
-                        ),
                       if (!p.locked) const PopupMenuItem(value: 'lock', child: Text('Lock')),
                       if (p.locked) const PopupMenuItem(value: 'unlock', child: Text('Unlock')),
                       const PopupMenuDivider(),
