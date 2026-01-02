@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 
 import 'auth_store.dart';
@@ -8,6 +9,15 @@ class AuthInterceptor extends Interceptor {
   final AuthApi authApi;
 
   AuthInterceptor({required this.authStore, required this.authApi});
+
+  Future<void>? _refreshing; // single-flight without TokenResponse type dependency
+
+  bool _shouldSkip(RequestOptions o) {
+    final path = o.path;
+    if (path.startsWith('/auth/')) return true;
+    if (o.extra['skip_auth_refresh'] == true) return true;
+    return false;
+  }
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -20,9 +30,10 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    // If unauthorized, try refresh once and retry request
     final status = err.response?.statusCode;
-    if (status != 401) {
+
+    // Only handle 401 for non-auth endpoints
+    if (status != 401 || _shouldSkip(err.requestOptions)) {
       handler.next(err);
       return;
     }
@@ -35,11 +46,17 @@ class AuthInterceptor extends Interceptor {
     }
 
     try {
-      final newTokens = await authApi.refresh(refreshToken: refreshToken);
-      await authStore.setTokens(
-        accessToken: newTokens.accessToken,
-        refreshToken: newTokens.refreshToken,
-      );
+      // Start refresh once; others await same future.
+      _refreshing ??= () async {
+        final newTokens = await authApi.refresh(refreshToken: refreshToken);
+        await authStore.setTokens(
+          accessToken: newTokens.accessToken,
+          refreshToken: newTokens.refreshToken,
+        );
+      }();
+
+      await _refreshing!;
+      _refreshing = null;
 
       final dio = (err.requestOptions.extra['_dio_instance'] as Dio?);
       if (dio == null) {
@@ -47,12 +64,21 @@ class AuthInterceptor extends Interceptor {
         return;
       }
 
-      final RequestOptions req = err.requestOptions;
+      final req = err.requestOptions;
+
+      // prevent infinite retry loops
+      if (req.extra['__retried'] == true) {
+        handler.next(err);
+        return;
+      }
+      req.extra['__retried'] = true;
+
       req.headers['Authorization'] = 'Bearer ${authStore.accessToken}';
 
       final response = await dio.fetch(req);
       handler.resolve(response);
     } catch (_) {
+      _refreshing = null;
       await authStore.clear();
       handler.next(err);
     }

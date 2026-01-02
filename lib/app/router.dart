@@ -56,6 +56,9 @@ Future<GoRouter> buildRouter() async {
     if (authStore.isLoggedIn) {
       push.initAndRegisterBestEffort();
       NotificationCenter.I.refreshUnreadCount();
+    } else {
+      push.stop();
+      NotificationCenter.I.reset();
     }
   });
 

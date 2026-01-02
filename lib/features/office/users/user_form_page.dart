@@ -53,6 +53,23 @@ class _UserFormPageState extends State<UserFormPage> {
     super.dispose();
   }
 
+  static String _roleLabelUi(String role) {
+    switch (role.toUpperCase()) {
+      case 'SENIOR':
+        return 'Sprecher';
+      case 'HOUSEKEEPING':
+        return 'Schmuckwart';
+      case 'MEMBER':
+        return 'Mitglied';
+      case 'ADMIN':
+        return 'Admin';
+      case 'TREASURER':
+        return 'Kassenwart';
+      default:
+        return role; // ADMIN, TREASURER, ...
+    }
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -243,7 +260,7 @@ class _UserFormPageState extends State<UserFormPage> {
                     Text('Rolle', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 6),
                     const Text(
-                      'Hinweis: Es muss immer mindestens einen ADMIN, SENIOR und HOUSEKEEPING geben.',
+                      'Hinweis: Es muss immer mindestens einen Admin, Sprecher und Schmuckwart geben.',
                     ),
                     const SizedBox(height: 12),
                     RadioGroup<String>(
@@ -252,13 +269,13 @@ class _UserFormPageState extends State<UserFormPage> {
                         if (v == null) return;
                         setState(() => _role = v);
                       },
-                      child: const Column(
+                      child: Column(
                         children: [
-                          _RoleRadio(label: 'ADMIN', value: 'ADMIN'),
-                          _RoleRadio(label: 'SENIOR', value: 'SENIOR'),
-                          _RoleRadio(label: 'HOUSEKEEPING', value: 'HOUSEKEEPING'),
-                          _RoleRadio(label: 'TREASURER', value: 'TREASURER'),
-                          _RoleRadio(label: 'MEMBER', value: 'MEMBER'),
+                          _RoleRadio(label: _roleLabelUi('ADMIN'), value: 'ADMIN'),
+                          _RoleRadio(label: _roleLabelUi('SENIOR'), value: 'SENIOR'),
+                          _RoleRadio(label: _roleLabelUi('HOUSEKEEPING'), value: 'HOUSEKEEPING'),
+                          _RoleRadio(label: _roleLabelUi('TREASURER'), value: 'TREASURER'),
+                          _RoleRadio(label: _roleLabelUi('MEMBER'), value: 'MEMBER'),
                         ],
                       ),
                     ),

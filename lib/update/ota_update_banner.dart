@@ -6,6 +6,37 @@ class OtaUpdateBanner extends StatelessWidget {
 
   const OtaUpdateBanner({super.key, required this.controller});
 
+  String _formatVersionUi(String v) {
+    final p = VersionParts.parse(v);
+    final core = '${p.major}.${p.minor}.${p.patch}';
+    final b = p.build;
+    return (b == null) ? core : '$core (Build $b)';
+  }
+
+  Future<bool> _confirmRedownload(BuildContext context) async {
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Erneut herunterladen?'),
+        content: const Text(
+          'Bist du sicher, dass du die Update-Datei erneut herunterladen willst? '
+              'Die vorhandene Datei wird dabei ersetzt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Erneut herunterladen'),
+          ),
+        ],
+      ),
+    );
+    return res ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -30,6 +61,13 @@ class OtaUpdateBanner extends StatelessWidget {
             compareAppVersions(st.cachedApkVersion!, st.currentVersion) > 0 &&
             compareAppVersions(st.cachedApkVersion!, st.latest.version) >= 0;
 
+        // UI state machine:
+        // 1) downloading -> progress only
+        // 2) sha1 mismatch / error after download -> error + Redownload button
+        // 3) downloaded & verified -> Install button + small redownload icon (with confirm)
+        // 4) update available, not downloaded -> Download button
+        final showRedownloadOnly = (st.error != null) && !canInstallCached && !st.downloading;
+
         return Card(
           color: cs.surfaceContainerLow,
           child: Padding(
@@ -43,7 +81,7 @@ class OtaUpdateBanner extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Your app has a new update!',
+                        'Für deine App ist ein neues Update verfügbar!',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -51,16 +89,10 @@ class OtaUpdateBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Installed: ${st.currentVersion}  •  Available: $effective',
+                  'Installiert: ${_formatVersionUi(st.currentVersion)}  •  Verfügbar: ${_formatVersionUi(effective)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (canInstallCached && st.cachedApkVersion != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Cached update ready to install.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+
                 if (st.error != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -68,6 +100,7 @@ class OtaUpdateBanner extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.error),
                   ),
                 ],
+
                 if (st.downloading) ...[
                   const SizedBox(height: 12),
                   LinearProgressIndicator(value: st.progress.clamp(0, 1)),
@@ -77,39 +110,56 @@ class OtaUpdateBanner extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    if (canInstallCached) ...[
-                      FilledButton.icon(
-                        onPressed: st.downloading ? null : () => controller.installDownloaded(),
-                        icon: const Icon(Icons.install_mobile_rounded),
-                        label: const Text('Install'),
-                      ),
-                      FilledButton.tonalIcon(
-                        onPressed: st.downloading ? null : () => controller.downloadLatest(),
-                        icon: const Icon(Icons.restart_alt_rounded),
-                        label: const Text('Retry download'),
-                      ),
-                    ] else ...[
-                      // If not installable (no download yet OR sha1 mismatch), offer download/retry download.
-                      FilledButton.icon(
-                        onPressed: st.downloading ? null : () => controller.downloadLatest(),
-                        icon: const Icon(Icons.download_rounded),
-                        label: Text(st.error != null ? 'Retry download' : 'Download'),
-                      ),
-                    ],
 
-                    // Keep a lightweight "check again" button as before.
-                    FilledButton.tonalIcon(
-                      onPressed: st.downloading ? null : () => controller.checkNow(),
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Check'),
+                if (!st.downloading) ...[
+                  const SizedBox(height: 12),
+
+                  // (4) Update available, not downloaded yet -> Download
+                  if (!canInstallCached && !showRedownloadOnly)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => controller.downloadLatest(),
+                        icon: const Icon(Icons.download_rounded),
+                        label: const Text('Herunterladen'),
+                      ),
                     ),
-                  ],
-                ),
+
+                  // (2) SHA1 mismatch / error -> Redownload (single button)
+                  if (showRedownloadOnly)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => controller.downloadLatest(),
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('Erneut herunterladen'),
+                      ),
+                    ),
+
+                  // (3) Downloaded & verified -> Install + small redownload icon (confirm)
+                  if (canInstallCached)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () => controller.installDownloaded(),
+                            icon: const Icon(Icons.install_mobile_rounded),
+                            label: const Text('Installieren'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Erneut herunterladen',
+                          onPressed: () async {
+                            final ok = await _confirmRedownload(context);
+                            if (!ok) return;
+                            controller.downloadLatest();
+                          },
+                          icon: const Icon(Icons.restart_alt_rounded),
+                        ),
+                      ],
+                    ),
+                ],
               ],
             ),
           ),

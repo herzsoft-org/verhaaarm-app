@@ -27,6 +27,23 @@ class _UsersPageState extends State<UsersPage> {
     _load();
   }
 
+  static String _roleLabelUi(String role) {
+    switch (role.toUpperCase()) {
+      case 'SENIOR':
+        return 'Sprecher';
+      case 'HOUSEKEEPING':
+        return 'Schmuckwart';
+      case 'MEMBER':
+        return 'Mitglied';
+      case 'ADMIN':
+        return 'Admin';
+      case 'TREASURER':
+        return 'Kassenwart';
+      default:
+        return role; // ADMIN, TREASURER, unbekannt
+    }
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -67,7 +84,7 @@ class _UsersPageState extends State<UsersPage> {
 
   String _singleRoleLabel(UserDto u) {
     if (u.roles.isEmpty) return '—';
-    return u.roles.first;
+    return _roleLabelUi(u.roles.first);
   }
 
   @override

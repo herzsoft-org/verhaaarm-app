@@ -235,10 +235,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   static String _roleLabelFromRoleSet(Set<AppRole> roles) {
     if (roles.contains(AppRole.admin)) return 'Admin';
-    if (roles.contains(AppRole.senior)) return 'Senior';
-    if (roles.contains(AppRole.treasurer)) return 'Treasurer';
-    if (roles.contains(AppRole.housekeeping)) return 'Housekeeping';
-    return 'Member';
+    if (roles.contains(AppRole.senior)) return 'Sprecher';
+    if (roles.contains(AppRole.treasurer)) return 'Kassenwart';
+    if (roles.contains(AppRole.housekeeping)) return 'Schmuckwart';
+    return 'Mitglied';
   }
 
   static bool _isStrongEnoughPassword(String s) {
@@ -620,7 +620,7 @@ class _ProfileSnapshot {
   factory _ProfileSnapshot.fromJson(Map<String, dynamic> json) => _ProfileSnapshot(
     displayName: (json['displayName'] as String?) ?? '—',
     username: (json['username'] as String?) ?? '—',
-    roleLabel: (json['roleLabel'] as String?) ?? 'Member',
+    roleLabel: (json['roleLabel'] as String?) ?? 'Mitglied',
     sessionLabel: (json['sessionLabel'] as String?) ?? '—',
     appVersion: (json['appVersion'] as String?) ?? '—',
     platformLabel: (json['platformLabel'] as String?) ?? '—',

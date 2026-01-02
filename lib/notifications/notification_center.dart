@@ -36,6 +36,12 @@ class NotificationCenter {
     _unreadStream.close();
   }
 
+  void reset() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _setUnread(0);
+  }
+
   void _onAuthChanged() {
     final loggedIn = _auth?.isLoggedIn == true;
 

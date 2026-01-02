@@ -30,4 +30,9 @@ class PushManager {
     debugPrint('WebPushRegistrar impl: $WebPushRegistrar'); // should not be stub
     await WebPushRegistrar(api: api, authStore: authStore).enableFromButtonClick();
   }
+
+  void stop() {
+    // Currently no timers/streams held by PushManager itself.
+    // Keep as a hook for future (and for router logout cleanup).
+  }
 }
