@@ -54,7 +54,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     // optimistic
     setState(() {
-      _items = _items.map((x) => x.id == n.id ? x.copyWith(readAt: DateTime.now().toUtc()) : x).toList(growable: false);
+      _items = _items
+          .map((x) => x.id == n.id ? x.copyWith(readAt: DateTime.now().toUtc()) : x)
+          .toList(growable: false);
     });
     NotificationCenter.I.decrementUnread(by: 1);
 
@@ -103,15 +105,27 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
-
   void _openFromNotification(NotificationDto n) {
-    final fineId = n.data['fineId'];
-    if (fineId != null && fineId.isNotEmpty) {
-      context.push('/fines/$fineId');
+    final data = n.data;
+    final type = n.type.toUpperCase();
+
+    // backend "notification" data keys
+    final fineId = (data['fineId'] ?? '').trim();
+    final taskId = (data['taskId'] ?? '').trim();
+
+    // Tasks: always go to tasks list
+    if (taskId.isNotEmpty || type.contains('TASK')) {
+      context.push('/tasks');
       return;
     }
 
-    // fallback: no deep link
+    // Fines: always go to my fines (as requested)
+    if (fineId.isNotEmpty || type.contains('FINE')) {
+      context.push('/my-fines');
+      return;
+    }
+
+    // fallback: stay
   }
 
   @override
@@ -178,7 +192,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    leading: unread ? const Icon(Icons.circle, size: 10) : const Icon(Icons.circle_outlined, size: 10),
+                    leading: unread
+                        ? const Icon(Icons.circle, size: 10)
+                        : const Icon(Icons.circle_outlined, size: 10),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
                       await _markRead(n);
@@ -205,7 +221,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 ),
               ),
             ],
-
 
             const SizedBox(height: 24),
           ],

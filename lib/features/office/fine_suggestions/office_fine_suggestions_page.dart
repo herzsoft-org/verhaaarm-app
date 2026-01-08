@@ -19,10 +19,12 @@ class OfficeFineSuggestionsPage extends StatefulWidget {
   });
 
   @override
-  State<OfficeFineSuggestionsPage> createState() => _OfficeFineSuggestionsPageState();
+  State<OfficeFineSuggestionsPage> createState() =>
+      _OfficeFineSuggestionsPageState();
 }
 
-class _OfficeFineSuggestionsPageState extends State<OfficeFineSuggestionsPage> {
+class _OfficeFineSuggestionsPageState
+    extends State<OfficeFineSuggestionsPage> {
   bool _loading = true;
   bool _acting = false;
 
@@ -48,7 +50,8 @@ class _OfficeFineSuggestionsPageState extends State<OfficeFineSuggestionsPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final suggestions = await widget.api.listSuggestions(status: _statusOpen);
+      final suggestions =
+      await widget.api.listSuggestions(status: _statusOpen);
       final users = await widget.api.pickerUsers();
       final catalog = await widget.api.listFineCatalog(active: null);
 
@@ -77,8 +80,10 @@ class _OfficeFineSuggestionsPageState extends State<OfficeFineSuggestionsPage> {
       if (t.isNotEmpty) return t;
       return 'Katalog-Beihängung';
     }
+
     final r = (s.reason ?? '').trim();
     if (r.isNotEmpty) return r;
+
     return 'Beihängungsvorschlag';
   }
 
@@ -100,9 +105,10 @@ class _OfficeFineSuggestionsPageState extends State<OfficeFineSuggestionsPage> {
         return;
       }
 
-      // Fallback (sollte selten sein)
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vorschlag akzeptiert (Fine-ID fehlt in Response).')),
+        const SnackBar(
+          content: Text('Vorschlag akzeptiert (Fine-ID fehlt).'),
+        ),
       );
       await _load();
     } catch (e) {
@@ -188,41 +194,59 @@ class _OfficeFineSuggestionsPageState extends State<OfficeFineSuggestionsPage> {
             final s = _items[i];
 
             final title = _titleForSuggestion(s);
-            final amount = Format.centsToEur(s.amountCents ?? 0);
-            final creator = _userLabel(s.creatorUserId);
-            final targets = s.targetUserIds.map(_userLabel).join(', ');
-            final reason = (s.reason ?? '').trim();
+            final amount =
+            Format.centsToEur(s.amountCents ?? 0);
+            final creator =
+            _userLabel(s.creatorUserId);
+            final targets =
+            s.targetUserIds.map(_userLabel).join(', ');
+            final reason =
+            (s.reason ?? '').trim();
+
+            final showReason = reason.isNotEmpty &&
+                (s.type == FineType.catalog ||
+                    title.trim() != reason);
 
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             title,
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium,
                           ),
                         ),
                         if (_acting)
                           const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child:
+                            CircularProgressIndicator(
+                                strokeWidth: 2),
                           ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text('Betrag: $amount'),
                     const SizedBox(height: 6),
-                    Text('Datum: ${Format.dateOnlyShort(s.fineDate)}'),
+                    Text(
+                        'Datum: ${Format.dateOnlyShort(s.fineDate)}'),
                     const SizedBox(height: 6),
-                    if (s.type == FineType.custom && reason.isNotEmpty) ...[
-                      Text('Grund: $reason'),
+                    if (showReason) ...[
+                      Text(
+                        s.type == FineType.catalog
+                            ? 'Hinweis: $reason'
+                            : 'Grund: $reason',
+                      ),
                       const SizedBox(height: 6),
                     ],
                     Text('Bbr.: $targets'),
@@ -231,31 +255,43 @@ class _OfficeFineSuggestionsPageState extends State<OfficeFineSuggestionsPage> {
                     const SizedBox(height: 6),
                     Text('Status: ${s.status}'),
                     const SizedBox(height: 6),
-                    Text('Erstellt: ${Format.dateTimeShort(s.createdAt)}'),
+                    Text(
+                        'Erstellt: ${Format.dateTimeShort(s.createdAt)}'),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
                           child: FilledButton(
-                            onPressed: (!canDecide || _acting) ? null : () => _accept(s),
-                            child: const Text('Akzeptieren'),
+                            onPressed: (!canDecide ||
+                                _acting)
+                                ? null
+                                : () => _accept(s),
+                            child:
+                            const Text('Akzeptieren'),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: FilledButton.tonal(
-                            onPressed: (!canDecide || _acting) ? null : () => _reject(s),
-                            child: const Text('Ablehnen'),
+                            onPressed: (!canDecide ||
+                                _acting)
+                                ? null
+                                : () => _reject(s),
+                            child:
+                            const Text('Ablehnen'),
                           ),
                         ),
                       ],
                     ),
                     if (!canDecide)
                       Padding(
-                        padding: const EdgeInsets.only(top: 10),
+                        padding:
+                        const EdgeInsets.only(top: 10),
                         child: Text(
                           'Du hast keine Rechte zum Akzeptieren/Ablehnen.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall,
                         ),
                       ),
                   ],

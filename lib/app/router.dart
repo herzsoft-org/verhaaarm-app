@@ -35,9 +35,15 @@ import '../features/office/tasks/office_tasks_page.dart';
 import '../features/notifications/notifications_page.dart';
 import '../notifications/notification_center.dart';
 import '../push/push_manager.dart';
+import '../push/push_fcm.dart' show setPushTapHandler;
 
 import '../models/dtos.dart';
 import '../auth/roles.dart';
+
+final GlobalKey<NavigatorState> rootNavKey = GlobalKey<NavigatorState>();
+
+GoRouter? _appRouter;
+GoRouter get appRouter => _appRouter!;
 
 Future<GoRouter> buildRouter() async {
   final authStore = AuthStore();
@@ -52,6 +58,7 @@ Future<GoRouter> buildRouter() async {
   NotificationCenter.I.init(api: api, authStore: authStore);
 
   final push = PushManager(api: api, authStore: authStore);
+
   authStore.addListener(() {
     if (authStore.isLoggedIn) {
       push.initAndRegisterBestEffort();
@@ -67,7 +74,8 @@ Future<GoRouter> buildRouter() async {
     NotificationCenter.I.refreshUnreadCount();
   }
 
-  return GoRouter(
+  final router = GoRouter(
+    navigatorKey: rootNavKey,
     observers: [routeObserver],
     initialLocation: '/home',
     refreshListenable: authStore,
@@ -92,7 +100,6 @@ Future<GoRouter> buildRouter() async {
         path: '/profile',
         builder: (context, state) => ProfilePage(api: api, authStore: authStore),
       ),
-
       GoRoute(
         path: '/notifications',
         builder: (context, state) => NotificationsPage(api: api, authStore: authStore),
@@ -169,12 +176,20 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/fines/:id',
-        builder: (context, state) => FineDetailPage(
-          api: api,
-          authStore: authStore,
-          fineId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) {
+          final roles = Roles.fromAccessToken(authStore.accessToken);
+          if (!Roles.canManageFines(roles)) {
+            return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
+          }
+
+          return FineDetailPage(
+            api: api,
+            authStore: authStore,
+            fineId: state.pathParameters['id']!,
+          );
+        },
       ),
+
       GoRoute(
         path: '/office/fine-suggestions',
         builder: (context, state) => OfficeFineSuggestionsPage(
@@ -297,4 +312,32 @@ Future<GoRouter> buildRouter() async {
       ),
     ),
   );
+
+  _appRouter = router;
+
+  // IMPORTANT: must be after _appRouter is set
+  setPushTapHandler((data) async {
+    final fineId = (data['fineId'] ?? '').trim();
+    final taskId = (data['taskId'] ?? '').trim();
+
+    // Prefer server "type" (matches NotificationDto.type like FINE_CREATED)
+    final type = (data['type'] ?? data['notificationType'] ?? '').toUpperCase();
+
+    // Tasks: always go to tasks list
+    if (taskId.isNotEmpty || type.contains('TASK')) {
+      appRouter.go('/tasks');
+      return;
+    }
+
+    // Fines: always go to my fines (as requested)
+    if (fineId.isNotEmpty || type.contains('FINE')) {
+      appRouter.go('/my-fines');
+      return;
+    }
+
+    // Fallback
+    appRouter.go('/notifications');
+  });
+
+  return router;
 }
