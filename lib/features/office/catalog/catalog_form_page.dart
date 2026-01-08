@@ -255,7 +255,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
                         final s = (v ?? '').trim();
                         if (s.isEmpty) return null;
                         final cents = Format.eurTextToCents(s);
-                        if (cents == null) return 'Ungültiger Betrag';
+                        if (cents == null) return 'Bitte gültigen Betrag angeben';
                         if (cents < 0) return '>= 0';
                         return null;
                       },

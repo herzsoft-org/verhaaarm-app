@@ -249,7 +249,7 @@ class _FineFormPageState extends State<FineFormPage> {
     final totalCents = _totalAmountCents();
     if (totalCents == null || totalCents < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ungültiger Betrag.')),
+        const SnackBar(content: Text('Bitte gültigen Betrag angeben.')),
       );
       return;
     }
@@ -443,6 +443,8 @@ class _FineFormPageState extends State<FineFormPage> {
                   const SizedBox(height: 12),
                   Form(
                     key: _formKey,
+                    // FIX: revalidate fields automatically as the user interacts/edits
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     child: Column(
                       children: [
                         if (_useCatalog) ...[
@@ -473,8 +475,10 @@ class _FineFormPageState extends State<FineFormPage> {
                             labelText: 'Grund',
                             prefixIcon: Icon(Icons.notes_rounded),
                           ),
+                          // FIX: ensure the error disappears immediately once text is entered
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
                           validator: (v) {
-                            if ((v ?? '').trim().isEmpty) return 'Grund fehlt.';
+                            if ((v ?? '').trim().isEmpty) return 'Bitte Grund angeben';
                             return null;
                           },
                         ),
@@ -498,12 +502,12 @@ class _FineFormPageState extends State<FineFormPage> {
                             if (_useCatalog) {
                               final def = _selectedCatalogItem?.defaultAmountCents;
                               if (def == null) return 'Katalogbetrag fehlt (Default Betrag).';
-                              if (def < 0) return 'Ungültiger Betrag.';
+                              if (def < 0) return 'Bitte gültigen Betrag angeben.';
                               return null;
                             }
                             final cents = Format.eurTextToCents(v ?? '');
-                            if (cents == null) return 'Ungültiger Betrag.';
-                            if (cents < 0) return 'Ungültiger Betrag.';
+                            if (cents == null) return 'Bitte gültigen Betrag angeben.';
+                            if (cents < 0) return 'Bitte gültigen Betrag angeben.';
                             return null;
                           },
                         ),
@@ -660,9 +664,7 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
     final query = _search.text.trim().toLowerCase();
     final filtered = query.isEmpty
         ? widget.items
-        : widget.items
-        .where((c) => c.title.toLowerCase().contains(query))
-        .toList(growable: false);
+        : widget.items.where((c) => c.title.toLowerCase().contains(query)).toList(growable: false);
 
     return SafeArea(
       child: Padding(
@@ -790,7 +792,7 @@ class _MultiplierRow extends StatelessWidget {
             const Icon(Icons.close_rounded),
             const SizedBox(width: 8),
             Text('x$value', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(width: 8),
+            const SizedBox(height: 8),
             IconButton(
               onPressed: onMinus,
               icon: const Icon(Icons.remove_circle_outline_rounded),

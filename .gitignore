@@ -7,6 +7,20 @@
 .buildlog/
 .history
 
+# Android Studio / IntelliJ caches
+.idea/caches/
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/shelf/
+
+# Device / emulator junk
+.idea/**/deviceStreaming.xml
+.idea/misc.xml
+
+
+/verhaarm-app/.idea/
+
 /.idea/workspace.xml
 
 # Flutter repo-specific

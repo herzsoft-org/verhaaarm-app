@@ -45,7 +45,8 @@ class _EventsPageState extends State<EventsPage> {
     'locked': p.locked,
   };
 
-  ConventPeriodDto _decodePeriod(Object json) => ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+  ConventPeriodDto _decodePeriod(Object json) =>
+      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeUser(UserPickerDto u) => {
     'id': u.id,
@@ -53,7 +54,8 @@ class _EventsPageState extends State<EventsPage> {
     'displayName': u.displayName,
   };
 
-  UserPickerDto _decodeUser(Object json) => UserPickerDto.fromJson((json as Map).cast<String, dynamic>());
+  UserPickerDto _decodeUser(Object json) =>
+      UserPickerDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeEvent(EventDto e) => {
     'id': e.id,
@@ -65,7 +67,8 @@ class _EventsPageState extends State<EventsPage> {
     'createdAt': e.createdAt,
   };
 
-  EventDto _decodeEvent(Object json) => EventDto.fromJson((json as Map).cast<String, dynamic>());
+  EventDto _decodeEvent(Object json) =>
+      EventDto.fromJson((json as Map).cast<String, dynamic>());
 
   @override
   void initState() {
@@ -76,7 +79,8 @@ class _EventsPageState extends State<EventsPage> {
   static ({int year, int term}) _semesterKey(String semester) {
     final s = semester.trim().toUpperCase();
     if (s.startsWith('SS')) {
-      final yy = int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final yy =
+          int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
       return (year: 2000 + yy, term: 1);
     }
     if (s.startsWith('WS')) {
@@ -96,25 +100,31 @@ class _EventsPageState extends State<EventsPage> {
     try {
       final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
         _kEventsPeriods,
-        decode: (json) => (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
+        decode: (json) =>
+            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
       );
       final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
         _kEventsEvents,
-        decode: (json) => (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+        decode: (json) =>
+            (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
       );
       final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
         _kEventsUsers,
-        decode: (json) => (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
+        decode: (json) =>
+            (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
       );
 
       final hasAnyCache = (cPeriods != null) || (cEvents != null) || (cUsers != null);
 
       if (hasAnyCache && mounted) {
-        final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
-          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periods = List<ConventPeriodDto>.from(
+          cPeriods?.value ?? const <ConventPeriodDto>[],
+        )..sort((a, b) => a.startAt.compareTo(b.startAt));
         final periodById = {for (final p in periods) p.id: p};
 
-        final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
+        final users = List<UserPickerDto>.from(
+          cUsers?.value ?? const <UserPickerDto>[],
+        );
         final userById = {for (final u in users) u.id: u};
 
         setState(() {
@@ -165,7 +175,8 @@ class _EventsPageState extends State<EventsPage> {
           encode: (v) => v.map(_encodeUser).toList(growable: false),
         );
 
-        final periodsSorted = List<ConventPeriodDto>.from(periods)..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final periodsSorted = List<ConventPeriodDto>.from(periods)
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
         final periodById = {for (final p in periodsSorted) p.id: p};
         final userById = {for (final u in users) u.id: u};
 
@@ -218,7 +229,8 @@ class _EventsPageState extends State<EventsPage> {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     final canCreate = Roles.canCreateEvent(roles);
 
-    final grouped = _buildGrouped(_events);
+    // FIX 1: showPast wird beim Gruppieren berücksichtigt (leere Perioden werden gar nicht erst erzeugt)
+    final grouped = _buildGrouped(_events, showPast: _showPast);
 
     return AppScaffold(
       title: 'Termine / Kalender',
@@ -273,10 +285,22 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  List<_SemesterGroup> _buildGrouped(List<EventDto> all) {
+  // FIX 2: Gruppierung + Sortierung korrekt:
+  // - bei showPast=false werden Past-Events vorab gefiltert => keine leeren Perioden/ Semester
+  // - Semester chronologisch (WS25/26 vor SS26 etc.), unknown zuletzt
+  // - Perioden innerhalb des Semesters chronologisch nach startAt, unknown zuletzt
+  List<_SemesterGroup> _buildGrouped(List<EventDto> all, {required bool showPast}) {
+    final now = DateTime.now();
+
+    final visibleEvents = all.where((e) {
+      if (showPast) return true;
+      final dt = Format.parseIsoToLocal(e.startsAt);
+      return !dt.isBefore(now);
+    }).toList(growable: false);
+
     final Map<String, Map<String, List<EventDto>>> map = {};
 
-    for (final e in all) {
+    for (final e in visibleEvents) {
       final p = _periodForEvent(e);
       final semester = p?.semester ?? 'Unbekannt';
       final pid = p?.id ?? 'unknown';
@@ -286,57 +310,26 @@ class _EventsPageState extends State<EventsPage> {
       map[semester]![pid]!.add(e);
     }
 
-    final now = DateTime.now();
-
-    DateTime semesterSortKey(String sem) {
-      final periodMap = map[sem]!;
-      final periods = periodMap.keys.map((pid) => _periodById[pid]).whereType<ConventPeriodDto>().toList(growable: false);
-      if (periods.isEmpty) return DateTime.fromMillisecondsSinceEpoch(1 << 62);
-
-      final starts = periods.map((p) => p.startDateLocal).toList(growable: false);
-
-      final futureStarts = starts.where((d) => !d.isBefore(now)).toList(growable: false)..sort();
-      if (futureStarts.isNotEmpty) return futureStarts.first;
-
-      final pastStarts = starts.where((d) => d.isBefore(now)).toList(growable: false)..sort();
-      return pastStarts.isNotEmpty ? pastStarts.last : DateTime.fromMillisecondsSinceEpoch(1 << 62);
-    }
-
-    int semesterIsFuture(String sem) {
-      final periodMap = map[sem]!;
-      final periods = periodMap.keys.map((pid) => _periodById[pid]).whereType<ConventPeriodDto>().toList(growable: false);
-      if (periods.isEmpty) return 2;
-
-      final anyFutureOrCurrent = periods.any((p) {
-        final end = p.endDateLocal;
-        return !end.isBefore(now);
-      });
-
-      return anyFutureOrCurrent ? 0 : 1;
-    }
-
     final semesters = map.keys.toList()
       ..sort((a, b) {
-        final fa = semesterIsFuture(a);
-        final fb = semesterIsFuture(b);
-        final c0 = fa.compareTo(fb);
-        if (c0 != 0) return c0;
-
-        final da = semesterSortKey(a);
-        final db = semesterSortKey(b);
-        final c1 = da.compareTo(db);
-        if (c1 != 0) return c1;
+        final au = a.trim().toLowerCase() == 'unbekannt';
+        final bu = b.trim().toLowerCase() == 'unbekannt';
+        if (au != bu) return au ? 1 : -1;
 
         final ka = _semesterKey(a);
         final kb = _semesterKey(b);
-        final c2 = ka.year.compareTo(kb.year);
-        if (c2 != 0) return c2;
+
+        final c1 = ka.year.compareTo(kb.year);
+        if (c1 != 0) return c1;
+
         return ka.term.compareTo(kb.term);
       });
 
     final result = <_SemesterGroup>[];
+
     for (final sem in semesters) {
       final periodMap = map[sem]!;
+
       final periodIds = periodMap.keys.toList()
         ..sort((a, b) {
           if (a == 'unknown' && b != 'unknown') return 1;
@@ -345,15 +338,11 @@ class _EventsPageState extends State<EventsPage> {
           final pa = _periodById[a];
           final pb = _periodById[b];
 
-          final da = pa == null ? DateTime.fromMillisecondsSinceEpoch(0) : pa.startDateLocal;
-          final db = pb == null ? DateTime.fromMillisecondsSinceEpoch(0) : pa!.startDateLocal;
+          if (pa == null && pb != null) return 1;
+          if (pb == null && pa != null) return -1;
+          if (pa == null && pb == null) return a.compareTo(b);
 
-          final aCurrentOrFuture = pa != null && !Format.parseIsoToLocal(pa.endAt).isBefore(now);
-          final bCurrentOrFuture = pb != null && !Format.parseIsoToLocal(pb.endAt).isBefore(now);
-
-          if (aCurrentOrFuture != bCurrentOrFuture) return aCurrentOrFuture ? -1 : 1;
-          if (aCurrentOrFuture && bCurrentOrFuture) return da.compareTo(db);
-          return db.compareTo(da);
+          return pa!.startAt.compareTo(pb!.startAt);
         });
 
       final periods = <_PeriodGroup>[];
@@ -456,6 +445,7 @@ class _PeriodSection extends StatelessWidget {
         ? (pg.periodId == 'unknown' ? 'Conventsperiode: Unbekannt' : 'Conventsperiode: ${pg.periodId}')
         : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
+    // Sicherheitsnetz: falls jemals wieder leere Groups reinkommen, nicht rendern
     final now = DateTime.now();
     final visibleEvents = pg.events.where((e) {
       if (showPast) return true;
@@ -464,17 +454,7 @@ class _PeriodSection extends StatelessWidget {
     }).toList();
 
     if (visibleEvents.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(header, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 6),
-            Text('Keine zukünftigen Termine.', style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     final flags = <Widget>[];
