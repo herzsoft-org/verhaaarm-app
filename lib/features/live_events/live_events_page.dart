@@ -40,8 +40,7 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
     'createdByUserId': e.createdByUserId,
   };
 
-  LiveEventDto _decodeLive(Object json) =>
-      LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
+  LiveEventDto _decodeLive(Object json) => LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
 
   @override
   void initState() {
@@ -129,9 +128,7 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
   }
 
   bool _canEdit(LiveEventDto e, Set<AppRole> roles, String? myUserId) {
-    if (roles.contains(AppRole.admin) ||
-        roles.contains(AppRole.senior) ||
-        roles.contains(AppRole.housekeeping)) {
+    if (roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping)) {
       return true;
     }
     return myUserId != null && e.createdByUserId == myUserId;
@@ -140,6 +137,7 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final cs = Theme.of(context).colorScheme;
 
     return AppScaffold(
       title: 'Wo geht was?',
@@ -183,10 +181,34 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
                 child: Card(
                   child: ListTile(
                     titleAlignment: ListTileTitleAlignment.center,
-                    leading: const Icon(Icons.group_rounded),
-                    title: Text(e.title),
-                    subtitle: Text(
-                      '${e.place}\nläuft bis: ${Format.dateTimeShort(e.expiresAt)}',
+                    // CHANGED: remove big leading icon; icons are now inline before text
+                    leading: null,
+                    title: Row(
+                      children: [
+                        Icon(Icons.campaign_rounded, size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(e.title)),
+                      ],
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((e.place ?? '').trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Icon(Icons.place_rounded, size: 18, color: cs.primary),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(e.place ?? '')),
+                              ],
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text('läuft bis: ${Format.dateTimeShort(e.expiresAt)}'),
+                        ),
+                      ],
                     ),
                     isThreeLine: true,
                     trailing: _canEdit(e, roles, _myUserId)

@@ -784,6 +784,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 }
 
+
 class _LiveEventPreviewTile extends StatelessWidget {
   final LiveEventDto e;
 
@@ -791,14 +792,44 @@ class _LiveEventPreviewTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(e.title, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text(e.place ?? '', style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 4),
-        Text(e.description ?? '', style: Theme.of(context).textTheme.bodySmall),
+        Row(
+          children: [
+            Icon(Icons.campaign_rounded, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                e.title,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if ((e.place ?? '').trim().isNotEmpty)
+          Row(
+            children: [
+              Icon(Icons.place_rounded, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  e.place ?? '',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        if ((e.description ?? '').trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            e.description ?? '',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ],
     );
   }
