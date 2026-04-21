@@ -62,6 +62,7 @@ class _EventsPageState extends State<EventsPage> {
     'title': e.title,
     'startsAt': e.startsAt,
     'mandatory': e.mandatory,
+    'eventKind': e.eventKind == EventKind.secondary ? 'SECONDARY' : 'MAIN',
     'creatorUserId': e.creatorUserId,
     'ownerType': e.ownerType.name,
     'createdAt': e.createdAt,
@@ -98,23 +99,28 @@ class _EventsPageState extends State<EventsPage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
+      final cPeriods =
+      await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
         _kEventsPeriods,
-        decode: (json) =>
-            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodePeriod(e as Object))
+            .toList(growable: false),
       );
       final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
         _kEventsEvents,
-        decode: (json) =>
-            (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodeEvent(e as Object))
+            .toList(growable: false),
       );
       final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
         _kEventsUsers,
-        decode: (json) =>
-            (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodeUser(e as Object))
+            .toList(growable: false),
       );
 
-      final hasAnyCache = (cPeriods != null) || (cEvents != null) || (cUsers != null);
+      final hasAnyCache =
+          (cPeriods != null) || (cEvents != null) || (cUsers != null);
 
       if (hasAnyCache && mounted) {
         final periods = List<ConventPeriodDto>.from(
@@ -212,14 +218,19 @@ class _EventsPageState extends State<EventsPage> {
 
   bool _canEditEvent(Set<AppRole> roles, EventDto e) {
     if (Roles.canManageAnyEvent(roles)) return true;
-    if (Roles.isHousekeeping(roles) && e.ownerType == EventOwnerType.housekeeping) return true;
+    if (Roles.isHousekeeping(roles) &&
+        e.ownerType == EventOwnerType.housekeeping) {
+      return true;
+    }
     return false;
   }
 
   ConventPeriodDto? _periodForEvent(EventDto e) {
     final d = Format.dateOnlyFromIsoDateTimeLocal(e.startsAt);
     for (final p in _periodsSorted) {
-      if (Format.isDateWithinPeriodInclusive(dateLocalMidnight: d, period: p)) return p;
+      if (Format.isDateWithinPeriodInclusive(dateLocalMidnight: d, period: p)) {
+        return p;
+      }
     }
     return null;
   }
@@ -229,7 +240,6 @@ class _EventsPageState extends State<EventsPage> {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     final canCreate = Roles.canCreateEvent(roles);
 
-    // FIX 1: showPast wird beim Gruppieren berücksichtigt (leere Perioden werden gar nicht erst erzeugt)
     final grouped = _buildGrouped(_events, showPast: _showPast);
 
     return AppScaffold(
@@ -241,8 +251,11 @@ class _EventsPageState extends State<EventsPage> {
           onPressed: _loading ? null : () => _load(force: true),
         ),
         IconButton(
-          tooltip: _showPast ? 'Vergangenheit ausblenden' : 'Vergangenheit anzeigen',
-          icon: Icon(_showPast ? Icons.history_toggle_off_rounded : Icons.history_rounded),
+          tooltip:
+          _showPast ? 'Vergangenheit ausblenden' : 'Vergangenheit anzeigen',
+          icon: Icon(
+            _showPast ? Icons.history_toggle_off_rounded : Icons.history_rounded,
+          ),
           onPressed: _loading ? null : () => setState(() => _showPast = !_showPast),
         ),
         if (canCreate)
@@ -285,11 +298,10 @@ class _EventsPageState extends State<EventsPage> {
     );
   }
 
-  // FIX 2: Gruppierung + Sortierung korrekt:
-  // - bei showPast=false werden Past-Events vorab gefiltert => keine leeren Perioden/ Semester
-  // - Semester chronologisch (WS25/26 vor SS26 etc.), unknown zuletzt
-  // - Perioden innerhalb des Semesters chronologisch nach startAt, unknown zuletzt
-  List<_SemesterGroup> _buildGrouped(List<EventDto> all, {required bool showPast}) {
+  List<_SemesterGroup> _buildGrouped(
+      List<EventDto> all, {
+        required bool showPast,
+      }) {
     final now = DateTime.now();
 
     final visibleEvents = all.where((e) {
@@ -437,15 +449,43 @@ class _PeriodSection extends StatelessWidget {
     required this.onEdit,
   });
 
+  IconData _iconForEvent(EventDto e) {
+    if (!e.mandatory) {
+      return Icons.sports_bar_rounded;
+    }
+
+    return switch (e.eventKind) {
+      EventKind.main => Icons.event_rounded,
+      EventKind.secondary => Icons.event_note_rounded,
+    };
+  }
+
+  Color _colorForEvent(BuildContext context, EventDto e) {
+    final scheme = Theme.of(context).colorScheme;
+    return switch (e.eventKind) {
+      EventKind.main => scheme.primary,
+      EventKind.secondary => scheme.tertiary,
+    };
+  }
+
+  Color _cardColorForEvent(BuildContext context, EventDto e) {
+    final scheme = Theme.of(context).colorScheme;
+    return switch (e.eventKind) {
+      EventKind.main => scheme.surfaceContainerHighest,
+      EventKind.secondary => scheme.tertiaryContainer.withValues(alpha: 0.45),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = period;
 
     final header = (p == null)
-        ? (pg.periodId == 'unknown' ? 'Conventsperiode: Unbekannt' : 'Conventsperiode: ${pg.periodId}')
+        ? (pg.periodId == 'unknown'
+        ? 'Conventsperiode: Unbekannt'
+        : 'Conventsperiode: ${pg.periodId}')
         : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
-    // Sicherheitsnetz: falls jemals wieder leere Groups reinkommen, nicht rendern
     final now = DateTime.now();
     final visibleEvents = pg.events.where((e) {
       if (showPast) return true;
@@ -458,8 +498,12 @@ class _PeriodSection extends StatelessWidget {
     }
 
     final flags = <Widget>[];
-    if (p?.active == true) flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
-    if (p?.locked == true) flags.add(_Chip(text: 'Locked', icon: Icons.lock_rounded));
+    if (p?.active == true) {
+      flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
+    }
+    if (p?.locked == true) {
+      flags.add(_Chip(text: 'Locked', icon: Icons.lock_rounded));
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -468,7 +512,12 @@ class _PeriodSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(header, style: Theme.of(context).textTheme.titleSmall)),
+              Expanded(
+                child: Text(
+                  header,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
               ...flags,
             ],
           ),
@@ -478,18 +527,32 @@ class _PeriodSection extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: Card(
                 elevation: 0,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: ListTile(
-                  titleAlignment: ListTileTitleAlignment.center,
-                  leading: Icon(e.mandatory ? Icons.event_rounded : Icons.sports_bar_rounded),
-                  title: Text(e.title),
-                  subtitle: Text(
-                    '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}\n'
-                        '${e.mandatory ? 'Pflichtveranstaltung' : ''}',
-                  ),
-                  isThreeLine: true,
-                  trailing: canEdit(e) ? const Icon(Icons.edit_rounded) : null,
-                  onTap: canEdit(e) ? () => onEdit(e.id) : null,
+                color: _cardColorForEvent(context, e),
+                child: Builder(
+                  builder: (context) {
+                    final accent = _colorForEvent(context, e);
+
+                    final subtitleParts = <String>[
+                      '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}',
+                      if (e.mandatory) 'Pflichtveranstaltung',
+                    ];
+
+                    return ListTile(
+                      titleAlignment: ListTileTitleAlignment.center,
+                      leading: CircleAvatar(
+                        backgroundColor: accent.withValues(alpha: 0.14),
+                        child: Icon(
+                          _iconForEvent(e),
+                          color: accent,
+                        ),
+                      ),
+                      title: Text(e.title),
+                      subtitle: Text(subtitleParts.join('\n')),
+                      isThreeLine: true,
+                      trailing: canEdit(e) ? const Icon(Icons.edit_rounded) : null,
+                      onTap: canEdit(e) ? () => onEdit(e.id) : null,
+                    );
+                  },
                 ),
               ),
             ),

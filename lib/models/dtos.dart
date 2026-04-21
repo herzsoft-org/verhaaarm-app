@@ -42,7 +42,6 @@ List<Map<String, dynamic>> _optList(Map<String, dynamic> j, String k) {
   return const <Map<String, dynamic>>[];
 }
 
-
 DateTime? _optDateTime(Map<String, dynamic> j, String k) {
   final s = _optString(j, k);
   if (s == null) return null;
@@ -61,7 +60,6 @@ DateTime _optDateTimeOrEpoch(Map<String, dynamic> j, String k) {
   return dt ?? DateTime.fromMillisecondsSinceEpoch(0);
 }
 
-
 // ---- date-only helpers (YYYY-MM-DD) ----
 // IMPORTANT: Do NOT DateTime.parse("YYYY-MM-DD").toLocal() because that can shift the day.
 // Treat backend date-only values as a LocalDate, i.e. local midnight.
@@ -77,8 +75,6 @@ DateTime _parseLocalDate(String s) {
   final d = int.tryParse(m.group(3)!) ?? 1;
   return DateTime(y, mo, d); // local midnight
 }
-
-
 
 // ---------------- DTOs ----------------
 
@@ -131,8 +127,6 @@ class ConventPeriodDto {
   );
 }
 
-
-
 class UserBalanceDto {
   final String userId;
   final int balanceCents;
@@ -177,8 +171,6 @@ class UserBalanceDto {
   };
 }
 
-
-
 class LiveEventDto {
   final String id;
   final String title;
@@ -186,7 +178,7 @@ class LiveEventDto {
   final String? description;
 
   final String createdByUserId;
-  final String createdAt;   // bleibt String
+  final String createdAt;
   final String expiresAt;
 
   LiveEventDto({
@@ -205,11 +197,10 @@ class LiveEventDto {
     place: _optString(json, 'place'),
     description: _optString(json, 'description'),
     createdByUserId: _reqString(json, 'createdByUserId'),
-    createdAt: _reqString(json, 'createdAt'), // <-- FIX
+    createdAt: _reqString(json, 'createdAt'),
     expiresAt: _reqString(json, 'expiresAt'),
   );
 }
-
 
 // ---------- Users (Picker) ----------
 class UserPickerDto {
@@ -301,8 +292,8 @@ class TaskDto {
   final DateTime? dueAt;
 
   final bool recurringEnabled;
-  final List<String> recurringWeekdays; // ["MON","WED",...]
-  final String? recurringDueTime; // "20:15" or "20:15:00"
+  final List<String> recurringWeekdays;
+  final String? recurringDueTime;
 
   final List<UserPickerDto> assignees;
   final DateTime createdAt;
@@ -354,8 +345,8 @@ class CreateTaskRequest {
 
   /// Recurring task fields
   final bool? recurringEnabled;
-  final List<String>? recurringWeekdays; // ["MON","WED",...]
-  final String? recurringDueTime; // "HH:mm:ss" (LocalTime)
+  final List<String>? recurringWeekdays;
+  final String? recurringDueTime;
 
   CreateTaskRequest({
     required this.title,
@@ -377,14 +368,12 @@ class CreateTaskRequest {
     };
 
     if (!recurring) {
-      // Normal task: dueAt must be present.
       if (dueAt != null) {
         m['dueAt'] = dueAt!.toUtc().toIso8601String();
       }
-      return m; // omit recurring keys
+      return m;
     }
 
-    // Recurring task: omit dueAt; backend derives it.
     m['recurringEnabled'] = true;
     if (recurringWeekdays != null) m['recurringWeekdays'] = recurringWeekdays;
     if (recurringDueTime != null) m['recurringDueTime'] = recurringDueTime;
@@ -547,7 +536,6 @@ class FinePhotoDto {
   final int sizeBytes;
   final String createdAt;
 
-  // optional (backend can add this later)
   final String? uploaderUserId;
 
   FinePhotoDto({
@@ -572,9 +560,7 @@ class FinePhotoDto {
 }
 
 class CreateFineRequest {
-  /// date-only: YYYY-MM-DD
   final String fineDate;
-
   final List<String> targetUserIds;
   final String? catalogItemId;
   final String? reason;
@@ -719,7 +705,27 @@ class FineDtoAcceptResult {
 // ---------- Scheduled Events ----------
 enum EventOwnerType { senior, housekeeping }
 
-EventOwnerType _eventOwnerTypeFromJson(String s) => (s == 'SENIOR') ? EventOwnerType.senior : EventOwnerType.housekeeping;
+EventOwnerType _eventOwnerTypeFromJson(String s) =>
+    (s == 'SENIOR') ? EventOwnerType.senior : EventOwnerType.housekeeping;
+
+enum EventKind { main, secondary }
+
+EventKind _eventKindFromJson(String s) =>
+    (s == 'SECONDARY') ? EventKind.secondary : EventKind.main;
+
+String _eventKindToJson(EventKind kind) =>
+    (kind == EventKind.secondary) ? 'SECONDARY' : 'MAIN';
+
+extension EventKindLabels on EventKind {
+  String get labelDe {
+    switch (this) {
+      case EventKind.main:
+        return 'Semesterprogrammveranstaltung';
+      case EventKind.secondary:
+        return 'Wochenplanveranstaltung';
+    }
+  }
+}
 
 class EventDto {
   final String id;
@@ -727,6 +733,7 @@ class EventDto {
   final String title;
   final String startsAt;
   final bool mandatory;
+  final EventKind eventKind;
   final EventOwnerType ownerType;
   final String createdAt;
 
@@ -736,6 +743,7 @@ class EventDto {
     required this.title,
     required this.startsAt,
     required this.mandatory,
+    required this.eventKind,
     required this.ownerType,
     required this.createdAt,
   });
@@ -746,6 +754,7 @@ class EventDto {
     title: _reqString(json, 'title'),
     startsAt: _reqString(json, 'startsAt'),
     mandatory: _optBool(json, 'mandatory', fallback: false),
+    eventKind: _eventKindFromJson(_reqString({'eventKind': json['eventKind'] ?? 'MAIN'}, 'eventKind')),
     ownerType: _eventOwnerTypeFromJson(_reqString(json, 'ownerType')),
     createdAt: _reqString(json, 'createdAt'),
   );
@@ -755,17 +764,20 @@ class CreateEventRequest {
   final String title;
   final String startsAt;
   final bool mandatory;
+  final EventKind eventKind;
 
   CreateEventRequest({
     required this.title,
     required this.startsAt,
     required this.mandatory,
+    required this.eventKind,
   });
 
   Map<String, dynamic> toJson() => {
     'title': title,
     'startsAt': startsAt,
     'mandatory': mandatory,
+    'eventKind': _eventKindToJson(eventKind),
   };
 }
 
@@ -773,17 +785,20 @@ class UpdateEventRequest {
   final String? title;
   final String? startsAt;
   final bool? mandatory;
+  final EventKind? eventKind;
 
   UpdateEventRequest({
     this.title,
     this.startsAt,
     this.mandatory,
+    this.eventKind,
   });
 
   Map<String, dynamic> toJson() => {
     if (title != null) 'title': title,
     if (startsAt != null) 'startsAt': startsAt,
     if (mandatory != null) 'mandatory': mandatory,
+    if (eventKind != null) 'eventKind': _eventKindToJson(eventKind!),
   };
 }
 
@@ -932,7 +947,6 @@ class GenerateAttendanceFinesResultDto {
             : const <String>[],
       );
 }
-
 
 // ---------- Live Events ----------
 class CreateLiveEventRequest {

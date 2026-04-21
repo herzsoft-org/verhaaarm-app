@@ -29,16 +29,15 @@ class _EventFormPageState extends State<EventFormPage> {
   bool _loading = true;
   bool _saving = false;
 
-  // periods are still useful to DISPLAY the derived period for a given date
   List<ConventPeriodDto> _periods = const [];
 
   final _title = TextEditingController();
   DateTime? _startsAtLocal;
   bool _mandatory = false;
+  EventKind _eventKind = EventKind.main;
 
   EventDto? _existing;
 
-  // attendance
   List<AttendanceDto> _attendance = const [];
   Map<String, UserPickerDto> _userById = const {};
 
@@ -65,7 +64,7 @@ class _EventFormPageState extends State<EventFormPage> {
       }
 
       final periods = await widget.api.listPeriods();
-      periods.sort((a, b) => b.startAt.compareTo(a.startAt)); // newest first
+      periods.sort((a, b) => b.startAt.compareTo(a.startAt));
 
       final users = await widget.api.pickerUsers();
       final userById = {for (final u in users) u.id: u};
@@ -80,11 +79,12 @@ class _EventFormPageState extends State<EventFormPage> {
         _existing = existing;
         _title.text = existing.title;
         _mandatory = existing.mandatory;
+        _eventKind = existing.eventKind;
         _startsAtLocal = DateTime.parse(existing.startsAt).toLocal();
       } else {
-        // default start time for new events (optional convenience)
         final now = DateTime.now();
         _startsAtLocal ??= now.add(const Duration(hours: 2));
+        _eventKind = EventKind.main;
       }
 
       if (!mounted) return;
@@ -141,12 +141,10 @@ class _EventFormPageState extends State<EventFormPage> {
 
   ConventPeriodDto? _derivedPeriodForLocal(DateTime? local) {
     if (local == null) return null;
-    // periods in DTO are ISO strings; compare in local time
     final dt = local;
     for (final p in _periods) {
       final start = p.startDateLocal;
       final end = p.endDateLocal;
-      // inclusive start, inclusive end (adjust if your backend uses exclusive end)
       if (!dt.isBefore(start) && !dt.isAfter(end)) return p;
     }
     return null;
@@ -169,6 +167,7 @@ class _EventFormPageState extends State<EventFormPage> {
             title: _title.text.trim(),
             startsAt: isoUtc,
             mandatory: _mandatory,
+            eventKind: _eventKind,
           ),
         );
       } else {
@@ -178,6 +177,7 @@ class _EventFormPageState extends State<EventFormPage> {
             title: _title.text.trim(),
             startsAt: isoUtc,
             mandatory: _mandatory,
+            eventKind: _eventKind,
           ),
         );
       }
@@ -393,8 +393,6 @@ class _EventFormPageState extends State<EventFormPage> {
                   Text('Details',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
-
-                  // derived period display (read-only)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading:
@@ -402,7 +400,6 @@ class _EventFormPageState extends State<EventFormPage> {
                     title: const Text('Conventsperiode (automatisch)'),
                     subtitle: Text(derivedText),
                   ),
-
                   const SizedBox(height: 12),
                   TextField(
                     controller: _title,
@@ -423,6 +420,42 @@ class _EventFormPageState extends State<EventFormPage> {
                       child: const Text('Wählen'),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Veranstaltungstyp',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<EventKind>(
+                        segments: const [
+                          ButtonSegment<EventKind>(
+                            value: EventKind.main,
+                            label: Text('Sempro'),
+                            icon: Icon(Icons.event_rounded),
+                          ),
+                          ButtonSegment<EventKind>(
+                            value: EventKind.secondary,
+                            label: Text('Wochenplan (Aufbau, Aufräumen...)'),
+                            icon: Icon(Icons.event_note_rounded),
+                          ),
+                        ],
+                        selected: {_eventKind},
+                        onSelectionChanged: _saving
+                            ? null
+                            : (selection) {
+                          setState(() => _eventKind = selection.first);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _eventKind.labelDe,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _mandatory,
@@ -435,8 +468,6 @@ class _EventFormPageState extends State<EventFormPage> {
               ),
             ),
           ),
-
-          // attendance section only for existing events
           if (_existing != null) ...[
             const SizedBox(height: 12),
             Card(
@@ -445,7 +476,6 @@ class _EventFormPageState extends State<EventFormPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header + actions (clean on phones, buttons wrap nicely)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -476,15 +506,12 @@ class _EventFormPageState extends State<EventFormPage> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 12),
-
                     if (_attendance.isEmpty)
                       Text(
                         'Keine Bbr. abwesend oder zu spät :)',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
-
                     for (final a in _attendance)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -520,8 +547,6 @@ class _EventFormPageState extends State<EventFormPage> {
               ),
             ),
           ],
-
-
           const SizedBox(height: 12),
           Row(
             children: [
