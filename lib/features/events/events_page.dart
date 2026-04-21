@@ -462,6 +462,11 @@ class _PeriodSection extends StatelessWidget {
 
   Color _colorForEvent(BuildContext context, EventDto e) {
     final scheme = Theme.of(context).colorScheme;
+
+    if (!e.mandatory) {
+      return scheme.secondary;
+    }
+
     return switch (e.eventKind) {
       EventKind.main => scheme.primary,
       EventKind.secondary => scheme.tertiary,
@@ -470,6 +475,11 @@ class _PeriodSection extends StatelessWidget {
 
   Color _cardColorForEvent(BuildContext context, EventDto e) {
     final scheme = Theme.of(context).colorScheme;
+
+    if (!e.mandatory) {
+      return scheme.secondaryContainer.withValues(alpha: 0.45);
+    }
+
     return switch (e.eventKind) {
       EventKind.main => scheme.surfaceContainerHighest,
       EventKind.secondary => scheme.tertiaryContainer.withValues(alpha: 0.45),

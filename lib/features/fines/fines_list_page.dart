@@ -29,6 +29,10 @@ class _FinesListPageState extends State<FinesListPage> {
     _load();
   }
 
+  bool _canResolveAllTargetUsers(FineDto f) {
+    return f.targetUserIds.every(_userById.containsKey);
+  }
+
   bool _isAttendanceSystemTitle(String title) {
     final t = title.trim().toLowerCase();
     return t == 'absent' || t == 'late';
@@ -150,6 +154,8 @@ class _FinesListPageState extends State<FinesListPage> {
     // group fines by computed period id (from fineDate)
     final Map<String, List<FineDto>> finesByPeriodId = {};
     for (final f in _fines) {
+      if (!_canResolveAllTargetUsers(f)) continue;
+
       final p = Format.findPeriodForFineDate(fineDate: f.fineDate, periods: periodsSorted);
       final pid = p?.id ?? 'unknown';
       finesByPeriodId.putIfAbsent(pid, () => <FineDto>[]);
