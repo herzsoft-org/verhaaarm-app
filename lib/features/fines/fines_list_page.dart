@@ -23,6 +23,9 @@ class _FinesListPageState extends State<FinesListPage> {
   Map<String, UserPickerDto> _userById = const {};
   Map<String, FineCatalogItemDto> _catalogById = const {};
 
+  String? _currentPeriodId;
+  String? _currentSemester;
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +80,25 @@ class _FinesListPageState extends State<FinesListPage> {
     return 'Beihängung';
   }
 
+  ConventPeriodDto? _detectCurrentPeriod(List<ConventPeriodDto> periods) {
+    for (final p in periods) {
+      if (p.active == true) return p;
+    }
+
+    final now = DateTime.now();
+    for (final p in periods) {
+      final start = Format.parseIsoToLocal(p.startAt);
+      final end = Format.parseIsoToLocal(p.endAt);
+      final startDay = DateTime(start.year, start.month, start.day);
+      final endDay = DateTime(end.year, end.month, end.day, 23, 59, 59, 999);
+      if (!now.isBefore(startDay) && !now.isAfter(endDay)) {
+        return p;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -90,12 +112,16 @@ class _FinesListPageState extends State<FinesListPage> {
       final catalog = await widget.api.listFineCatalog(active: null);
       final catalogById = {for (final c in catalog) c.id: c};
 
+      final currentPeriod = _detectCurrentPeriod(periods);
+
       if (!mounted) return;
       setState(() {
         _periods = periods;
         _userById = userById;
         _catalogById = catalogById;
         _fines = fines;
+        _currentPeriodId = currentPeriod?.id;
+        _currentSemester = currentPeriod?.semester;
       });
     } catch (e) {
       if (!mounted) return;
@@ -140,6 +166,8 @@ class _FinesListPageState extends State<FinesListPage> {
                 userLabel: _userLabel,
                 onTapFine: (id) => context.push('/fines/$id'),
                 isAttendanceFine: _isAttendanceFine,
+                initiallyExpanded: sem.semester == _currentSemester,
+                currentPeriodId: _currentPeriodId,
               ),
           ],
         ),
@@ -151,7 +179,6 @@ class _FinesListPageState extends State<FinesListPage> {
     final periodsSorted = [..._periods]
       ..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
 
-    // group fines by computed period id (from fineDate)
     final Map<String, List<FineDto>> finesByPeriodId = {};
     for (final f in _fines) {
       if (!_canResolveAllTargetUsers(f)) continue;
@@ -162,7 +189,6 @@ class _FinesListPageState extends State<FinesListPage> {
       finesByPeriodId[pid]!.add(f);
     }
 
-    // group periods by semester (includes empty periods initially)
     final Map<String, List<ConventPeriodDto>> periodsBySemester = {};
     for (final p in _periods) {
       periodsBySemester.putIfAbsent(p.semester, () => <ConventPeriodDto>[]);
@@ -192,13 +218,14 @@ class _FinesListPageState extends State<FinesListPage> {
         final fines = [...(finesByPeriodId[p.id] ?? const <FineDto>[])]
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-        // hide empty periods
-        if (fines.isEmpty) continue;
+        final isCurrentPeriod = p.id == _currentPeriodId;
+
+        // only keep empty period visible if it is the current one
+        if (fines.isEmpty && !isCurrentPeriod) continue;
 
         periodGroups.add(_PeriodGroup(period: p, fines: fines));
       }
 
-      // unknown fines only if any
       final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
       if (unknownFines.isNotEmpty) {
         unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -217,13 +244,11 @@ class _FinesListPageState extends State<FinesListPage> {
         );
       }
 
-      // hide empty semesters (no periods with fines, and no unknown fines)
       if (periodGroups.isEmpty) continue;
 
       result.add(_SemesterGroup(semester: sem, periods: periodGroups));
     }
 
-    // keep fallback if there are only unknown fines and no periods/semesters
     if (result.isEmpty && (finesByPeriodId['unknown']?.isNotEmpty ?? false)) {
       final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])]
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -273,6 +298,8 @@ class _SemesterSection extends StatelessWidget {
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
   final bool Function(FineDto) isAttendanceFine;
+  final bool initiallyExpanded;
+  final String? currentPeriodId;
 
   const _SemesterSection({
     required this.semester,
@@ -281,30 +308,32 @@ class _SemesterSection extends StatelessWidget {
     required this.userLabel,
     required this.onTapFine,
     required this.isAttendanceFine,
+    required this.initiallyExpanded,
+    required this.currentPeriodId,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(semester, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            for (final pg in periods)
-              _PeriodSection(
-                period: pg.period,
-                fines: pg.fines,
-                fineTitle: fineTitle,
-                userLabel: userLabel,
-                onTapFine: onTapFine,
-                isAttendanceFine: isAttendanceFine,
-              ),
-          ],
-        ),
+      child: ExpansionTile(
+        key: PageStorageKey('semester-$semester'),
+        initiallyExpanded: initiallyExpanded,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        title: Text(semester, style: Theme.of(context).textTheme.titleLarge),
+        children: [
+          for (final pg in periods)
+            _PeriodSection(
+              period: pg.period,
+              fines: pg.fines,
+              fineTitle: fineTitle,
+              userLabel: userLabel,
+              onTapFine: onTapFine,
+              isAttendanceFine: isAttendanceFine,
+              initiallyExpanded: pg.period.id == currentPeriodId,
+            ),
+        ],
       ),
     );
   }
@@ -318,6 +347,7 @@ class _PeriodSection extends StatelessWidget {
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
   final bool Function(FineDto) isAttendanceFine;
+  final bool initiallyExpanded;
 
   const _PeriodSection({
     required this.period,
@@ -326,6 +356,7 @@ class _PeriodSection extends StatelessWidget {
     required this.userLabel,
     required this.onTapFine,
     required this.isAttendanceFine,
+    required this.initiallyExpanded,
   });
 
   @override
@@ -335,50 +366,72 @@ class _PeriodSection extends StatelessWidget {
         : 'Conventsperiode: ${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}';
 
     final flags = <Widget>[];
-    if (period.active == true) flags.add(_Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
-    if (period.locked == true) flags.add(_Chip(text: 'Locked', icon: Icons.lock_rounded));
+    if (period.active == true) {
+      flags.add(const _Chip(text: 'Aktiv', icon: Icons.play_arrow_rounded));
+    }
+    if (period.locked == true) {
+      flags.add(const _Chip(text: 'Locked', icon: Icons.lock_rounded));
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        child: ExpansionTile(
+          key: PageStorageKey('period-${period.id}'),
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          title: Text(header, style: Theme.of(context).textTheme.titleSmall),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(child: Text(header, style: Theme.of(context).textTheme.titleSmall)),
               ...flags,
+              const SizedBox(width: 8),
+              const Icon(Icons.expand_more_rounded),
             ],
           ),
-          const SizedBox(height: 6),
-          for (final f in fines)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Card(
-                elevation: 0,
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          children: [
+            if (fines.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  titleAlignment: ListTileTitleAlignment.center,
-                  leading: const Icon(Icons.gavel_rounded),
-                  title: Text(fineTitle(f)),
-                  subtitle: Text(_subtitleForFine(f)),
-                  isThreeLine: true,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isAttendanceFine(f))
-                        const Chip(
-                          label: Text('Auto'),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      if (isAttendanceFine(f)) const SizedBox(width: 8),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
-                  ),
-                  onTap: () => onTapFine(f.id),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Keine Beihängungen in der aktuellen Conventsperiode'),
                 ),
-              ),
-            ),
-        ],
+              )
+            else
+              for (final f in fines)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Card(
+                    elevation: 0,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: ListTile(
+                      titleAlignment: ListTileTitleAlignment.center,
+                      leading: const Icon(Icons.gavel_rounded),
+                      title: Text(fineTitle(f)),
+                      subtitle: Text(_subtitleForFine(f)),
+                      isThreeLine: true,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isAttendanceFine(f))
+                            const Chip(
+                              label: Text('Auto'),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          if (isAttendanceFine(f)) const SizedBox(width: 8),
+                          const Icon(Icons.chevron_right_rounded),
+                        ],
+                      ),
+                      onTap: () => onTapFine(f.id),
+                    ),
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }

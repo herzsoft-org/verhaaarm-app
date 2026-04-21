@@ -150,7 +150,7 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
     final grouped = _groupByAssignee();
 
     return AppScaffold(
-      title: 'Arbeitsaufträge (Admin)',
+      title: 'Arbeitsaufträge verwalten',
       actions: [
         IconButton(
           tooltip: 'Neu laden',

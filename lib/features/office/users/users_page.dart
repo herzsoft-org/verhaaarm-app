@@ -20,6 +20,7 @@ class UsersPage extends StatefulWidget {
 class _UsersPageState extends State<UsersPage> {
   bool _loading = true;
   List<UserDto> _users = const [];
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -87,14 +88,49 @@ class _UsersPageState extends State<UsersPage> {
     return _roleLabelUi(u.roles.first);
   }
 
+  Future<void> _openSearch() async {
+    final controller = TextEditingController(text: _searchQuery);
+
+    final result = await showSearch<String?>(
+      context: context,
+      delegate: _UsersSearchDelegate(
+        users: _users,
+        initialQuery: _searchQuery,
+      ),
+    );
+
+    controller.dispose();
+
+    if (result != null && mounted) {
+      setState(() => _searchQuery = result);
+    }
+  }
+
+  List<UserDto> get _filteredUsers {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return _users;
+
+    return _users.where((u) {
+      final username = u.username.toLowerCase();
+      final displayName = u.displayName.toLowerCase();
+      return username.contains(q) || displayName.contains(q);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     final canCreate = Roles.canManageUsers(roles);
+    final filteredUsers = _filteredUsers;
 
     return AppScaffold(
       title: 'Nutzer',
       actions: [
+        IconButton(
+          tooltip: 'Suchen',
+          icon: const Icon(Icons.search_rounded),
+          onPressed: _loading ? null : _openSearch,
+        ),
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
@@ -112,12 +148,12 @@ class _UsersPageState extends State<UsersPage> {
           : ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          if (_users.isEmpty)
+          if (filteredUsers.isEmpty)
             const Padding(
               padding: EdgeInsets.all(8),
               child: Text('Keine Nutzer gefunden.'),
             ),
-          for (final u in _users)
+          for (final u in filteredUsers)
             Card(
               child: ListTile(
                 leading: Icon(u.disabled ? Icons.block_rounded : Icons.person_rounded),
@@ -132,6 +168,87 @@ class _UsersPageState extends State<UsersPage> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _UsersSearchDelegate extends SearchDelegate<String?> {
+  final List<UserDto> users;
+
+  _UsersSearchDelegate({
+    required this.users,
+    String initialQuery = '',
+  }) {
+    query = initialQuery;
+  }
+
+  List<UserDto> _filterUsers(String q) {
+    final needle = q.trim().toLowerCase();
+    if (needle.isEmpty) return users;
+
+    return users.where((u) {
+      final username = u.username.toLowerCase();
+      final displayName = u.displayName.toLowerCase();
+      return username.contains(needle) || displayName.contains(needle);
+    }).toList();
+  }
+
+  @override
+  String get searchFieldLabel => 'Nach Username oder Anzeigename suchen';
+
+  @override
+  List<Widget>? buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          tooltip: 'Leeren',
+          icon: const Icon(Icons.clear_rounded),
+          onPressed: () => query = '',
+        ),
+    ];
+  }
+
+  @override
+  Widget? buildLeading(BuildContext context) {
+    return IconButton(
+      tooltip: 'Zurück',
+      icon: const Icon(Icons.arrow_back_rounded),
+      onPressed: () => close(context, null),
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    close(context, query);
+    return const SizedBox.shrink();
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    final filteredUsers = _filterUsers(query);
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        if (filteredUsers.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(8),
+            child: Text('Keine Nutzer gefunden.'),
+          ),
+        for (final u in filteredUsers)
+          Card(
+            child: ListTile(
+              leading: Icon(u.disabled ? Icons.block_rounded : Icons.person_rounded),
+              title: Text('${u.displayName} (${u.username})'),
+              subtitle: Text(
+                u.disabled ? 'Deaktiviert' : '',
+              ),
+              isThreeLine: false,
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => close(context, query),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -89,8 +89,10 @@ class Roles {
     return roles.contains(AppRole.admin);
   }
 
-  // --- Tasks (ADMIN can see/edit/delete all)
+  // --- Tasks (who can see/edit/delete all)
   static bool canManageTasks(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin);
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
   }
 }
