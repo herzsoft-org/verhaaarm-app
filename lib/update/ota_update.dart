@@ -456,7 +456,7 @@ class OtaUpdateController extends ChangeNotifier {
       return;
     }
 
-    await _platform.invokeMethod('installApk', {'path': path});
+    await _platform.invokeMethod('installApkPreferSilent', {'path': path});
 
     // Do NOT delete here: we don't know if user completed install.
     // Cleanup happens on next app start/checkNow() when currentVersion >= apkVersion.
