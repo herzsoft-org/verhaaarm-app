@@ -1,11 +1,12 @@
 {
+    "id": "/",
     "name": "Verhåårm Web App",
     "short_name": "Verhåårm",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Verhåårm Web App",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

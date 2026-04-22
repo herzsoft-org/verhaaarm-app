@@ -23,7 +23,7 @@ class WebPushRegistrar {
 
   Future<void> initBestEffort() async {
     if (!authStore.isLoggedIn) return;
-    await _registerServiceWorkerBestEffort();
+    await _registerPushServiceWorker();
   }
 
   bool _isStandalone() {
@@ -75,18 +75,9 @@ class WebPushRegistrar {
       return;
     }
 
-    final sw = _serviceWorkerContainer();
-    if (sw == null) {
-      debugPrint('ABORT: serviceWorker container became null');
-      return;
-    }
-
-    // IMPORTANT: use ready registration, not controller
-    debugPrint('Awaiting serviceWorker.ready...');
-    final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS));
-    final reg = _asJsObject(readyRegAny);
+    final reg = await _registerPushServiceWorker();
     if (reg == null) {
-      debugPrint('ABORT: serviceWorker.ready returned null');
+      debugPrint('ABORT: push service worker registration failed');
       return;
     }
 
@@ -221,14 +212,27 @@ class WebPushRegistrar {
 
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
 
-  Future<void> _registerServiceWorkerBestEffort() async {
+  Future<JSObject?> _registerPushServiceWorker() async {
     try {
       final sw = _serviceWorkerContainer();
-      if (sw == null) return;
-      // Actually touch ready so Flutter’s SW is ensured active
-      await _awaitPromiseThen(sw.getProperty('ready'.toJS));
-    } catch (_) {
-      // ignore
+      if (sw == null) return null;
+
+      final regAny = await _awaitPromiseThen(
+        sw.callMethod(
+          'register'.toJS,
+          <JSAny?>[
+            '/push-sw.js'.toJS,
+            <String, Object?>{
+              'scope': '/',
+            }.jsify(),
+          ].toJS,
+        ),
+      );
+
+      return _asJsObject(regAny);
+    } catch (e) {
+      debugPrint('SW register failed: $e');
+      return null;
     }
   }
 
