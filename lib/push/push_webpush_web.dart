@@ -217,15 +217,19 @@ class WebPushRegistrar {
       final sw = _serviceWorkerContainer();
       if (sw == null) return null;
 
+      final registerAny = sw.getProperty('register'.toJS);
+      if (registerAny == null) {
+        debugPrint('SW register missing');
+        return null;
+      }
+
+      final registerFn = registerAny as JSFunction;
+
       final regAny = await _awaitPromiseThen(
-        sw.callMethod(
-          'register'.toJS,
-          <JSAny?>[
-            '/push-sw.js'.toJS,
-            <String, Object?>{
-              'scope': '/',
-            }.jsify(),
-          ].toJS,
+        registerFn.callAsFunction(
+          sw,
+          '/push-sw.js'.toJS,
+          <String, Object?>{'scope': '/'}.jsify(),
         ),
       );
 
