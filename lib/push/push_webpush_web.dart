@@ -23,7 +23,7 @@ class WebPushRegistrar {
 
   Future<void> initBestEffort() async {
     if (!authStore.isLoggedIn) return;
-    await _registerPushServiceWorker();
+    unawaited(_registerPushServiceWorker());
   }
 
   bool _isStandalone() {
@@ -75,9 +75,17 @@ class WebPushRegistrar {
       return;
     }
 
-    final reg = await _registerPushServiceWorker();
+    final sw = _serviceWorkerContainer();
+    if (sw == null) {
+      debugPrint('ABORT: serviceWorker container became null');
+      return;
+    }
+
+    debugPrint('Awaiting serviceWorker.ready...');
+    final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS));
+    final reg = _asJsObject(readyRegAny);
     if (reg == null) {
-      debugPrint('ABORT: push service worker registration failed');
+      debugPrint('ABORT: serviceWorker.ready returned null');
       return;
     }
 
@@ -115,19 +123,6 @@ class WebPushRegistrar {
     }
     final subscribeFn = subscribeAny as JSFunction;
 
-    try {
-      final existingAny = await _awaitPromiseThen(
-        getSubscriptionFn.callAsFunction(pushManager),
-      );
-      final existing = _asJsObject(existingAny);
-      debugPrint('Existing subscription? ${existing != null}');
-      if (existing != null) {
-        debugPrint('Existing endpoint=${existing.getProperty('endpoint'.toJS)?.toString()}');
-      }
-    } catch (e) {
-      debugPrint('getSubscription() failed: $e');
-    }
-
     final key = WebPushVapid.publicKey;
     debugPrint('VAPID publicKey len=${key.length}');
     debugPrint('VAPID publicKey head=${key.length >= 12 ? key.substring(0, 12) : key}');
@@ -153,16 +148,33 @@ class WebPushRegistrar {
     }.jsify();
 
     JSObject? sub;
+
     try {
-      debugPrint('Calling pushManager.subscribe(...)...');
-      final subAny = await _awaitPromiseThen(
-        subscribeFn.callAsFunction(pushManager, options),
+      final existingAny = await _awaitPromiseThen(
+        getSubscriptionFn.callAsFunction(pushManager),
       );
-      sub = _asJsObject(subAny);
-      debugPrint('subscribe() returned null? ${sub == null}');
+      final existing = _asJsObject(existingAny);
+      debugPrint('Existing subscription? ${existing != null}');
+      if (existing != null) {
+        debugPrint('Existing endpoint=${existing.getProperty('endpoint'.toJS)?.toString()}');
+        sub = existing;
+      }
     } catch (e) {
-      debugPrint('subscribe() threw: $e');
-      rethrow;
+      debugPrint('getSubscription() failed: $e');
+    }
+
+    if (sub == null) {
+      try {
+        debugPrint('Calling pushManager.subscribe(...)...');
+        final subAny = await _awaitPromiseThen(
+          subscribeFn.callAsFunction(pushManager, options),
+        );
+        sub = _asJsObject(subAny);
+        debugPrint('subscribe() returned null? ${sub == null}');
+      } catch (e) {
+        debugPrint('subscribe() threw: $e');
+        rethrow;
+      }
     }
 
     if (sub == null) {
@@ -175,19 +187,6 @@ class WebPushRegistrar {
     if (endpoint.isEmpty) {
       debugPrint('ABORT: empty endpoint');
       return;
-    }
-
-    try {
-      final verifyAny = await _awaitPromiseThen(
-        getSubscriptionFn.callAsFunction(pushManager),
-      );
-      final verify = _asJsObject(verifyAny);
-      debugPrint('Verify getSubscription() null? ${verify == null}');
-      if (verify != null) {
-        debugPrint('Verify endpoint=${verify.getProperty('endpoint'.toJS)?.toString()}');
-      }
-    } catch (e) {
-      debugPrint('Verify getSubscription() failed: $e');
     }
 
     final getKeyAny = sub.getProperty('getKey'.toJS);
