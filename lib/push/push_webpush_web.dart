@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -18,11 +19,35 @@ class WebPushRegistrar {
   final ApiClient api;
   final AuthStore authStore;
 
+  Timer? _keepAliveTimer;
+  bool _started = false;
+  bool _tickRunning = false;
+  String? _lastSyncedSignature;
+
   WebPushRegistrar({required this.api, required this.authStore});
 
   Future<void> initBestEffort() async {
     if (!authStore.isLoggedIn) return;
-    unawaited(_ensurePushServiceWorkerRegistered());
+    if (!_supportsWebPush()) return;
+    if (_started) return;
+
+    _started = true;
+
+    await _keepAliveTick();
+
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(
+      const Duration(minutes: 1),
+          (_) => unawaited(_keepAliveTick()),
+    );
+  }
+
+  void stop() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _started = false;
+    _tickRunning = false;
+    _lastSyncedSignature = null;
   }
 
   bool _isStandalone() {
@@ -180,63 +205,47 @@ class WebPushRegistrar {
       return;
     }
 
-    final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
-    debugPrint('Subscription endpoint=$endpoint');
-    if (endpoint.isEmpty) {
-      debugPrint('ABORT: empty endpoint');
-      return;
-    }
-
-    final getKeyAny = sub.getProperty('getKey'.toJS);
-    if (getKeyAny == null) {
-      debugPrint('ABORT: subscription.getKey missing');
-      return;
-    }
-    final getKeyFn = getKeyAny as JSFunction;
-
-    final p256dhBufAny = getKeyFn.callAsFunction(sub, 'p256dh'.toJS);
-    final authBufAny = getKeyFn.callAsFunction(sub, 'auth'.toJS);
-
-    if (p256dhBufAny == null || authBufAny == null) {
-      debugPrint('ABORT: subscription keys missing');
-      return;
-    }
-
-    final p256dhBytes = _arrayBufferToBytes(p256dhBufAny);
-    final authBytes = _arrayBufferToBytes(authBufAny);
-    if (p256dhBytes == null || authBytes == null) {
-      debugPrint('ABORT: key buffers could not be converted');
-      return;
-    }
-
-    final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
-    final authB64Url = _b64UrlNoPad(authBytes);
-
-    debugPrint('About to call api.registerWebPush');
-    debugPrint('endpoint=$endpoint');
-    debugPrint('p256dh len=${p256dhB64Url.length}');
-    debugPrint('auth len=${authB64Url.length}');
-
-    try {
-      await api.registerWebPush(
-        endpoint: endpoint,
-        p256dh: p256dhB64Url,
-        auth: authB64Url,
-        raw: {
-          'endpoint': endpoint,
-          'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
-        },
-      );
-      debugPrint('api.registerWebPush finished successfully');
-    } catch (e) {
-      debugPrint('api.registerWebPush failed: $e');
-      rethrow;
-    }
-
+    await _syncSubscriptionToBackend(sub, force: true);
     debugPrint('WebPush subscription registered on backend.');
+
+    await _keepAliveTick();
   }
 
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
+
+  Future<void> _keepAliveTick() async {
+    if (_tickRunning) return;
+    _tickRunning = true;
+
+    try {
+      if (!authStore.isLoggedIn) return;
+      if (!_supportsWebPush()) return;
+
+      final reg = await _ensurePushServiceWorkerRegistered();
+      if (reg == null) {
+        debugPrint('keepAlive: could not ensure push service worker');
+        return;
+      }
+
+      final permission = _getNotificationPermission();
+      if (permission != 'granted') {
+        debugPrint('keepAlive: notification permission is $permission, skipping subscription sync');
+        return;
+      }
+
+      final sub = await _getExistingSubscription(reg);
+      if (sub == null) {
+        debugPrint('keepAlive: no existing push subscription to sync');
+        return;
+      }
+
+      await _syncSubscriptionToBackend(sub);
+    } catch (e) {
+      debugPrint('keepAlive tick failed: $e');
+    } finally {
+      _tickRunning = false;
+    }
+  }
 
   Future<JSObject?> _getUsablePushRegistration() async {
     final sw = _serviceWorkerContainer();
@@ -245,7 +254,7 @@ class WebPushRegistrar {
       return null;
     }
 
-    final existing = await _getPushServiceWorkerRegistration();
+    final existing = await _findPushServiceWorkerRegistration();
     if (existing != null) {
       debugPrint('Found existing /push-sw.js registration');
       return existing;
@@ -275,33 +284,61 @@ class WebPushRegistrar {
     }
   }
 
-  Future<JSObject?> _getPushServiceWorkerRegistration() async {
+  Future<JSObject?> _findPushServiceWorkerRegistration() async {
     try {
       final sw = _serviceWorkerContainer();
       if (sw == null) return null;
 
-      final getRegistrationAny = sw.getProperty('getRegistration'.toJS);
-      if (getRegistrationAny == null) {
-        debugPrint('SW getRegistration missing');
+      final getRegistrationsAny = sw.getProperty('getRegistrations'.toJS);
+      if (getRegistrationsAny == null) {
+        debugPrint('SW getRegistrations missing');
         return null;
       }
 
-      final getRegistrationFn = getRegistrationAny as JSFunction;
+      final getRegistrationsFn = getRegistrationsAny as JSFunction;
 
-      final regAny = await _awaitPromiseThen(
-        getRegistrationFn.callAsFunction(sw, '/push-sw.js'.toJS),
-        label: 'serviceWorker.getRegistration(/push-sw.js)',
+      final regsAny = await _awaitPromiseThen(
+        getRegistrationsFn.callAsFunction(sw),
+        label: 'serviceWorker.getRegistrations',
       );
 
-      return _asJsObject(regAny);
+      final regsObj = _asJsObject(regsAny);
+      if (regsObj == null) return null;
+
+      final lengthAny = regsObj.getProperty('length'.toJS);
+      final length = int.tryParse(lengthAny?.toString() ?? '') ?? 0;
+
+      for (var i = 0; i < length; i++) {
+        final regAny = regsObj.getProperty(i.toString().toJS);
+        final reg = _asJsObject(regAny);
+        if (reg == null) continue;
+
+        final scriptUrl = _registrationScriptUrl(reg);
+        if (scriptUrl != null && scriptUrl.contains('/push-sw.js')) {
+          return reg;
+        }
+      }
+
+      return null;
     } catch (e) {
-      debugPrint('getRegistration(/push-sw.js) failed: $e');
+      debugPrint('getRegistrations failed: $e');
       return null;
     }
   }
 
+  String? _registrationScriptUrl(JSObject reg) {
+    for (final key in const ['active', 'waiting', 'installing']) {
+      final workerAny = reg.getProperty(key.toJS);
+      final worker = _asJsObject(workerAny);
+      if (worker == null) continue;
+      final url = worker.getProperty('scriptURL'.toJS)?.toString();
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
   Future<JSObject?> _ensurePushServiceWorkerRegistered() async {
-    final existing = await _getPushServiceWorkerRegistration();
+    final existing = await _findPushServiceWorkerRegistration();
     if (existing != null) return existing;
     return _registerPushServiceWorker();
   }
@@ -333,6 +370,84 @@ class WebPushRegistrar {
       debugPrint('SW register failed: $e');
       return null;
     }
+  }
+
+  Future<JSObject?> _getExistingSubscription(JSObject reg) async {
+    try {
+      final pushManagerAny = reg.getProperty('pushManager'.toJS);
+      if (pushManagerAny == null) return null;
+
+      final pushManager = pushManagerAny as JSObject;
+      final getSubscriptionAny = pushManager.getProperty('getSubscription'.toJS);
+      if (getSubscriptionAny == null) return null;
+
+      final subAny = await _awaitPromiseThen(
+        (getSubscriptionAny as JSFunction).callAsFunction(pushManager),
+        label: 'pushManager.getSubscription',
+      );
+
+      return _asJsObject(subAny);
+    } catch (e) {
+      debugPrint('getExistingSubscription failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> _syncSubscriptionToBackend(JSObject sub, {bool force = false}) async {
+    final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
+    if (endpoint.isEmpty) {
+      debugPrint('syncSubscriptionToBackend: empty endpoint');
+      return;
+    }
+
+    final getKeyAny = sub.getProperty('getKey'.toJS);
+    if (getKeyAny == null) {
+      debugPrint('syncSubscriptionToBackend: subscription.getKey missing');
+      return;
+    }
+    final getKeyFn = getKeyAny as JSFunction;
+
+    final p256dhBufAny = getKeyFn.callAsFunction(sub, 'p256dh'.toJS);
+    final authBufAny = getKeyFn.callAsFunction(sub, 'auth'.toJS);
+
+    if (p256dhBufAny == null || authBufAny == null) {
+      debugPrint('syncSubscriptionToBackend: subscription keys missing');
+      return;
+    }
+
+    final p256dhBytes = _arrayBufferToBytes(p256dhBufAny);
+    final authBytes = _arrayBufferToBytes(authBufAny);
+    if (p256dhBytes == null || authBytes == null) {
+      debugPrint('syncSubscriptionToBackend: key buffer conversion failed');
+      return;
+    }
+
+    final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
+    final authB64Url = _b64UrlNoPad(authBytes);
+
+    final signature = '$endpoint|$p256dhB64Url|$authB64Url';
+    if (!force && _lastSyncedSignature == signature) {
+      debugPrint('syncSubscriptionToBackend: unchanged, skip backend sync');
+      return;
+    }
+
+    debugPrint('About to call api.registerWebPush');
+    debugPrint('endpoint=$endpoint');
+    debugPrint('p256dh len=${p256dhB64Url.length}');
+    debugPrint('auth len=${authB64Url.length}');
+
+    await api.registerWebPush(
+      endpoint: endpoint,
+      p256dh: p256dhB64Url,
+      auth: authB64Url,
+      raw: {
+        'endpoint': endpoint,
+        'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
+      },
+    );
+
+    _lastSyncedSignature = signature;
+    debugPrint('api.registerWebPush finished successfully');
   }
 
   String _getNotificationPermission() {

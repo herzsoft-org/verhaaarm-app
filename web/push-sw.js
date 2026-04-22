@@ -20,7 +20,7 @@ self.addEventListener('push', (event) => {
       data,
       icon: '/icons/Icon-192.png',
       badge: '/icons/Icon-maskable-192.png',
-      tag: payload.notificationId || undefined,
+      tag: data.notificationId || undefined,
       renotify: false,
     })
   );

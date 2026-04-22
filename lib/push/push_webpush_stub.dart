@@ -14,4 +14,6 @@ class WebPushRegistrar {
   Future<void> enableFromButtonClick() async {
     // not web
   }
+
+  void stop() {}
 }

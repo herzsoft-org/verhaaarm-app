@@ -9,13 +9,16 @@ class PushManager {
   final ApiClient api;
   final AuthStore authStore;
 
+  WebPushRegistrar? _webRegistrar;
+
   PushManager({required this.api, required this.authStore});
 
   Future<void> initAndRegisterBestEffort() async {
     if (!authStore.isLoggedIn) return;
 
     if (kIsWeb) {
-      await WebPushRegistrar(api: api, authStore: authStore).initBestEffort();
+      _webRegistrar ??= WebPushRegistrar(api: api, authStore: authStore);
+      await _webRegistrar!.initBestEffort();
       return;
     }
 
@@ -23,16 +26,16 @@ class PushManager {
   }
 
   Future<void> enableWebPushFromButtonClick() async {
-    debugPrint('WebPushRegistrar runtime type: $WebPushRegistrar');
     if (!authStore.isLoggedIn) return;
     if (!kIsWeb) return;
 
-    debugPrint('WebPushRegistrar impl: $WebPushRegistrar'); // should not be stub
-    await WebPushRegistrar(api: api, authStore: authStore).enableFromButtonClick();
+    _webRegistrar ??= WebPushRegistrar(api: api, authStore: authStore);
+    await _webRegistrar!.initBestEffort();
+    await _webRegistrar!.enableFromButtonClick();
   }
 
   void stop() {
-    // Currently no timers/streams held by PushManager itself.
-    // Keep as a hook for future (and for router logout cleanup).
+    _webRegistrar?.stop();
+    _webRegistrar = null;
   }
 }
