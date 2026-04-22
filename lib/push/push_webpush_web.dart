@@ -3,7 +3,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -420,34 +419,21 @@ class WebPushRegistrar {
       JSAny? promiseLike, {
         String? label,
         Duration timeout = const Duration(seconds: 15),
-      }) {
-    if (promiseLike == null) return Future.value(null);
+      }) async {
+    if (promiseLike == null) return null;
 
-    final c = Completer<JSAny?>();
-    final win = web.window as JSObject;
-
-    final promiseCtorAny = win.getProperty('Promise'.toJS);
-    if (promiseCtorAny == null) return Future.value(promiseLike);
-
-    final promiseCtor = promiseCtorAny as JSObject;
-    final pAny = promiseCtor.callMethod('resolve'.toJS, <JSAny?>[promiseLike].toJS);
-
-    final onFulfilled = ((JSAny? v) {
-      if (!c.isCompleted) c.complete(v);
-    }).toJS;
-
-    final onRejected = ((JSAny? e) {
-      if (!c.isCompleted) c.completeError(e ?? 'Promise rejected');
-    }).toJS;
-
-    (pAny as JSObject).callMethod('then'.toJS, <JSAny?>[onFulfilled, onRejected].toJS);
-
-    return c.future.timeout(
-      timeout,
-      onTimeout: () {
-        throw TimeoutException('Timed out waiting for ${label ?? 'promise'}');
-      },
-    );
+    try {
+      final promise = promiseLike as JSPromise<JSAny?>;
+      return await promise.toDart.timeout(
+        timeout,
+        onTimeout: () {
+          throw TimeoutException('Timed out waiting for ${label ?? 'promise'}');
+        },
+      );
+    } catch (e) {
+      debugPrint('_awaitPromiseThen failed for ${label ?? 'promise'}: $e');
+      rethrow;
+    }
   }
 
   JSObject? _serviceWorkerContainer() {
