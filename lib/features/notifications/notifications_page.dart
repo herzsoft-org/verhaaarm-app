@@ -26,6 +26,7 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   bool _loading = true;
   bool _clearing = false;
+  bool _enablingWebPush = false;
   List<NotificationDto> _items = const [];
 
   @override
@@ -35,6 +36,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     // nice UX: refresh unread when entering page
     NotificationCenter.I.refreshUnreadCount();
+    if (kIsWeb) {
+      NotificationCenter.I.refreshPushStatus();
+    }
   }
 
   Future<void> _load() async {
@@ -105,6 +109,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
+  Future<void> _enableWebPush() async {
+    if (_enablingWebPush) return;
+
+    setState(() => _enablingWebPush = true);
+    try {
+      final pm = PushManager(api: widget.api, authStore: widget.authStore);
+      await pm.enableWebPushFromButtonClick();
+    } finally {
+      await NotificationCenter.I.refreshPushStatus();
+      if (mounted) setState(() => _enablingWebPush = false);
+    }
+  }
+
   void _openFromNotification(NotificationDto n) {
     final data = n.data;
     final type = n.type.toUpperCase();
@@ -128,6 +145,35 @@ class _NotificationsPageState extends State<NotificationsPage> {
     // fallback: stay
   }
 
+  String _pushStatusLabel(PushStatus status) {
+    switch (status) {
+      case PushStatus.enabled:
+        return 'Web-Benachrichtigungen sind bereits aktiviert';
+      case PushStatus.disabled:
+        return 'Web-Benachrichtigungen sind noch nicht aktiviert';
+      case PushStatus.error:
+        return 'Status der Web-Benachrichtigungen konnte nicht geprüft werden';
+      case PushStatus.unknown:
+        return 'Prüfe Status der Web-Benachrichtigungen ...';
+      case PushStatus.unsupported:
+        return '';
+    }
+  }
+
+  Color? _pushStatusColor(BuildContext context, PushStatus status) {
+    switch (status) {
+      case PushStatus.enabled:
+        return Colors.green;
+      case PushStatus.disabled:
+        return Colors.orange;
+      case PushStatus.error:
+        return Theme.of(context).colorScheme.error;
+      case PushStatus.unknown:
+      case PushStatus.unsupported:
+        return Theme.of(context).textTheme.bodyMedium?.color;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -136,6 +182,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
         onRefresh: () async {
           await _load();
           await NotificationCenter.I.refreshUnreadCount();
+          if (kIsWeb) {
+            await NotificationCenter.I.refreshPushStatus();
+          }
         },
         child: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -206,18 +255,44 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
             const SizedBox(height: 24),
 
-            // Web push enable button (safe to show everywhere; it no-ops on non-web)
             if (kIsWeb) ...[
               const SizedBox(height: 24),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final pm = PushManager(api: widget.api, authStore: widget.authStore);
-                    await pm.enableWebPushFromButtonClick();
+                  onPressed: _enablingWebPush ? null : _enableWebPush,
+                  icon: _enablingWebPush
+                      ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Icon(Icons.notifications_active),
+                  label: Text(
+                    _enablingWebPush
+                        ? 'Aktiviere Web-Benachrichtigungen ...'
+                        : 'Web-Benachrichtigungen aktivieren',
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: StreamBuilder<PushStatus>(
+                  stream: NotificationCenter.I.pushStatusStream,
+                  initialData: NotificationCenter.I.pushStatus,
+                  builder: (context, snapshot) {
+                    final status = snapshot.data ?? PushStatus.unknown;
+                    final label = _pushStatusLabel(status);
+                    if (label.isEmpty) return const SizedBox.shrink();
+
+                    return Text(
+                      label,
+                      style: TextStyle(
+                        color: _pushStatusColor(context, status),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
                   },
-                  icon: const Icon(Icons.notifications_active),
-                  label: const Text('Enable web notifications'),
                 ),
               ),
             ],
