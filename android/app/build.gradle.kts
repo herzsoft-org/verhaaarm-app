@@ -65,6 +65,7 @@ android {
         debug {
             // 2) Install alongside release + different launcher name
             applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             resValue("string", "app_name", "Verhåårm-Debug")
         }
 

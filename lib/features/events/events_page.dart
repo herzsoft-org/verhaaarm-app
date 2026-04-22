@@ -558,7 +558,7 @@ class _PeriodSection extends StatelessWidget {
                       ),
                       title: Text(e.title),
                       subtitle: Text(subtitleParts.join('\n')),
-                      isThreeLine: true,
+                      isThreeLine: e.mandatory,
                       trailing: canEdit(e) ? const Icon(Icons.edit_rounded) : null,
                       onTap: canEdit(e) ? () => onEdit(e.id) : null,
                     );
