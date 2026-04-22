@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          flutter build web --release
+          flutter build web --release --pwa-strategy=none
           cat web/push_sw_patch.js >> build/web/flutter_service_worker.js
           echo "== build/web contents =="
           ls -la build/web | head -200
