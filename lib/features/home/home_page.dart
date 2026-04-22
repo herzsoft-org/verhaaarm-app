@@ -768,11 +768,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Widget _buildLiveEventsCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    final hasLiveEvents = _liveEvents.isNotEmpty;
+    final liveCardColor = hasLiveEvents
+        ? cs.tertiaryContainer.withValues(alpha: 0.45)
+        : cs.surfaceContainerLow;
+
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () => GoRouter.of(context).push('/live-events'),
       child: Card(
-        color: cs.surfaceContainerLow,
+        color: liveCardColor,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

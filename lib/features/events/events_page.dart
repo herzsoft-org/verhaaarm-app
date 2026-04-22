@@ -35,6 +35,7 @@ class _EventsPageState extends State<EventsPage> {
   Map<String, UserPickerDto> _userById = const {};
 
   bool _showPast = false;
+  bool _showAllPast = false;
 
   Map<String, dynamic> _encodePeriod(ConventPeriodDto p) => {
     'id': p.id,
@@ -235,12 +236,50 @@ class _EventsPageState extends State<EventsPage> {
     return null;
   }
 
+  String? _currentSemester() {
+    if (_periodsSorted.isEmpty) return null;
+
+    final active = _periodsSorted.where((p) => p.active).toList(growable: false);
+    if (active.isNotEmpty) {
+      active.sort((a, b) => a.startAt.compareTo(b.startAt));
+      return active.last.semester;
+    }
+
+    final now = DateTime.now();
+    for (final p in _periodsSorted) {
+      final start = DateTime.parse(p.startAt);
+      final end = DateTime.parse(p.endAt);
+      final startOnly = DateTime(start.year, start.month, start.day);
+      final endOnly = DateTime(end.year, end.month, end.day, 23, 59, 59);
+
+      if (!now.isBefore(startOnly) && !now.isAfter(endOnly)) {
+        return p.semester;
+      }
+    }
+
+    final known = _periodsSorted.where((p) => p.semester.trim().isNotEmpty).toList()
+      ..sort((a, b) {
+        final ka = _semesterKey(a.semester);
+        final kb = _semesterKey(b.semester);
+
+        final c1 = ka.year.compareTo(kb.year);
+        if (c1 != 0) return c1;
+        return ka.term.compareTo(kb.term);
+      });
+
+    return known.isNotEmpty ? known.last.semester : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
     final canCreate = Roles.canCreateEvent(roles);
 
-    final grouped = _buildGrouped(_events, showPast: _showPast);
+    final grouped = _buildGrouped(
+      _events,
+      showPast: _showPast,
+      showAllPast: _showAllPast,
+    );
 
     return AppScaffold(
       title: 'Termine / Kalender',
@@ -258,8 +297,29 @@ class _EventsPageState extends State<EventsPage> {
           icon: Icon(
             _showPast ? Icons.history_toggle_off_rounded : Icons.history_rounded,
           ),
-          onPressed: _loading ? null : () => setState(() => _showPast = !_showPast),
+          onPressed: _loading
+              ? null
+              : () => setState(() {
+            _showPast = !_showPast;
+            if (!_showPast) {
+              _showAllPast = false;
+            }
+          }),
         ),
+        if (_showPast)
+          IconButton(
+            tooltip: _showAllPast
+                ? 'Nur vergangene Termine des aktuellen Semesters anzeigen'
+                : 'Alle vergangenen Termine anzeigen',
+            icon: Icon(
+              _showAllPast
+                  ? Icons.filter_alt_off_rounded
+                  : Icons.unfold_more_rounded,
+            ),
+            onPressed: _loading
+                ? null
+                : () => setState(() => _showAllPast = !_showAllPast),
+          ),
         if (canCreate)
           IconButton(
             tooltip: 'Neuer Termin',
@@ -303,13 +363,21 @@ class _EventsPageState extends State<EventsPage> {
   List<_SemesterGroup> _buildGrouped(
       List<EventDto> all, {
         required bool showPast,
+        required bool showAllPast,
       }) {
     final now = DateTime.now();
+    final currentSemester = _currentSemester();
 
     final visibleEvents = all.where((e) {
-      if (showPast) return true;
       final dt = Format.parseIsoToLocal(e.startsAt);
-      return !dt.isBefore(now);
+      final isPast = dt.isBefore(now);
+
+      if (!isPast) return true;
+      if (!showPast) return false;
+      if (showAllPast) return true;
+
+      final p = _periodForEvent(e);
+      return p?.semester == currentSemester;
     }).toList(growable: false);
 
     final Map<String, Map<String, List<EventDto>>> map = {};
@@ -361,7 +429,8 @@ class _EventsPageState extends State<EventsPage> {
 
       final periods = <_PeriodGroup>[];
       for (final pid in periodIds) {
-        final events = [...periodMap[pid]!]..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+        final events = [...periodMap[pid]!]
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
         periods.add(_PeriodGroup(periodId: pid, events: events));
       }
 
