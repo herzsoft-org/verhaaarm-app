@@ -101,10 +101,23 @@ class WebPushRegistrar {
     }
     final pushManager = pushManagerAny as JSObject;
 
-    // Existing subscription?
+    final getSubscriptionAny = pushManager.getProperty('getSubscription'.toJS);
+    if (getSubscriptionAny == null) {
+      debugPrint('ABORT: pushManager.getSubscription missing');
+      return;
+    }
+    final getSubscriptionFn = getSubscriptionAny as JSFunction;
+
+    final subscribeAny = pushManager.getProperty('subscribe'.toJS);
+    if (subscribeAny == null) {
+      debugPrint('ABORT: pushManager.subscribe missing');
+      return;
+    }
+    final subscribeFn = subscribeAny as JSFunction;
+
     try {
       final existingAny = await _awaitPromiseThen(
-        pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
+        getSubscriptionFn.callAsFunction(pushManager),
       );
       final existing = _asJsObject(existingAny);
       debugPrint('Existing subscription? ${existing != null}');
@@ -115,7 +128,6 @@ class WebPushRegistrar {
       debugPrint('getSubscription() failed: $e');
     }
 
-    // --- VAPID sanity logs (recommended) ---
     final key = WebPushVapid.publicKey;
     debugPrint('VAPID publicKey len=${key.length}');
     debugPrint('VAPID publicKey head=${key.length >= 12 ? key.substring(0, 12) : key}');
@@ -144,7 +156,7 @@ class WebPushRegistrar {
     try {
       debugPrint('Calling pushManager.subscribe(...)...');
       final subAny = await _awaitPromiseThen(
-        pushManager.callMethod('subscribe'.toJS, <JSAny?>[options].toJS),
+        subscribeFn.callAsFunction(pushManager, options),
       );
       sub = _asJsObject(subAny);
       debugPrint('subscribe() returned null? ${sub == null}');
@@ -165,10 +177,9 @@ class WebPushRegistrar {
       return;
     }
 
-    // Verify it persisted
     try {
       final verifyAny = await _awaitPromiseThen(
-        pushManager.callMethod('getSubscription'.toJS, <JSAny?>[].toJS),
+        getSubscriptionFn.callAsFunction(pushManager),
       );
       final verify = _asJsObject(verifyAny);
       debugPrint('Verify getSubscription() null? ${verify == null}');
@@ -179,9 +190,16 @@ class WebPushRegistrar {
       debugPrint('Verify getSubscription() failed: $e');
     }
 
-    // Extract keys + send to backend
-    final p256dhBufAny = sub.callMethod('getKey'.toJS, <JSAny?>['p256dh'.toJS].toJS);
-    final authBufAny = sub.callMethod('getKey'.toJS, <JSAny?>['auth'.toJS].toJS);
+    final getKeyAny = sub.getProperty('getKey'.toJS);
+    if (getKeyAny == null) {
+      debugPrint('ABORT: subscription.getKey missing');
+      return;
+    }
+    final getKeyFn = getKeyAny as JSFunction;
+
+    final p256dhBufAny = getKeyFn.callAsFunction(sub, 'p256dh'.toJS);
+    final authBufAny = getKeyFn.callAsFunction(sub, 'auth'.toJS);
+
     if (p256dhBufAny == null || authBufAny == null) {
       debugPrint('ABORT: subscription keys missing');
       return;
@@ -197,15 +215,26 @@ class WebPushRegistrar {
     final p256dhB64Url = _b64UrlNoPad(p256dhBytes);
     final authB64Url = _b64UrlNoPad(authBytes);
 
-    await api.registerWebPush(
-      endpoint: endpoint,
-      p256dh: p256dhB64Url,
-      auth: authB64Url,
-      raw: {
-        'endpoint': endpoint,
-        'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
-      },
-    );
+    debugPrint('About to call api.registerWebPush');
+    debugPrint('endpoint=$endpoint');
+    debugPrint('p256dh len=${p256dhB64Url.length}');
+    debugPrint('auth len=${authB64Url.length}');
+
+    try {
+      await api.registerWebPush(
+        endpoint: endpoint,
+        p256dh: p256dhB64Url,
+        auth: authB64Url,
+        raw: {
+          'endpoint': endpoint,
+          'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
+        },
+      );
+      debugPrint('api.registerWebPush finished successfully');
+    } catch (e) {
+      debugPrint('api.registerWebPush failed: $e');
+      rethrow;
+    }
 
     debugPrint('WebPush subscription registered on backend.');
   }
@@ -268,7 +297,6 @@ class WebPushRegistrar {
     final lenAny = fnObj.getProperty('length'.toJS);
     final fnLen = int.tryParse(lenAny?.toString() ?? '') ?? 0;
 
-    // Old callback-style
     if (fnLen >= 1) {
       final completer = Completer<String>();
       final cb = ((JSAny? perm) {
@@ -284,7 +312,6 @@ class WebPushRegistrar {
       }
     }
 
-    // Promise-style
     try {
       final resAny = (fnAny as JSFunction).callAsFunction(ctor);
       final resolved = await _awaitPromiseThen(resAny);
@@ -317,7 +344,6 @@ class WebPushRegistrar {
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
   }
 
-  // Promise helper: unwrap via Promise.resolve(...).then(...) (WebKit-safe)
   Future<JSAny?> _awaitPromiseThen(JSAny? promiseLike) {
     if (promiseLike == null) return Future.value(null);
 
@@ -370,7 +396,6 @@ class WebPushRegistrar {
   String _b64UrlNoPad(Uint8List bytes) => base64UrlEncode(bytes).replaceAll('=', '');
 
   Uint8List _urlBase64ToUint8List(String base64Url) {
-    // STRICT: avoid hidden whitespace / newlines / copy-paste artifacts
     var s = base64Url.trim();
     s = s.replaceAll('\n', '').replaceAll('\r', '').replaceAll(' ', '');
 
