@@ -149,26 +149,30 @@ class WebPushRegistrar {
       final existing = _asJsObject(existingAny);
       debugPrint('Existing subscription? ${existing != null}');
       if (existing != null) {
-        debugPrint('Existing endpoint=${existing.getProperty('endpoint'.toJS)?.toString()}');
-        sub = existing;
+        final unsubscribeAny = existing.getProperty('unsubscribe'.toJS);
+        if (unsubscribeAny != null) {
+          debugPrint('Unsubscribing existing subscription before subscribe()...');
+          await _awaitPromiseThen(
+            (unsubscribeAny as JSFunction).callAsFunction(existing),
+            label: 'subscription.unsubscribe',
+          );
+        }
       }
     } catch (e) {
-      debugPrint('getSubscription() failed: $e');
+      debugPrint('getSubscription()/unsubscribe failed: $e');
     }
 
-    if (sub == null) {
-      try {
-        debugPrint('Calling pushManager.subscribe(...)...');
-        final subAny = await _awaitPromiseThen(
-          subscribeFn.callAsFunction(pushManager, options),
-          label: 'pushManager.subscribe',
-        );
-        sub = _asJsObject(subAny);
-        debugPrint('subscribe() returned null? ${sub == null}');
-      } catch (e) {
-        debugPrint('subscribe() threw: $e');
-        rethrow;
-      }
+    try {
+      debugPrint('Calling pushManager.subscribe(...)...');
+      final subAny = await _awaitPromiseThen(
+        subscribeFn.callAsFunction(pushManager, options),
+        label: 'pushManager.subscribe',
+      );
+      sub = _asJsObject(subAny);
+      debugPrint('subscribe() returned null? ${sub == null}');
+    } catch (e) {
+      debugPrint('subscribe() threw: $e');
+      rethrow;
     }
 
     if (sub == null) {
