@@ -23,7 +23,7 @@ class WebPushRegistrar {
 
   Future<void> initBestEffort() async {
     if (!authStore.isLoggedIn) return;
-    unawaited(_registerPushServiceWorker());
+    unawaited(_ensurePushServiceWorkerRegistered());
   }
 
   bool _isStandalone() {
@@ -75,21 +75,13 @@ class WebPushRegistrar {
       return;
     }
 
-    final sw = _serviceWorkerContainer();
-    if (sw == null) {
-      debugPrint('ABORT: serviceWorker container became null');
-      return;
-    }
-
-    debugPrint('Awaiting serviceWorker.ready...');
-    final readyRegAny = await _awaitPromiseThen(sw.getProperty('ready'.toJS));
-    final reg = _asJsObject(readyRegAny);
+    final reg = await _getUsablePushRegistration();
     if (reg == null) {
-      debugPrint('ABORT: serviceWorker.ready returned null');
+      debugPrint('ABORT: no usable push service worker registration');
       return;
     }
 
-    debugPrint('SW ready.scope=${reg.getProperty('scope'.toJS)?.toString()}');
+    debugPrint('Using SW registration scope=${reg.getProperty('scope'.toJS)?.toString()}');
 
     final activeAny = reg.getProperty('active'.toJS);
     debugPrint('SW active=${activeAny != null}');
@@ -150,8 +142,10 @@ class WebPushRegistrar {
     JSObject? sub;
 
     try {
+      debugPrint('Calling pushManager.getSubscription(...)...');
       final existingAny = await _awaitPromiseThen(
         getSubscriptionFn.callAsFunction(pushManager),
+        label: 'pushManager.getSubscription',
       );
       final existing = _asJsObject(existingAny);
       debugPrint('Existing subscription? ${existing != null}');
@@ -168,6 +162,7 @@ class WebPushRegistrar {
         debugPrint('Calling pushManager.subscribe(...)...');
         final subAny = await _awaitPromiseThen(
           subscribeFn.callAsFunction(pushManager, options),
+          label: 'pushManager.subscribe',
         );
         sub = _asJsObject(subAny);
         debugPrint('subscribe() returned null? ${sub == null}');
@@ -183,7 +178,7 @@ class WebPushRegistrar {
     }
 
     final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
-    debugPrint('New subscription endpoint=$endpoint');
+    debugPrint('Subscription endpoint=$endpoint');
     if (endpoint.isEmpty) {
       debugPrint('ABORT: empty endpoint');
       return;
@@ -240,6 +235,74 @@ class WebPushRegistrar {
 
   bool _supportsWebPush() => _serviceWorkerContainer() != null;
 
+  Future<JSObject?> _getUsablePushRegistration() async {
+    final sw = _serviceWorkerContainer();
+    if (sw == null) {
+      debugPrint('No service worker container');
+      return null;
+    }
+
+    final existing = await _getPushServiceWorkerRegistration();
+    if (existing != null) {
+      debugPrint('Found existing /push-sw.js registration');
+      return existing;
+    }
+
+    debugPrint('No existing /push-sw.js registration, registering now...');
+    final registered = await _registerPushServiceWorker();
+    if (registered != null) {
+      debugPrint('push-sw.js registered successfully');
+      return registered;
+    }
+
+    debugPrint('Falling back to navigator.serviceWorker.ready...');
+    try {
+      final readyAny = await _awaitPromiseThen(
+        sw.getProperty('ready'.toJS),
+        label: 'serviceWorker.ready',
+      );
+      final readyReg = _asJsObject(readyAny);
+      if (readyReg != null) {
+        debugPrint('serviceWorker.ready returned a registration');
+      }
+      return readyReg;
+    } catch (e) {
+      debugPrint('serviceWorker.ready failed: $e');
+      return null;
+    }
+  }
+
+  Future<JSObject?> _getPushServiceWorkerRegistration() async {
+    try {
+      final sw = _serviceWorkerContainer();
+      if (sw == null) return null;
+
+      final getRegistrationAny = sw.getProperty('getRegistration'.toJS);
+      if (getRegistrationAny == null) {
+        debugPrint('SW getRegistration missing');
+        return null;
+      }
+
+      final getRegistrationFn = getRegistrationAny as JSFunction;
+
+      final regAny = await _awaitPromiseThen(
+        getRegistrationFn.callAsFunction(sw, '/push-sw.js'.toJS),
+        label: 'serviceWorker.getRegistration(/push-sw.js)',
+      );
+
+      return _asJsObject(regAny);
+    } catch (e) {
+      debugPrint('getRegistration(/push-sw.js) failed: $e');
+      return null;
+    }
+  }
+
+  Future<JSObject?> _ensurePushServiceWorkerRegistered() async {
+    final existing = await _getPushServiceWorkerRegistration();
+    if (existing != null) return existing;
+    return _registerPushServiceWorker();
+  }
+
   Future<JSObject?> _registerPushServiceWorker() async {
     try {
       final sw = _serviceWorkerContainer();
@@ -259,6 +322,7 @@ class WebPushRegistrar {
           '/push-sw.js'.toJS,
           <String, Object?>{'scope': '/'}.jsify(),
         ),
+        label: 'serviceWorker.register(/push-sw.js)',
       );
 
       return _asJsObject(regAny);
@@ -305,7 +369,10 @@ class WebPushRegistrar {
 
       try {
         (fnAny as JSFunction).callAsFunction(ctor, cb);
-        return completer.future;
+        return completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => _getNotificationPermission(),
+        );
       } catch (_) {
         return _getNotificationPermission();
       }
@@ -313,7 +380,10 @@ class WebPushRegistrar {
 
     try {
       final resAny = (fnAny as JSFunction).callAsFunction(ctor);
-      final resolved = await _awaitPromiseThen(resAny);
+      final resolved = await _awaitPromiseThen(
+        resAny,
+        label: 'Notification.requestPermission',
+      );
       return resolved?.toString() ?? 'default';
     } catch (_) {
       final completer = Completer<String>();
@@ -324,7 +394,10 @@ class WebPushRegistrar {
 
       try {
         (fnAny as JSFunction).callAsFunction(ctor, cb);
-        return completer.future;
+        return completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => _getNotificationPermission(),
+        );
       } catch (_) {
         return _getNotificationPermission();
       }
@@ -343,7 +416,11 @@ class WebPushRegistrar {
     return nav.getProperty('userAgent'.toJS)?.toString() ?? '';
   }
 
-  Future<JSAny?> _awaitPromiseThen(JSAny? promiseLike) {
+  Future<JSAny?> _awaitPromiseThen(
+      JSAny? promiseLike, {
+        String? label,
+        Duration timeout = const Duration(seconds: 15),
+      }) {
     if (promiseLike == null) return Future.value(null);
 
     final c = Completer<JSAny?>();
@@ -364,7 +441,13 @@ class WebPushRegistrar {
     }).toJS;
 
     (pAny as JSObject).callMethod('then'.toJS, <JSAny?>[onFulfilled, onRejected].toJS);
-    return c.future;
+
+    return c.future.timeout(
+      timeout,
+      onTimeout: () {
+        throw TimeoutException('Timed out waiting for ${label ?? 'promise'}');
+      },
+    );
   }
 
   JSObject? _serviceWorkerContainer() {
