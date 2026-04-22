@@ -575,11 +575,15 @@ class _MyFinesPageState extends State<MyFinesPage> {
   Widget build(BuildContext context) {
     final p = _activePeriod;
 
-    // CHANGED: show total balance as a negative number (always prefixed with "-")
+    // CHANGED: show total balance as a negative number, but not when it is 0
     final rawBalanceText = (_balance?.balanceFormatted ?? '').trim();
+    final numericBalance = _balance?.balanceCents ?? 0;
+
     final balanceText = rawBalanceText.isEmpty
         ? ''
-        : (rawBalanceText.startsWith('-') ? rawBalanceText : '-$rawBalanceText');
+        : (numericBalance == 0
+        ? rawBalanceText.replaceFirst(RegExp(r'^-'), '')
+        : (rawBalanceText.startsWith('-') ? rawBalanceText : '-$rawBalanceText'));
 
     final grouped = _showAllPeriods
         ? _buildGroupedBySemesterAndPeriod(_visibleFines)
@@ -589,6 +593,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
 
     return AppScaffold(
       title: 'Meine Beihängungen',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

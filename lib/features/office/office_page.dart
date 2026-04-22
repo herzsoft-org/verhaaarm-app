@@ -52,14 +52,15 @@ class _OfficePageState extends State<OfficePage> {
             ),
             const SizedBox(height: 12),
           ],
-
           _Section(
             title: 'Beihängungen',
             children: [
               ListTile(
                 leading: const Icon(Icons.list_alt_rounded),
                 title: const Text('Alle Beihängungen'),
-                subtitle: const Text('Alle Nutzer, alle Conventsperioden (nach Backend-Rechten)'),
+                subtitle: const Text(
+                  'Alle Nutzer, alle Conventsperioden (nach Backend-Rechten)',
+                ),
                 onTap: () => context.push('/fines'),
               ),
               if (canAcceptSuggestions)
@@ -96,7 +97,6 @@ class _OfficePageState extends State<OfficePage> {
             ],
           ),
           const SizedBox(height: 12),
-
           if (canPeriods)
             _Section(
               title: 'Semester & Conventsperioden',
@@ -110,7 +110,6 @@ class _OfficePageState extends State<OfficePage> {
               ],
             ),
           if (canPeriods) const SizedBox(height: 12),
-
           if (canUsers)
             _Section(
               title: 'Nutzerverwaltung',
@@ -118,7 +117,9 @@ class _OfficePageState extends State<OfficePage> {
                 ListTile(
                   leading: const Icon(Icons.people_rounded),
                   title: const Text('Nutzer verwalten'),
-                  subtitle: const Text('Erstellen, Rollen, deaktivieren, Passwort setzen'),
+                  subtitle: const Text(
+                    'Erstellen, Rollen, deaktivieren, Passwort setzen',
+                  ),
                   onTap: () => context.push('/office/users'),
                 ),
               ],
@@ -158,7 +159,9 @@ class _OfficePageState extends State<OfficePage> {
         _csvBusy = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Conventsperioden konnten nicht geladen werden: $e')),
+        SnackBar(
+          content: Text('Conventsperioden konnten nicht geladen werden: $e'),
+        ),
       );
       return;
     }
@@ -215,7 +218,8 @@ class _OfficePageState extends State<OfficePage> {
     } else {
       selectedSemester = semesters.first;
       final periodsInSemester = grouped[selectedSemester]!;
-      selectedPeriodId = periodsInSemester.isNotEmpty ? periodsInSemester.first.id : null;
+      selectedPeriodId =
+      periodsInSemester.isNotEmpty ? periodsInSemester.first.id : null;
     }
 
     ExportScope scope = ExportScope.period;
@@ -225,13 +229,17 @@ class _OfficePageState extends State<OfficePage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            final periodsInSelectedSemester = grouped[selectedSemester] ?? const <ConventPeriodDto>[];
+            final periodsInSelectedSemester =
+                grouped[selectedSemester] ?? const <ConventPeriodDto>[];
 
             if (scope == ExportScope.period) {
-              final hasSelectedPeriod = periodsInSelectedSemester.any((p) => p.id == selectedPeriodId);
+              final hasSelectedPeriod = periodsInSelectedSemester.any(
+                    (p) => p.id == selectedPeriodId,
+              );
               if (!hasSelectedPeriod) {
-                selectedPeriodId =
-                periodsInSelectedSemester.isNotEmpty ? periodsInSelectedSemester.first.id : null;
+                selectedPeriodId = periodsInSelectedSemester.isNotEmpty
+                    ? periodsInSelectedSemester.first.id
+                    : null;
               }
             }
 
@@ -243,110 +251,109 @@ class _OfficePageState extends State<OfficePage> {
             return AlertDialog(
               title: const Text('CSV Export'),
               content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RadioListTile<ExportScope>(
-                      value: ExportScope.period,
-                      groupValue: scope,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Conventsperiode exportieren'),
-                      subtitle: const Text('Standard: aktuelle Periode'),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setDialogState(() {
-                          scope = value;
-                        });
-                      },
-                    ),
-                    if (scope == ExportScope.period) ...[
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: selectedSemester,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Semester',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          for (final semester in semesters)
-                            DropdownMenuItem<String>(
-                              value: semester,
-                              child: Text(semester),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setDialogState(() {
-                            selectedSemester = value;
-                            final updatedPeriods = grouped[selectedSemester] ?? const <ConventPeriodDto>[];
-                            selectedPeriodId =
-                            updatedPeriods.isNotEmpty ? updatedPeriods.first.id : null;
-                          });
-                        },
+                child: RadioGroup<ExportScope>(
+                  groupValue: scope,
+                  onChanged: (value) {
+                    setDialogState(() {
+                      scope = value!;
+                    });
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RadioListTile<ExportScope>(
+                        value: ExportScope.period,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Conventsperiode exportieren'),
+                        subtitle: const Text('Standard: aktuelle Periode'),
                       ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedPeriodId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Conventsperiode',
-                          border: OutlineInputBorder(),
+                      if (scope == ExportScope.period) ...[
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedSemester,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Semester',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final semester in semesters)
+                              DropdownMenuItem<String>(
+                                value: semester,
+                                child: Text(semester),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setDialogState(() {
+                              selectedSemester = value;
+                              final updatedPeriods =
+                                  grouped[selectedSemester] ??
+                                      const <ConventPeriodDto>[];
+                              selectedPeriodId = updatedPeriods.isNotEmpty
+                                  ? updatedPeriods.first.id
+                                  : null;
+                            });
+                          },
                         ),
-                        items: [
-                          for (final period in periodsInSelectedSemester)
-                            DropdownMenuItem<String>(
-                              value: period.id,
-                              child: Text(_periodLabel(period)),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          setDialogState(() {
-                            selectedPeriodId = value;
-                          });
-                        },
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedPeriodId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Conventsperiode',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final period in periodsInSelectedSemester)
+                              DropdownMenuItem<String>(
+                                value: period.id,
+                                child: Text(_periodLabel(period)),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            setDialogState(() {
+                              selectedPeriodId = value;
+                            });
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      RadioListTile<ExportScope>(
+                        value: ExportScope.semester,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Semester exportieren'),
+                        subtitle: const Text(
+                          'Alle Perioden des ausgewählten Semesters zusammenführen',
+                        ),
                       ),
+                      if (scope == ExportScope.semester) ...[
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedSemester,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Semester',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final semester in semesters)
+                              DropdownMenuItem<String>(
+                                value: semester,
+                                child: Text(semester),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setDialogState(() {
+                              selectedSemester = value;
+                            });
+                          },
+                        ),
+                      ],
                     ],
-                    const SizedBox(height: 16),
-                    RadioListTile<ExportScope>(
-                      value: ExportScope.semester,
-                      groupValue: scope,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Semester exportieren'),
-                      subtitle: const Text('Alle Perioden des ausgewählten Semesters zusammenführen'),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setDialogState(() {
-                          scope = value;
-                        });
-                      },
-                    ),
-                    if (scope == ExportScope.semester) ...[
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: selectedSemester,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Semester',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          for (final semester in semesters)
-                            DropdownMenuItem<String>(
-                              value: semester,
-                              child: Text(semester),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setDialogState(() {
-                            selectedSemester = value;
-                          });
-                        },
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
               actions: [
@@ -360,8 +367,12 @@ class _OfficePageState extends State<OfficePage> {
                     Navigator.of(dialogContext).pop(
                       _ExportDialogResult(
                         scope: scope,
-                        semester: scope == ExportScope.semester ? selectedSemester : null,
-                        periodId: scope == ExportScope.period ? selectedPeriodId : null,
+                        semester: scope == ExportScope.semester
+                            ? selectedSemester
+                            : null,
+                        periodId: scope == ExportScope.period
+                            ? selectedPeriodId
+                            : null,
                       ),
                     );
                   }
@@ -409,7 +420,9 @@ class _OfficePageState extends State<OfficePage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('CSV Export für ${_periodLabel(selectedPeriod)} bereit.')),
+        SnackBar(
+          content: Text('CSV Export für ${_periodLabel(selectedPeriod)} bereit.'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -417,10 +430,11 @@ class _OfficePageState extends State<OfficePage> {
         SnackBar(content: Text('CSV Export fehlgeschlagen: $e')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _csvBusy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _csvBusy = false;
+        });
+      }
     }
   }
 
@@ -450,15 +464,23 @@ class _OfficePageState extends State<OfficePage> {
         final data = r.data;
 
         if (data is! List<int>) {
-          throw Exception('CSV Export für ${_periodLabel(period)} hat kein Byte-Format geliefert');
+          throw Exception(
+            'CSV Export für ${_periodLabel(period)} hat kein Byte-Format geliefert',
+          );
         }
 
-        final csvText = utf8.decode(data, allowMalformed: true).replaceAll('\r\n', '\n').trim();
+        final csvText = utf8
+            .decode(data, allowMalformed: true)
+            .replaceAll('\r\n', '\n')
+            .trim();
         if (csvText.isEmpty) {
           continue;
         }
 
-        final lines = csvText.split('\n').where((line) => line.trim().isNotEmpty).toList();
+        final lines = csvText
+            .split('\n')
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
         if (lines.isEmpty) {
           continue;
         }
@@ -497,14 +519,17 @@ class _OfficePageState extends State<OfficePage> {
         SnackBar(content: Text('CSV Export fehlgeschlagen: $e')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _csvBusy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _csvBusy = false;
+        });
+      }
     }
   }
 
-  Map<String, List<ConventPeriodDto>> _groupBySemester(List<ConventPeriodDto> periods) {
+  Map<String, List<ConventPeriodDto>> _groupBySemester(
+      List<ConventPeriodDto> periods,
+      ) {
     final sorted = [...periods]..sort(_comparePeriodsDesc);
     final map = <String, List<ConventPeriodDto>>{};
 

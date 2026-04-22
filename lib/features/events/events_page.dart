@@ -244,6 +244,8 @@ class _EventsPageState extends State<EventsPage> {
 
     return AppScaffold(
       title: 'Termine / Kalender',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

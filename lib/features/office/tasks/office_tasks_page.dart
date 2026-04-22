@@ -157,6 +157,11 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
           icon: const Icon(Icons.refresh_rounded),
           onPressed: _loading ? null : () => _load(force: true),
         ),
+        IconButton(
+          tooltip: 'Neu',
+          icon: const Icon(Icons.add_rounded),
+          onPressed: () => context.push('/office/tasks/new'),
+        ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -257,8 +262,7 @@ class _AdminTaskCard extends StatelessWidget {
   }
 
   void _showWeekdaysDialog(BuildContext context) {
-    final days = task.recurringWeekdays.toList(growable: false)
-      ..sort((a, b) => a.compareTo(b));
+    final days = task.recurringWeekdays.toList(growable: false)..sort((a, b) => a.compareTo(b));
 
     showDialog<void>(
       context: context,
@@ -313,8 +317,7 @@ class _AdminTaskCard extends StatelessWidget {
     );
 
     final assigneeCount = task.assignees.length;
-    final recurringDays = task.recurringWeekdays.toList(growable: false)
-      ..sort((a, b) => a.compareTo(b));
+    final recurringDays = task.recurringWeekdays.toList(growable: false)..sort((a, b) => a.compareTo(b));
 
     return Card(
       color: task.solved ? cs.surfaceContainerLowest : cs.surfaceContainerLow,
@@ -323,7 +326,6 @@ class _AdminTaskCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header (circle, date badge, title, menu)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -342,7 +344,6 @@ class _AdminTaskCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-
                 if (due != null) ...[
                   Tooltip(
                     message: fmt(due),
@@ -355,7 +356,11 @@ class _AdminTaskCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.schedule_rounded, size: 18, color: isOverdue ? cs.onErrorContainer : cs.onSurfaceVariant),
+                          Icon(
+                            Icons.schedule_rounded,
+                            size: 18,
+                            color: isOverdue ? cs.onErrorContainer : cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             _ddMm(due),
@@ -369,7 +374,6 @@ class _AdminTaskCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                 ],
-
                 Expanded(
                   child: Text(
                     task.title,
@@ -378,7 +382,6 @@ class _AdminTaskCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-
                 PopupMenuButton<_AdminMenuAction>(
                   tooltip: 'Aktionen',
                   onSelected: (a) {
@@ -410,7 +413,7 @@ class _AdminTaskCard extends StatelessWidget {
                       child: Row(
                         children: [
                           Icon(task.solved ? Icons.undo_rounded : Icons.check_rounded),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           Text(task.solved ? 'Wieder offen' : 'Erledigt'),
                         ],
                       ),
@@ -434,7 +437,6 @@ class _AdminTaskCard extends StatelessWidget {
                 ),
               ],
             ),
-
             if (task.description.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -444,18 +446,13 @@ class _AdminTaskCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-
             const SizedBox(height: 8),
-
             Text(
               'Erstellt: ${fmt(task.createdAt)}'
                   '${task.solvedAt == null ? '' : ' · Erledigt: ${fmt(task.solvedAt!)}'}',
               style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
-
             const SizedBox(height: 12),
-
-            // Bottom row: assignees count, recurring badge, open/close button
             Row(
               children: [
                 Tooltip(
@@ -475,9 +472,7 @@ class _AdminTaskCard extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
                 if (task.recurringEnabled)
                   Tooltip(
                     message: 'Wochentage anzeigen',
@@ -507,9 +502,7 @@ class _AdminTaskCard extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 const Spacer(),
-
                 FilledButton.tonal(
                   onPressed: onToggleSolved,
                   child: Text(task.solved ? 'Wieder offen' : 'Erledigt'),

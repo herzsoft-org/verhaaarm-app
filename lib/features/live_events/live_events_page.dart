@@ -141,6 +141,8 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
 
     return AppScaffold(
       title: 'Wo geht was?',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

@@ -225,6 +225,22 @@ Future<GoRouter> buildRouter() async {
         builder: (context, state) => OfficeTasksPage(api: api, authStore: authStore),
       ),
       GoRoute(
+        path: '/office/tasks/new',
+        builder: (context, state) {
+          final roles = Roles.fromAccessToken(authStore.accessToken);
+          if (!Roles.canManageTasks(roles)) {
+            return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
+          }
+
+          return TaskFormPage(
+            api: api,
+            authStore: authStore,
+            isEdit: false,
+            isAdminEdit: true,
+          );
+        },
+      ),
+      GoRoute(
         path: '/office/tasks/:id/edit',
         builder: (context, state) {
           final roles = Roles.fromAccessToken(authStore.accessToken);

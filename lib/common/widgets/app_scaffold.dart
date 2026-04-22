@@ -7,35 +7,43 @@ import '../../notifications/notification_center.dart';
 
 class AppScaffold extends StatelessWidget {
   final String title;
+  final Widget? titleWidget;
   final Widget body;
   final List<Widget>? actions;
+
+  final bool showNotificationButton;
+  final bool showProfileButton;
 
   const AppScaffold({
     super.key,
     required this.title,
+    this.titleWidget,
     required this.body,
     this.actions,
+    this.showNotificationButton = true,
+    this.showProfileButton = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
-    final isOnProfile = location == '/profile' || location.startsWith('/profile/');
-    final isOnNotifications = location == '/notifications' || location.startsWith('/notifications/');
+    final isOnProfile =
+        location == '/profile' || location.startsWith('/profile/');
+    final isOnNotifications =
+        location == '/notifications' || location.startsWith('/notifications/');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: titleWidget ?? Text(title),
         actions: [
           ...(actions ?? const []),
 
-          // Bell (hide on notifications page itself)
-          if (!isOnNotifications)
+          if (showNotificationButton && !isOnNotifications)
             _NotificationBell(
               onTap: () => context.push('/notifications'),
             ),
 
-          if (!isOnProfile)
+          if (showProfileButton && !isOnProfile)
             IconButton(
               tooltip: 'Profil',
               icon: const Icon(Icons.person_rounded),
@@ -90,7 +98,8 @@ class _NotificationBellState extends State<_NotificationBell> {
               right: -2,
               top: -2,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.error,
                   borderRadius: BorderRadius.circular(10),
@@ -99,7 +108,10 @@ class _NotificationBellState extends State<_NotificationBell> {
                 child: Text(
                   _unread > 99 ? '99+' : '$_unread',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),

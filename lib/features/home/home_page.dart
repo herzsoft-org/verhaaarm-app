@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../api/api_client.dart';
 import '../../app/route_observer.dart';
@@ -62,7 +63,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
   // OTA
   late final OtaUpdateController _ota;
 
-  bool get _isAndroidApp => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool get _isAndroidApp =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   // Dedicated lightweight client for quotes
   late final Dio _quoteDio = Dio(
@@ -143,7 +145,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'locked': p.locked,
   };
 
-  ConventPeriodDto _decodePeriod(Object json) => ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
+  ConventPeriodDto _decodePeriod(Object json) =>
+      ConventPeriodDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeBalance(UserBalanceDto b) => {
     'userId': b.userId,
@@ -152,7 +155,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'balanceFormatted': b.balanceFormatted,
   };
 
-  UserBalanceDto _decodeBalance(Object json) => UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
+  UserBalanceDto _decodeBalance(Object json) =>
+      UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeLive(LiveEventDto e) => {
     'id': e.id,
@@ -164,21 +168,25 @@ class _HomePageState extends State<HomePage> with RouteAware {
     'createdByUserId': e.createdByUserId,
   };
 
-  LiveEventDto _decodeLive(Object json) => LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
+  LiveEventDto _decodeLive(Object json) =>
+      LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
 
   Map<String, dynamic> _encodeEvent(EventDto e) => {
     'id': e.id,
     'title': e.title,
     'startsAt': e.startsAt,
     'mandatory': e.mandatory,
+    'eventKind': e.eventKind == EventKind.secondary ? 'SECONDARY' : 'MAIN',
     'creatorUserId': e.creatorUserId,
     'ownerType': e.ownerType.name,
     'createdAt': e.createdAt,
   };
 
-  EventDto _decodeEvent(Object json) => EventDto.fromJson((json as Map).cast<String, dynamic>());
+  EventDto _decodeEvent(Object json) =>
+      EventDto.fromJson((json as Map).cast<String, dynamic>());
 
-  QuoteDto _decodeQuote(Object json) => QuoteDto.fromJson((json as Map).cast<String, dynamic>());
+  QuoteDto _decodeQuote(Object json) =>
+      QuoteDto.fromJson((json as Map).cast<String, dynamic>());
 
   int _decodeInt(Object json) {
     if (json is int) return json;
@@ -204,7 +212,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
     final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
       _kHomeLiveEvents,
-      decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+      decode: (json) => (json as List)
+          .map((e) => _decodeLive(e as Object))
+          .toList(growable: false),
     );
     if (cLive != null && cLive.isFresh(_ttlHomeLive)) return;
 
@@ -246,7 +256,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final decoded = jsonDecode(text);
       final List<dynamic> rawList = switch (decoded) {
         List<dynamic>() => decoded,
-        Map<String, dynamic>() => (decoded['quotes'] as List<dynamic>? ?? const <dynamic>[]),
+        Map<String, dynamic>() =>
+        (decoded['quotes'] as List<dynamic>? ?? const <dynamic>[]),
         _ => const <dynamic>[],
       };
 
@@ -284,19 +295,26 @@ class _HomePageState extends State<HomePage> with RouteAware {
       );
       final cLive = await AppCache.I.entryOrLoadPersisted<List<LiveEventDto>>(
         _kHomeLiveEvents,
-        decode: (json) => (json as List).map((e) => _decodeLive(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodeLive(e as Object))
+            .toList(growable: false),
       );
       final cEvents = await AppCache.I.entryOrLoadPersisted<List<EventDto>>(
         _kHomeEvents,
-        decode: (json) => (json as List).map((e) => _decodeEvent(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodeEvent(e as Object))
+            .toList(growable: false),
       );
       final cTasks = await AppCache.I.entryOrLoadPersisted<int>(
         _kHomeTasksUnsolved,
         decode: _decodeInt,
       );
 
-      final hasAnyCache =
-          (cPeriod != null) || (cBalance != null) || (cLive != null) || (cEvents != null) || (cTasks != null);
+      final hasAnyCache = (cPeriod != null) ||
+          (cBalance != null) ||
+          (cLive != null) ||
+          (cEvents != null) ||
+          (cTasks != null);
 
       if (hasAnyCache && mounted) {
         final events = List<EventDto>.from(cEvents?.value ?? const <EventDto>[]);
@@ -305,7 +323,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
         setState(() {
           _activePeriod = cPeriod?.value;
           _balance = cBalance?.value;
-          _liveEvents = List<LiveEventDto>.unmodifiable(cLive?.value ?? const <LiveEventDto>[]);
+          _liveEvents =
+          List<LiveEventDto>.unmodifiable(cLive?.value ?? const <LiveEventDto>[]);
           _nextEvent = next;
           _unsolvedTasks = cTasks?.value ?? 0;
           _loading = false;
@@ -452,13 +471,67 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
+  int _eventPriority(EventDto e) {
+    if (e.mandatory) {
+      return switch (e.eventKind) {
+        EventKind.main => 0,
+        EventKind.secondary => 1,
+      };
+    }
+
+    return switch (e.eventKind) {
+      EventKind.main => 2,
+      EventKind.secondary => 3,
+    };
+  }
+
+  IconData _iconForEvent(EventDto e) {
+    if (!e.mandatory) {
+      return Icons.sports_bar_rounded;
+    }
+
+    return switch (e.eventKind) {
+      EventKind.main => Icons.event_rounded,
+      EventKind.secondary => Icons.event_note_rounded,
+    };
+  }
+
+  Color _colorForEvent(BuildContext context, EventDto e) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (!e.mandatory) {
+      return scheme.secondary;
+    }
+
+    return switch (e.eventKind) {
+      EventKind.main => scheme.primary,
+      EventKind.secondary => scheme.tertiary,
+    };
+  }
+
+  Color _cardColorForEvent(BuildContext context, EventDto e) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (!e.mandatory) {
+      return scheme.secondaryContainer.withValues(alpha: 0.45);
+    }
+
+    return switch (e.eventKind) {
+      EventKind.main => scheme.surfaceContainerHighest,
+      EventKind.secondary => scheme.tertiaryContainer.withValues(alpha: 0.45),
+    };
+  }
+
   EventDto? _pickNextEvent(List<EventDto> events, {ConventPeriodDto? period}) {
     final now = DateTime.now();
 
     bool inActivePeriod(EventDto e) {
       if (period == null) return true;
       final d = Format.dateOnlyFromIsoDateTimeLocal(e.startsAt);
-      return Format.isDateWithinPeriodInclusive(dateLocalMidnight: d, period: period);
+      return Format.isDateWithinPeriodInclusive(
+        dateLocalMidnight: d,
+        period: period,
+      );
     }
 
     final upcoming = events.where((e) {
@@ -466,20 +539,32 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return !dt.isBefore(now) && inActivePeriod(e);
     }).toList();
 
+    int compareEvents(EventDto a, EventDto b) {
+      final timeCmp = a.startsAt.compareTo(b.startsAt);
+      if (timeCmp != 0) return timeCmp;
+
+      final priorityCmp = _eventPriority(a).compareTo(_eventPriority(b));
+      if (priorityCmp != 0) return priorityCmp;
+
+      return 0;
+    }
+
     if (upcoming.isEmpty) {
       if (period != null) {
         final anyUpcoming = events.where((e) {
           final dt = Format.parseIsoToLocal(e.startsAt);
           return !dt.isBefore(now);
         }).toList();
+
         if (anyUpcoming.isEmpty) return null;
-        anyUpcoming.sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+        anyUpcoming.sort(compareEvents);
         return anyUpcoming.first;
       }
       return null;
     }
 
-    upcoming.sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    upcoming.sort(compareEvents);
     return upcoming.first;
   }
 
@@ -495,6 +580,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
   String _formatPayableBalanceForHome(UserBalanceDto? balance) {
     final s = _formatBalanceForHome(balance).trim();
     if (s.isEmpty) return s;
+
+    final cents = balance?.balanceCents ?? 0;
+    if (cents == 0) return s;
+
     return s.startsWith('-') ? s : '-$s';
   }
 
@@ -502,6 +591,33 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Verhåårm',
+      titleWidget: Builder(
+        builder: (context) {
+          final titleStyle = Theme.of(context).appBarTheme.titleTextStyle ??
+              Theme.of(context).textTheme.titleLarge;
+
+          final titleColor =
+              titleStyle?.color ?? Theme.of(context).colorScheme.onSurface;
+
+          final titleHeight = titleStyle?.fontSize ?? 22;
+
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SvgPicture.asset(
+                'assets/zirkel.svg',
+                height: titleHeight,
+                colorFilter: ColorFilter.mode(titleColor, BlendMode.srcIn),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Verhåårm',
+                style: titleStyle,
+              ),
+            ],
+          );
+        },
+      ),
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -559,11 +675,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               Icon(Icons.assignment_rounded, color: cs.primary),
               const SizedBox(width: 10),
-              Text('Arbeitsaufträge', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Arbeitsaufträge',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const Spacer(),
               if (n > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(999),
@@ -588,6 +708,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Widget _buildBalanceCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final period = _activePeriod;
+    final isZeroBalance = (_balance?.balanceCents ?? 0) == 0;
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -603,15 +724,32 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 children: [
                   Icon(Icons.account_balance_wallet_rounded, color: cs.primary),
                   const SizedBox(width: 10),
-                  Text('Aktueller Beihängungssaldo', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Aktueller Beihängungssaldo',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const Spacer(),
                   const Icon(Icons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                _formatPayableBalanceForHome(_balance),
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w700),
+              Row(
+                children: [
+                  if (!isZeroBalance) ...[
+                    Icon(
+                      Icons.sentiment_dissatisfied_rounded,
+                      color: cs.onSurfaceVariant,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    _formatPayableBalanceForHome(_balance),
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               Text(
@@ -644,14 +782,20 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 children: [
                   Icon(Icons.groups_2_rounded, color: cs.primary),
                   const SizedBox(width: 10),
-                  Text('Wo geht was?', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Wo geht was?',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const Spacer(),
                   const Icon(Icons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 10),
               if (_liveEvents.isEmpty)
-                Text('Gerade geht leider nichts :(', style: Theme.of(context).textTheme.bodyMedium)
+                Text(
+                  'Gerade geht leider nichts :(',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                )
               else
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -663,7 +807,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           margin: const EdgeInsets.only(bottom: 8),
                           color: cs.surfaceContainerHighest,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: _LiveEventPreviewTile(e: e),
@@ -683,11 +829,15 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final cs = Theme.of(context).colorScheme;
     final e = _nextEvent;
 
+    final cardColor = e == null ? cs.surfaceContainerLow : _cardColorForEvent(context, e);
+    final iconColor = e == null ? cs.primary : _colorForEvent(context, e);
+    final iconData = e == null ? Icons.event_rounded : _iconForEvent(e);
+
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () => GoRouter.of(context).push('/events'),
       child: Card(
-        color: cs.surfaceContainerLow,
+        color: cardColor,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -695,21 +845,30 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               Row(
                 children: [
-                  Icon(Icons.event_rounded, color: cs.primary),
+                  Icon(iconData, color: iconColor),
                   const SizedBox(width: 10),
-                  Text('Nächster Termin', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Nächster Termin',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const Spacer(),
                   const Icon(Icons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 10),
               if (e == null)
-                Text('Keine zukünftigen Termine.', style: Theme.of(context).textTheme.bodyMedium)
+                Text(
+                  'Keine zukünftigen Termine.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                )
               else
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(e.title, style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      e.title,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}${e.mandatory ? ' · Pflicht' : ''}',
@@ -751,7 +910,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               Expanded(
                 child: FilledButton.tonalIcon(
-                  onPressed: () => GoRouter.of(context).push('/suggestions/new'),
+                  onPressed: () =>
+                      GoRouter.of(context).push('/suggestions/new'),
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -771,7 +931,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: canOfficial ? () => GoRouter.of(context).push('/fines/new') : null,
+                  onPressed: canOfficial
+                      ? () => GoRouter.of(context).push('/fines/new')
+                      : null,
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Beihängen'),
                 ),
@@ -783,7 +945,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     );
   }
 }
-
 
 class _LiveEventPreviewTile extends StatelessWidget {
   final LiveEventDto e;
