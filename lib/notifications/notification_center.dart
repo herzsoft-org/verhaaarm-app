@@ -27,12 +27,19 @@ class NotificationCenter {
   PushStatus _pushStatus = PushStatus.unknown;
   PushStatus get pushStatus => _pushStatus;
 
+  String _pushDebugMessage = '';
+  String get pushDebugMessage => _pushDebugMessage;
+
   final StreamController<int> _unreadStream = StreamController<int>.broadcast();
   Stream<int> get unreadStream => _unreadStream.stream;
 
   final StreamController<PushStatus> _pushStatusStream =
   StreamController<PushStatus>.broadcast();
   Stream<PushStatus> get pushStatusStream => _pushStatusStream.stream;
+
+  final StreamController<String> _pushDebugStream =
+  StreamController<String>.broadcast();
+  Stream<String> get pushDebugStream => _pushDebugStream.stream;
 
   Timer? _pollTimer;
   bool _initialized = false;
@@ -52,6 +59,7 @@ class NotificationCenter {
     _pollTimer?.cancel();
     _unreadStream.close();
     _pushStatusStream.close();
+    _pushDebugStream.close();
   }
 
   void reset() {
@@ -59,6 +67,7 @@ class NotificationCenter {
     _pollTimer = null;
     _setUnread(0);
     _setPushStatus(PushStatus.unknown);
+    _setPushDebugMessage('');
   }
 
   void _onAuthChanged() {
@@ -70,6 +79,7 @@ class NotificationCenter {
     if (!loggedIn) {
       _setUnread(0);
       _setPushStatus(PushStatus.unknown);
+      _setPushDebugMessage('');
       return;
     }
 
@@ -100,11 +110,20 @@ class NotificationCenter {
     if (auth == null || !auth.isLoggedIn) return;
 
     try {
+      _setPushDebugMessage('Prüfe Web-Push-Status ...');
       final status = await _pushStatusProbe.readStatus();
       _setPushStatus(status);
-    } catch (_) {
+      if (_pushDebugMessage == 'Prüfe Web-Push-Status ...') {
+        _setPushDebugMessage('');
+      }
+    } catch (e) {
       _setPushStatus(PushStatus.error);
+      _setPushDebugMessage('Probe exception: $e');
     }
+  }
+
+  void setPushDebugMessage(String message) {
+    _setPushDebugMessage(message);
   }
 
   void _setUnread(int v) {
@@ -120,7 +139,12 @@ class NotificationCenter {
     _pushStatusStream.add(_pushStatus);
   }
 
-  // Call this when you know you changed read state locally.
+  void _setPushDebugMessage(String v) {
+    if (_pushDebugMessage == v) return;
+    _pushDebugMessage = v;
+    _pushDebugStream.add(_pushDebugMessage);
+  }
+
   void decrementUnread({int by = 1}) => _setUnread(_unread - by);
   void resetUnread() => _setUnread(0);
 }

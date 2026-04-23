@@ -295,6 +295,30 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   },
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: StreamBuilder<String>(
+                  stream: NotificationCenter.I.pushDebugStream,
+                  initialData: NotificationCenter.I.pushDebugMessage,
+                  builder: (context, snapshot) {
+                    final text = snapshot.data ?? '';
+                    if (text.isEmpty) return const SizedBox.shrink();
+
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(
+                        text,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
 
             const SizedBox(height: 24),
