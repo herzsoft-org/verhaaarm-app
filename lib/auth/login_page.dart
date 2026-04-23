@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/api_client.dart';
+import '../common/api_error_text.dart';
 import 'auth_store.dart';
 
 class LoginPage extends StatefulWidget {
@@ -57,13 +58,21 @@ class _LoginPageState extends State<LoginPage> {
       context.go('/home');
     } on DioException catch (e) {
       if (!mounted) return;
+
+      String message;
+      if (e.response?.statusCode == 401) {
+        message = 'Benutzername oder Passwort ist falsch.';
+      } else {
+        message = userFriendlyApiError(e, fallback: 'Login fehlgeschlagen.');
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login fehlgeschlagen: $e')),
+        SnackBar(content: Text(message)),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login fehlgeschlagen: $e')),
+        const SnackBar(content: Text('Login fehlgeschlagen.')),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
