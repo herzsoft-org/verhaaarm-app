@@ -78,6 +78,8 @@ class _CatalogPageState extends State<CatalogPage> {
 
     return AppScaffold(
       title: 'Beihängungskatalog',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

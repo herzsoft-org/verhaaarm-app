@@ -172,7 +172,9 @@ class _PeriodsPageState extends State<PeriodsPage> {
       });
 
     return AppScaffold(
-      title: 'Semester / Conventsperioden',
+      title: 'Conventsperioden',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

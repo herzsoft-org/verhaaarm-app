@@ -282,7 +282,7 @@ class _EventsPageState extends State<EventsPage> {
     );
 
     return AppScaffold(
-      title: 'Termine / Kalender',
+      title: 'Termine',
       showNotificationButton: false,
       showProfileButton: false,
       actions: [

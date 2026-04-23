@@ -151,6 +151,8 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
 
     return AppScaffold(
       title: 'Arbeitsaufträge verwalten',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

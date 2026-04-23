@@ -34,7 +34,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     super.initState();
     _load();
 
-    // nice UX: refresh unread when entering page
     NotificationCenter.I.refreshUnreadCount();
     if (kIsWeb) {
       NotificationCenter.I.refreshPushStatus();
@@ -45,7 +44,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     setState(() => _loading = true);
     try {
       final list = await widget.api.listNotifications(limit: 50);
-      // newest first
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() => _items = list);
     } finally {
@@ -56,7 +54,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Future<void> _markRead(NotificationDto n) async {
     if (n.readAt != null) return;
 
-    // optimistic
     setState(() {
       _items = _items
           .map((x) => x.id == n.id ? x.copyWith(readAt: DateTime.now().toUtc()) : x)
@@ -67,7 +64,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     try {
       await widget.api.markNotificationRead(n.id);
     } catch (_) {
-      // resync later
       NotificationCenter.I.refreshUnreadCount();
     }
   }
@@ -76,7 +72,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final prev = _items;
     setState(() => _items = _items.where((x) => x.id != n.id).toList(growable: false));
 
-    // keep unread badge sane
     if (n.readAt == null) NotificationCenter.I.decrementUnread(by: 1);
 
     try {
@@ -98,9 +93,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     try {
       await widget.api.clearNotifications();
-      debugPrint('Clear all: OK');
+      debugPrint('Alle löschen: OK');
     } catch (e, st) {
-      debugPrint('Clear all: FAILED: $e\n$st');
+      debugPrint('Alle löschen: FEHLGESCHLAGEN: $e\n$st');
       if (!mounted) return;
       setState(() => _items = prev);
       NotificationCenter.I.refreshUnreadCount();
@@ -126,23 +121,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final data = n.data;
     final type = n.type.toUpperCase();
 
-    // backend "notification" data keys
     final fineId = (data['fineId'] ?? '').trim();
     final taskId = (data['taskId'] ?? '').trim();
 
-    // Tasks: always go to tasks list
     if (taskId.isNotEmpty || type.contains('TASK')) {
       context.push('/tasks');
       return;
     }
 
-    // Fines: always go to my fines (as requested)
     if (fineId.isNotEmpty || type.contains('FINE')) {
       context.push('/my-fines');
       return;
     }
-
-    // fallback: stay
   }
 
   String _pushStatusLabel(PushStatus status) {
@@ -177,7 +167,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Notifications',
+      title: 'Benachrichtigungen',
       body: RefreshIndicator(
         onRefresh: () async {
           await _load();
@@ -199,7 +189,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   TextButton.icon(
                     onPressed: _items.isEmpty || _clearing ? null : _clearAll,
                     icon: const Icon(Icons.delete_sweep),
-                    label: const Text('Clear all'),
+                    label: const Text('Alle löschen'),
                   ),
                 ],
               ),
@@ -211,7 +201,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   children: [
                     Icon(Icons.notifications_none, size: 48),
                     SizedBox(height: 12),
-                    Text('No notifications'),
+                    Text('Keine Benachrichtigungen'),
                   ],
                 ),
               ),
@@ -290,30 +280,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       style: TextStyle(
                         color: _pushStatusColor(context, status),
                         fontWeight: FontWeight.w600,
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: StreamBuilder<String>(
-                  stream: NotificationCenter.I.pushDebugStream,
-                  initialData: NotificationCenter.I.pushDebugMessage,
-                  builder: (context, snapshot) {
-                    final text = snapshot.data ?? '';
-                    if (text.isEmpty) return const SizedBox.shrink();
-
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: SelectableText(
-                        text,
-                        style: const TextStyle(fontSize: 12),
                       ),
                     );
                   },
