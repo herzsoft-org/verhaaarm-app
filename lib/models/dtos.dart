@@ -610,6 +610,9 @@ class FineSuggestionDto {
   final int? amountCents;
   final FineType type;
   final String status;
+  final String? decidedByUserId;
+  final String? decidedAt;
+  final String? acceptedFineId;
   final List<String> targetUserIds;
   final String createdAt;
 
@@ -622,6 +625,9 @@ class FineSuggestionDto {
     required this.amountCents,
     required this.type,
     required this.status,
+    required this.decidedByUserId,
+    required this.decidedAt,
+    required this.acceptedFineId,
     required this.targetUserIds,
     required this.createdAt,
   });
@@ -635,9 +641,36 @@ class FineSuggestionDto {
     amountCents: json['amountCents'] == null ? null : _optInt(json, 'amountCents'),
     type: _fineTypeFromJson(_reqString(json, 'type')),
     status: _reqString(json, 'status'),
+    decidedByUserId: _optString(json, 'decidedByUserId'),
+    decidedAt: _optString(json, 'decidedAt'),
+    acceptedFineId: _optString(json, 'acceptedFineId'),
     targetUserIds: _optStringList(json, 'targetUserIds'),
     createdAt: _reqString(json, 'createdAt'),
   );
+}
+
+class UpdateFineSuggestionRequest {
+  final String? fineDate;
+  final List<String>? targetUserIds;
+  final String? catalogItemId;
+  final String? reason;
+  final int? amountCents;
+
+  UpdateFineSuggestionRequest({
+    this.fineDate,
+    this.targetUserIds,
+    this.catalogItemId,
+    this.reason,
+    this.amountCents,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (fineDate != null) 'fineDate': fineDate,
+    if (targetUserIds != null) 'targetUserIds': targetUserIds,
+    if (catalogItemId != null) 'catalogItemId': catalogItemId,
+    if (reason != null) 'reason': reason,
+    if (amountCents != null) 'amountCents': amountCents,
+  };
 }
 
 class CreateFineSuggestionRequest {
@@ -663,6 +696,38 @@ class CreateFineSuggestionRequest {
     'amountCents': amountCents,
   };
 }
+
+
+
+class FineSuggestionPhotoDto {
+  final String id;
+  final String suggestionId;
+  final String originalFilename;
+  final String contentType;
+  final int sizeBytes;
+  final String createdAt;
+
+  FineSuggestionPhotoDto({
+    required this.id,
+    required this.suggestionId,
+    required this.originalFilename,
+    required this.contentType,
+    required this.sizeBytes,
+    required this.createdAt,
+  });
+
+  factory FineSuggestionPhotoDto.fromJson(Map<String, dynamic> json) =>
+      FineSuggestionPhotoDto(
+        id: _reqString(json, 'id'),
+        suggestionId: _reqString(json, 'suggestionId'),
+        originalFilename: _reqString(json, 'originalFilename'),
+        contentType: _reqString(json, 'contentType'),
+        sizeBytes: _optInt(json, 'sizeBytes', fallback: 0),
+        createdAt: _reqString(json, 'createdAt'),
+      );
+}
+
+
 
 // ---------- Update Fine ----------
 class UpdateFineRequest {

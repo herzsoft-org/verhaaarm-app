@@ -459,6 +459,15 @@ class ApiClient {
     return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
+  Future<FineSuggestionDto> updateSuggestion(String id, UpdateFineSuggestionRequest req) async {
+    final r = await dio.patch('/fine-suggestions/$id', data: req.toJson());
+    return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteSuggestion(String id) async {
+    await dio.delete('/fine-suggestions/$id');
+  }
+
   Future<void> rejectSuggestion(String id) async {
     await dio.post('/fine-suggestions/$id/reject');
   }
@@ -466,6 +475,70 @@ class ApiClient {
   Future<FineDtoAcceptResult> acceptSuggestion(String id) async {
     final r = await dio.post('/fine-suggestions/$id/accept');
     return FineDtoAcceptResult.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  // ----------------------------
+  // FINE SUGGESTION PHOTOS
+  // ----------------------------
+
+  Future<List<FineSuggestionPhotoDto>> listSuggestionPhotos(String suggestionId) async {
+    final r = await dio.get('/fine-suggestions/$suggestionId/photos');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => FineSuggestionPhotoDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<FineSuggestionPhotoDto> uploadSuggestionPhoto({
+    required String suggestionId,
+    String? filePath,
+    Uint8List? bytes,
+    required String filename,
+    String? contentType,
+  }) async {
+    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+      throw ArgumentError('Provide exactly one of filePath or bytes.');
+    }
+
+    final MultipartFile mf = (bytes != null)
+        ? MultipartFile.fromBytes(
+      bytes,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    )
+        : await MultipartFile.fromFile(
+      filePath!,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    );
+
+    final form = FormData.fromMap({'file': mf});
+
+    final r = await dio.post(
+      '/fine-suggestions/$suggestionId/photos',
+      data: form,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+
+    return FineSuggestionPhotoDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<Uint8List> downloadSuggestionPhotoBytes({
+    required String suggestionId,
+    required String photoId,
+  }) async {
+    final r = await dio.get(
+      '/fine-suggestions/$suggestionId/photos/$photoId/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList((r.data as List<int>));
+  }
+
+  Future<void> deleteSuggestionPhoto({
+    required String suggestionId,
+    required String photoId,
+  }) async {
+    await dio.delete('/fine-suggestions/$suggestionId/photos/$photoId');
   }
 
   // ----------------------------

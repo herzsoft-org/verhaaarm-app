@@ -916,7 +916,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
               Expanded(
                 child: FilledButton.tonalIcon(
                   onPressed: () =>
-                      GoRouter.of(context).push('/suggestions/new'),
+                      GoRouter.of(context).push('/my-fine-suggestions'),
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,

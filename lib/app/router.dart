@@ -21,6 +21,8 @@ import '../features/office/catalog/catalog_form_page.dart';
 import '../features/office/periods/periods_page.dart';
 import '../features/office/periods/period_form_page.dart';
 import '../features/office/fine_suggestions/office_fine_suggestions_page.dart';
+import '../features/fines/my_fine_suggestions_page.dart';
+import '../features/fines/fine_suggestion_detail_page.dart';
 
 import '../features/live_events/live_events_page.dart';
 import '../features/live_events/live_event_form_page.dart';
@@ -167,11 +169,32 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
       GoRoute(
+        path: '/my-fine-suggestions',
+        builder: (context, state) => MyFineSuggestionsPage(api: api),
+      ),
+      GoRoute(
         path: '/suggestions/new',
         builder: (context, state) => FineFormPage(
           api: api,
           authStore: authStore,
           mode: FineFormMode.suggestion,
+        ),
+      ),
+      GoRoute(
+        path: '/suggestions/:id',
+        builder: (context, state) => FineSuggestionDetailPage(
+          api: api,
+          authStore: authStore,
+          suggestionId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/suggestions/:id/edit',
+        builder: (context, state) => FineFormPage(
+          api: api,
+          authStore: authStore,
+          mode: FineFormMode.suggestion,
+          suggestionId: state.pathParameters['id'],
         ),
       ),
       GoRoute(

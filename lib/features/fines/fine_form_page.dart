@@ -9,6 +9,7 @@ import '../../models/dtos.dart';
 import 'member_picker_sheet.dart';
 import 'fine_photos_dialog.dart';
 import '../../auth/auth_store.dart';
+import 'suggestion_photos_dialog.dart';
 
 enum FineFormMode { official, suggestion }
 
@@ -16,12 +17,14 @@ class FineFormPage extends StatefulWidget {
   final ApiClient api;
   final AuthStore authStore;
   final FineFormMode mode;
+  final String? suggestionId;
 
   const FineFormPage({
     super.key,
     required this.api,
     required this.authStore,
     required this.mode,
+    this.suggestionId,
   });
 
   @override
@@ -53,6 +56,58 @@ class _FineFormPageState extends State<FineFormPage> {
   // fineDate (YYYY-MM-DD)
   String _fineDate = _todayIsoDate();
 
+
+  bool get _isSuggestionEdit =>
+      widget.mode == FineFormMode.suggestion &&
+          (widget.suggestionId ?? '').trim().isNotEmpty;
+
+  String _eurInputFromCents(int cents) {
+    final s = (cents / 100).toStringAsFixed(2);
+    return s.replaceAll('.', ',');
+  }
+
+  int _deriveMultiplier({
+    required int? totalAmountCents,
+    required int? defaultAmountCents,
+  }) {
+    final total = totalAmountCents ?? 0;
+    final base = defaultAmountCents ?? 0;
+    if (total <= 0 || base <= 0) return 1;
+    if (total % base != 0) return 1;
+    final m = total ~/ base;
+    return _clampMultiplier(m);
+  }
+
+  Future<void> _askAddImagesAfterSuggestionCreate(String suggestionId) async {
+    final add = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Fotos hinzufügen?'),
+        content: const Text('Möchtest du jetzt Fotos zu diesem Vorschlag hochladen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Nein'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ja'),
+          ),
+        ],
+      ),
+    );
+
+    if (add == true && mounted) {
+      await SuggestionPhotosDialog.openAdd(
+        context: context,
+        api: widget.api,
+        suggestionId: suggestionId,
+        maxPhotos: 5,
+        currentCount: 0,
+      );
+    }
+  }
+
   static String _todayIsoDate() {
     final now = DateTime.now();
     return '${now.year.toString().padLeft(4, '0')}-'
@@ -81,24 +136,55 @@ class _FineFormPageState extends State<FineFormPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final periods = await widget.api.listPeriods();
+      final periodsFuture = widget.api.listPeriods();
+      final catalogFuture = widget.api.listFineCatalog(active: true, forCreation: true);
 
-      // Backend change: supports /fine-catalog?forCreation=true
-      // This should exclude system attendance items (absent/late) from the result.
-      final catalog = await widget.api.listFineCatalog(active: true, forCreation: true);
+      FineSuggestionDto? suggestion;
+      if (_isSuggestionEdit) {
+        suggestion = await widget.api.getSuggestion(widget.suggestionId!.trim());
+      }
+
+      final periods = await periodsFuture;
+      final catalog = await catalogFuture;
 
       if (!mounted) return;
 
-      // Extra safety: filter them out client-side too.
       final filtered = catalog.where((c) => !_isAttendanceSystemTitle(c.title)).toList();
+
+      FineCatalogItemDto? selectedCatalogItem;
+      var useCatalog = true;
+      var multiplier = 1;
+
+      if (suggestion != null) {
+        useCatalog = (suggestion.catalogItemId ?? '').trim().isNotEmpty;
+
+        if (useCatalog) {
+          try {
+            selectedCatalogItem = filtered.firstWhere((c) => c.id == suggestion!.catalogItemId);
+          } catch (_) {
+            selectedCatalogItem = null;
+          }
+
+          multiplier = _deriveMultiplier(
+            totalAmountCents: suggestion.amountCents,
+            defaultAmountCents: selectedCatalogItem?.defaultAmountCents,
+          );
+        } else {
+          _amount.text = _eurInputFromCents(suggestion.amountCents ?? 0);
+        }
+
+        _reason.text = suggestion.reason ?? '';
+        _targetUserIds = suggestion.targetUserIds.toSet();
+        _fineDate = suggestion.fineDate;
+      }
 
       setState(() {
         _periods = periods;
         _catalog = filtered;
-        _selectedCatalogItem = null; // placeholder default
-        _multiplier = 1;
+        _selectedCatalogItem = selectedCatalogItem;
+        _multiplier = multiplier;
+        _useCatalog = useCatalog;
 
-        // default fineDate: today (or keep if already set)
         if (_fineDate.trim().isEmpty) _fineDate = _todayIsoDate();
       });
     } catch (e) {
@@ -262,7 +348,6 @@ class _FineFormPageState extends State<FineFormPage> {
       return;
     }
 
-    // fineDate sanity
     final fd = _fineDate.trim();
     if (fd.isEmpty || DateTime.tryParse(fd) == null || fd.length != 10) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -271,10 +356,13 @@ class _FineFormPageState extends State<FineFormPage> {
       return;
     }
 
-    // Extra safety: never allow selecting system attendance items from UI.
-    if (_useCatalog && _selectedCatalogItem != null && _isAttendanceSystemTitle(_selectedCatalogItem!.title)) {
+    if (_useCatalog &&
+        _selectedCatalogItem != null &&
+        _isAttendanceSystemTitle(_selectedCatalogItem!.title)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dieser Katalogeintrag wird automatisch durch Anwesenheit vergeben.')),
+        const SnackBar(
+          content: Text('Dieser Katalogeintrag wird automatisch durch Anwesenheit vergeben.'),
+        ),
       );
       return;
     }
@@ -295,27 +383,50 @@ class _FineFormPageState extends State<FineFormPage> {
 
         if (!mounted) return;
 
-        // Ask before navigating away
         await _askAddImagesAfterCreate(fine.id);
         if (!mounted) return;
 
         context.pushReplacement('/fines/${fine.id}');
       } else {
-        final req = CreateFineSuggestionRequest(
-          fineDate: fd,
-          targetUserIds: _targetUserIds.toList(),
-          catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
-          reason: reason,
-          amountCents: totalCents,
-        );
+        if (_isSuggestionEdit) {
+          final suggestionId = widget.suggestionId!.trim();
 
-        await widget.api.createSuggestion(req);
+          final req = UpdateFineSuggestionRequest(
+            fineDate: fd,
+            targetUserIds: _targetUserIds.toList(),
+            catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
+            reason: reason,
+            amountCents: totalCents,
+          );
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vorschlag erstellt. Fotos können erst nach Annahme hinzugefügt werden.')),
-        );
-        context.go('/home');
+          final updated = await widget.api.updateSuggestion(suggestionId, req);
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Vorschlag gespeichert.')),
+          );
+          context.go('/suggestions/${updated.id}');
+        } else {
+          final req = CreateFineSuggestionRequest(
+            fineDate: fd,
+            targetUserIds: _targetUserIds.toList(),
+            catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
+            reason: reason,
+            amountCents: totalCents,
+          );
+
+          final created = await widget.api.createSuggestion(req);
+
+          if (!mounted) return;
+
+          await _askAddImagesAfterSuggestionCreate(created.id);
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Vorschlag erstellt.')),
+          );
+          context.go('/suggestions/${created.id}');
+        }
       }
     } on DioException catch (e) {
       final code = e.response?.statusCode;
@@ -342,7 +453,9 @@ class _FineFormPageState extends State<FineFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.mode == FineFormMode.official ? 'Beihängen' : 'Beihängung vorschlagen';
+    final title = widget.mode == FineFormMode.official
+        ? 'Beihängen'
+        : (_isSuggestionEdit ? 'Vorschlag bearbeiten' : 'Beihängung vorschlagen');
 
     return AppScaffold(
       title: title,
@@ -557,7 +670,11 @@ class _FineFormPageState extends State<FineFormPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                                 : const Icon(Icons.check_rounded),
-                            label: Text(_saving ? 'Speichern…' : 'Speichern'),
+                            label: Text(
+                              _saving
+                                  ? 'Speichern…'
+                                  : (_isSuggestionEdit ? 'Änderungen speichern' : 'Speichern'),
+                            ),
                           ),
                         ),
                       ],
@@ -573,7 +690,9 @@ class _FineFormPageState extends State<FineFormPage> {
               child: Text(
                 widget.mode == FineFormMode.official
                     ? 'Hinweis: Offizielle Beihängungen nur mit Berechtigung.'
-                    : 'Hinweis: Vorschläge müssen erst von dem Sprecher oder Schmuckwart angenommen werden.',
+                    : (_isSuggestionEdit
+                    ? 'Hinweis: Offene Vorschläge können bearbeitet und mit Fotos ergänzt werden.'
+                    : 'Hinweis: Vorschläge müssen erst von dem Sprecher oder Schmuckwart angenommen werden.'),
               ),
             ),
           ),
