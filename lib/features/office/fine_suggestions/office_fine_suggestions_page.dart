@@ -168,7 +168,7 @@ class _OfficeFineSuggestionsPageState
     final canDecide = _canDecide();
 
     return AppScaffold(
-      title: 'Vorgeschlagene Beihängungen',
+      title: 'Vorschläge',
       actions: [
         IconButton(
           tooltip: 'Neu laden',

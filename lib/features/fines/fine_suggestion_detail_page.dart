@@ -167,7 +167,12 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vorschlag zurückgezogen.')),
       );
-      context.go('/my-fine-suggestions');
+
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/my-fine-suggestions');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

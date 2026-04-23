@@ -150,7 +150,7 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
     final grouped = _groupByAssignee();
 
     return AppScaffold(
-      title: 'Arbeitsaufträge verwalten',
+      title: 'Arbeitsaufträge',
       showNotificationButton: false,
       showProfileButton: false,
       actions: [

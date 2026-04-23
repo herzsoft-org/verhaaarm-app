@@ -425,7 +425,12 @@ class _FineFormPageState extends State<FineFormPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Vorschlag erstellt.')),
           );
-          context.go('/suggestions/${created.id}');
+
+          if (context.canPop()) {
+            context.pop(true);
+          } else {
+            context.go('/my-fine-suggestions');
+          }
         }
       }
     } on DioException catch (e) {
@@ -901,31 +906,79 @@ class _MultiplierRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Row(
-          children: [
-            const Icon(Icons.close_rounded),
-            const SizedBox(width: 8),
-            Text('x$value', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            IconButton(
-              onPressed: onMinus,
-              icon: const Icon(Icons.remove_circle_outline_rounded),
-              tooltip: '-',
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(12),
             ),
-            IconButton(
-              onPressed: onPlus,
-              icon: const Icon(Icons.add_circle_outline_rounded),
-              tooltip: '+',
+            child: Text(
+              'Anzahl',
+              style: theme.textTheme.labelLarge,
             ),
-            const Spacer(),
-            Text('Gesamt: $totalLabel', style: Theme.of(context).textTheme.titleMedium),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+
+          Container(
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: onMinus,
+                  icon: const Icon(Icons.remove_rounded),
+                  tooltip: 'Weniger',
+                ),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 52),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${value}x',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  onPressed: onPlus,
+                  icon: const Icon(Icons.add_rounded),
+                  tooltip: 'Mehr',
+                ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
+
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'Gesamt',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                totalLabel,
+                style: theme.textTheme.titleMedium,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

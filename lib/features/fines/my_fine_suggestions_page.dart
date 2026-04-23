@@ -127,7 +127,7 @@ class _MyFineSuggestionsPageState extends State<MyFineSuggestionsPage> {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Meine Beihängungsvorschläge',
+      title: 'Vorschläge',
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
@@ -152,7 +152,12 @@ class _MyFineSuggestionsPageState extends State<MyFineSuggestionsPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => context.push('/suggestions/new'),
+                onPressed: () async {
+                  final changed = await context.push<bool>('/suggestions/new');
+                  if (changed == true && mounted) {
+                    _load(force: true);
+                  }
+                },
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Neuen Vorschlag erstellen'),
               ),
@@ -221,7 +226,12 @@ class _MyFineSuggestionsPageState extends State<MyFineSuggestionsPage> {
                           const Icon(Icons.chevron_right_rounded),
                         ],
                       ),
-                      onTap: () => context.push('/suggestions/${s.id}'),
+                      onTap: () async {
+                        final changed = await context.push<bool>('/suggestions/${s.id}');
+                        if (changed == true && mounted) {
+                          _load(force: true);
+                        }
+                      },
                     )
                   ),
                 ),
