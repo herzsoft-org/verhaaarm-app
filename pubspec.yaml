@@ -2,7 +2,7 @@ name: verhaaarm
 description: "Verhåårm App"
 publish_to: 'none'
 
-version: 1.4.1+45
+version: 1.4.2+46
 
 environment:
   sdk: ^3.10.4
