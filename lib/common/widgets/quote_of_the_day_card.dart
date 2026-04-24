@@ -24,7 +24,7 @@ class QuoteOfTheDayCard extends StatelessWidget {
                 Icon(Icons.format_quote_rounded, color: cs.primary, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  'Zitate unserer lieben Bbr.',
+                  'Zitate aus dem Aktivenleben',
                   style: tt.titleSmall, // smaller header
                 ),
               ],
