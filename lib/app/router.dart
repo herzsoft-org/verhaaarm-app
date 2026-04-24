@@ -24,6 +24,10 @@ import '../features/office/fine_suggestions/office_fine_suggestions_page.dart';
 import '../features/fines/my_fine_suggestions_page.dart';
 import '../features/fines/fine_suggestion_detail_page.dart';
 
+import '../features/legal/legal_document.dart';
+import '../features/legal/legal_documents_page.dart';
+import '../features/legal/legal_document_viewer_page.dart';
+
 import '../features/live_events/live_events_page.dart';
 import '../features/live_events/live_event_form_page.dart';
 
@@ -134,7 +138,24 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
+      GoRoute(
+        path: '/legal-documents',
+        builder: (context, state) => const LegalDocumentsPage(),
+      ),
 
+      GoRoute(
+        path: '/legal-documents/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final doc = LegalDocument.byId(id);
+
+          if (doc == null) {
+            return const LegalDocumentsPage();
+          }
+
+          return LegalDocumentViewerPage(document: doc);
+        },
+      ),
       GoRoute(
         path: '/events',
         builder: (context, state) => EventsPage(api: api, authStore: authStore),

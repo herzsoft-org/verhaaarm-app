@@ -618,13 +618,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
           );
         },
       ),
-      actions: [
-        IconButton(
-          tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : () => _load(force: true),
-        ),
-      ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

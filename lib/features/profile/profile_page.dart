@@ -14,6 +14,7 @@ import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/schnupfspruch_button.dart';
 
 class ProfilePage extends StatefulWidget {
   final ApiClient api;
@@ -52,7 +53,8 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final c = await AppCache.I.entryOrLoadPersisted<_ProfileSnapshot>(
         _kProfile,
-        decode: (json) => _ProfileSnapshot.fromJson((json as Map).cast<String, dynamic>()),
+        decode: (json) =>
+            _ProfileSnapshot.fromJson((json as Map).cast<String, dynamic>()),
       );
       final hasCache = c != null;
 
@@ -120,7 +122,8 @@ class _ProfilePageState extends State<ProfilePage> {
     final roleSet = Roles.fromAccessToken(token);
     final roleLabel = _roleLabelFromRoleSet(roleSet);
 
-    final sessionLabel = widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
+    final sessionLabel =
+    widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
 
     final pkg = await PackageInfo.fromPlatform();
     final appVersion = '${pkg.version} (${pkg.buildNumber})';
@@ -155,7 +158,8 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     final locale = WidgetsBinding.instance.platformDispatcher.locale;
-    final localeLabel = '${locale.languageCode}_${locale.countryCode ?? ''}'.trim();
+    final localeLabel =
+    '${locale.languageCode}_${locale.countryCode ?? ''}'.trim();
 
     String displayName = '—';
     String username = '—';
@@ -241,6 +245,33 @@ class _ProfilePageState extends State<ProfilePage> {
     return 'Mitglied';
   }
 
+  Widget _buildLegalDocumentsCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => GoRouter.of(context).push('/legal-documents'),
+      child: Card(
+        color: cs.surfaceContainerLow,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.menu_book_rounded, color: cs.primary),
+              const SizedBox(width: 10),
+              Text(
+                'Rechtsgrundlagen',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const Spacer(),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static bool _isStrongEnoughPassword(String s) {
     if (s.length < 8) return false;
     final hasUpper = RegExp(r'[A-Z]').hasMatch(s);
@@ -267,7 +298,10 @@ class _ProfilePageState extends State<ProfilePage> {
       try {
         // Need userId for PATCH /users/{id}/password
         final me = await widget.api.getMe();
-        await widget.api.patchUserPassword(userId: me.id, newPassword: newPwCtrl.text);
+        await widget.api.patchUserPassword(
+          userId: me.id,
+          newPassword: newPwCtrl.text,
+        );
 
         if (!mounted) return;
         Navigator.of(context).pop(true);
@@ -326,12 +360,15 @@ class _ProfilePageState extends State<ProfilePage> {
                         labelText: 'Neues Passwort',
                         helperText:
                         'Mind. 8 Zeichen, Groß + Kleinbuchstaben, mind. eine Zahl.',
-                        helperMaxLines: 3, // wrap on phones
+                        helperMaxLines: 3,
                         suffixIcon: IconButton(
                           tooltip: showNew ? 'Verbergen' : 'Anzeigen',
-                          onPressed: () => setStateDialog(() => showNew = !showNew),
+                          onPressed: () =>
+                              setStateDialog(() => showNew = !showNew),
                           icon: Icon(
-                            showNew ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                            showNew
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
                           ),
                         ),
                       ),
@@ -354,9 +391,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         labelText: 'Passwort wiederholen',
                         suffixIcon: IconButton(
                           tooltip: showConfirm ? 'Verbergen' : 'Anzeigen',
-                          onPressed: () => setStateDialog(() => showConfirm = !showConfirm),
+                          onPressed: () =>
+                              setStateDialog(() => showConfirm = !showConfirm),
                           icon: Icon(
-                            showConfirm ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                            showConfirm
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
                           ),
                         ),
                       ),
@@ -424,8 +464,14 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('Abmelden?'),
         content: const Text('Du wirst abgemeldet und lokale Daten werden gelöscht.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Abmelden')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Abmelden'),
+          ),
         ],
       ),
     );
@@ -440,6 +486,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return AppScaffold(
       title: 'Profil',
       actions: [
+        const SchnupfspruchButton(),
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
@@ -460,7 +507,11 @@ class _ProfilePageState extends State<ProfilePage> {
               child: _loading
                   ? const Row(
                 children: [
-                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                   SizedBox(width: 12),
                   Text('Lade Profil…'),
                 ],
@@ -470,8 +521,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   CircleAvatar(
                     radius: 26,
                     child: Text(
-                      (_displayName != '—' && _displayName.trim().isNotEmpty)
-                          ? _displayName.trim().characters.first.toUpperCase()
+                      (_displayName != '—' &&
+                          _displayName.trim().isNotEmpty)
+                          ? _displayName
+                          .trim()
+                          .characters
+                          .first
+                          .toUpperCase()
                           : 'V',
                     ),
                   ),
@@ -480,7 +536,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_displayName, style: Theme.of(context).textTheme.titleLarge),
+                        Text(
+                          _displayName,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           _username == '—' ? '—' : '@$_username',
@@ -492,10 +551,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             Icon(
                               Icons.verified_user_rounded,
                               size: 18,
-                              color: Theme.of(context).colorScheme.primary,
+                              color:
+                              Theme.of(context).colorScheme.primary,
                             ),
                             const SizedBox(width: 6),
-                            Text(_roleLabel, style: Theme.of(context).textTheme.bodyMedium),
+                            Text(
+                              _roleLabel,
+                              style:
+                              Theme.of(context).textTheme.bodyMedium,
+                            ),
                           ],
                         ),
                       ],
@@ -505,6 +569,9 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ),
+
+          const SizedBox(height: 12),
+          _buildLegalDocumentsCard(context),
 
           const SizedBox(height: 12),
           Card(
@@ -537,12 +604,13 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
 
-          // MOVED: Change password button right above logout button
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: (_loading || !widget.authStore.isLoggedIn) ? null : _openChangePasswordDialog,
+              onPressed: (_loading || !widget.authStore.isLoggedIn)
+                  ? null
+                  : _openChangePasswordDialog,
               icon: const Icon(Icons.password_rounded),
               label: const Text('Passwort ändern'),
             ),
@@ -571,7 +639,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   recognizer: TapGestureRecognizer()
                     ..onTap = () async {
                       final uri = Uri.parse('https://github.com/herzblutnord');
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
                     },
                 ),
               ],
@@ -617,14 +688,15 @@ class _ProfileSnapshot {
     'sessionLabel': sessionLabel,
   };
 
-  factory _ProfileSnapshot.fromJson(Map<String, dynamic> json) => _ProfileSnapshot(
-    displayName: (json['displayName'] as String?) ?? '—',
-    username: (json['username'] as String?) ?? '—',
-    roleLabel: (json['roleLabel'] as String?) ?? 'Mitglied',
-    sessionLabel: (json['sessionLabel'] as String?) ?? '—',
-    appVersion: (json['appVersion'] as String?) ?? '—',
-    platformLabel: (json['platformLabel'] as String?) ?? '—',
-    deviceLabel: (json['deviceLabel'] as String?) ?? '—',
-    localeLabel: (json['localeLabel'] as String?) ?? '—',
-  );
+  factory _ProfileSnapshot.fromJson(Map<String, dynamic> json) =>
+      _ProfileSnapshot(
+        displayName: (json['displayName'] as String?) ?? '—',
+        username: (json['username'] as String?) ?? '—',
+        roleLabel: (json['roleLabel'] as String?) ?? 'Mitglied',
+        sessionLabel: (json['sessionLabel'] as String?) ?? '—',
+        appVersion: (json['appVersion'] as String?) ?? '—',
+        platformLabel: (json['platformLabel'] as String?) ?? '—',
+        deviceLabel: (json['deviceLabel'] as String?) ?? '—',
+        localeLabel: (json['localeLabel'] as String?) ?? '—',
+      );
 }

@@ -2,7 +2,7 @@ name: verhaaarm
 description: "Verhåårm App"
 publish_to: 'none'
 
-version: 1.4.4+48
+version: 1.4.5+49
 
 environment:
   sdk: ^3.10.4
@@ -42,6 +42,8 @@ dependencies:
   firebase_messaging: ^16.1.0
 
   flutter_svg: ^2.2.4
+  pdfx: ^2.9.2
+  file_saver: ^0.3.1
 
 
 dev_dependencies:
@@ -56,6 +58,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/zirkel.svg
+    - assets/icons/moustache.svg
+    - assets/data/schnupfsprueche.json
+    - assets/legal/
 
 flutter_launcher_icons:
   android: true
