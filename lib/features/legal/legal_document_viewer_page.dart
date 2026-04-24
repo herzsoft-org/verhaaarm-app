@@ -1,8 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
 
 import '../../common/widgets/app_scaffold.dart';
 import 'legal_document.dart';
+import 'legal_document_save_result.dart';
+import 'legal_document_saver.dart';
+import 'legal_document_viewer_platform.dart';
 
 class LegalDocumentViewerPage extends StatefulWidget {
   final LegalDocument document;
@@ -20,14 +26,12 @@ class LegalDocumentViewerPage extends StatefulWidget {
 class _LegalDocumentViewerPageState extends State<LegalDocumentViewerPage> {
   late final PdfControllerPinch _controller;
 
+  bool _loading = true;
+  bool _failed = false;
+  bool _saving = false;
+
   int _currentPage = 1;
-  int? _pagesCount;
-
-  bool get _hasPages => (_pagesCount ?? 0) > 0;
-
-  bool get _canGoBack => _hasPages && _currentPage > 1;
-
-  bool get _canGoForward => _hasPages && _currentPage < (_pagesCount ?? 1);
+  int _pagesCount = 0;
 
   @override
   void initState() {
@@ -45,185 +49,310 @@ class _LegalDocumentViewerPageState extends State<LegalDocumentViewerPage> {
     super.dispose();
   }
 
-  Future<void> _goToPage(int page) async {
-    final pagesCount = _pagesCount;
-    if (pagesCount == null) return;
+  Future<void> _saveDocument() async {
+    if (_saving) return;
 
-    final safePage = page.clamp(1, pagesCount).toInt();
+    setState(() => _saving = true);
+
+    try {
+      final data = await rootBundle.load(widget.document.assetPath);
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+
+      final result = await saveLegalDocument(
+        fileName: widget.document.fileName,
+        assetPath: widget.document.assetPath,
+        bytes: Uint8List.fromList(bytes),
+      );
+
+      if (!mounted) return;
+
+      final message = switch (result) {
+        LegalDocumentSaveResult.saved =>
+        '${widget.document.title} wird heruntergeladen.',
+        LegalDocumentSaveResult.opened =>
+        '${widget.document.title} wurde im Browser geöffnet.',
+      };
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${widget.document.title} konnte nicht heruntergeladen werden.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<void> _goToPage(int page) async {
+    if (_pagesCount <= 0) return;
+
+    final safePage = page.clamp(1, _pagesCount);
 
     await _controller.animateToPage(
       pageNumber: safePage,
       duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
+      curve: Curves.easeOutCubic,
     );
   }
 
-  Future<void> _previousPage() async {
-    if (!_canGoBack) return;
+  Future<void> _goToPreviousPage() async {
+    if (_currentPage <= 1) return;
 
     await _controller.previousPage(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
     );
   }
 
-  Future<void> _nextPage() async {
-    if (!_canGoForward) return;
+  Future<void> _goToNextPage() async {
+    if (_pagesCount <= 0 || _currentPage >= _pagesCount) return;
 
     await _controller.nextPage(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
     );
   }
 
-  Future<void> _openJumpToPageDialog() async {
-    final pagesCount = _pagesCount;
-    if (pagesCount == null) return;
-
-    final controller = TextEditingController(text: _currentPage.toString());
-
-    final page = await showDialog<int>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Zu Seite springen'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Seite',
-              helperText: '1 bis $pagesCount',
-            ),
-            onSubmitted: (_) {
-              final value = int.tryParse(controller.text.trim());
-              Navigator.pop(ctx, value);
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = int.tryParse(controller.text.trim());
-                Navigator.pop(ctx, value);
-              },
-              child: const Text('Springen'),
-            ),
-          ],
-        );
-      },
-    );
-
-    controller.dispose();
-
-    if (page == null) return;
-    await _goToPage(page);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pagesCount = _pagesCount;
-
+  Widget _buildMobileWebFallback(BuildContext context) {
     return AppScaffold(
       title: widget.document.title,
-      body: Column(
-        children: [
-          Material(
-            elevation: 1,
-            child: SafeArea(
-              top: false,
-              bottom: false,
+      actions: [
+        IconButton(
+          tooltip: 'Herunterladen',
+          onPressed: _saving ? null : _saveDocument,
+          icon: _saving
+              ? const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+              : const Icon(Icons.download_rounded),
+        ),
+      ],
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: Row(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      tooltip: 'Erste Seite',
-                      onPressed: _canGoBack ? () => _goToPage(1) : null,
-                      icon: const Icon(Icons.first_page_rounded),
+                    const Icon(
+                      Icons.picture_as_pdf_rounded,
+                      size: 56,
                     ),
-                    IconButton(
-                      tooltip: 'Vorherige Seite',
-                      onPressed: _canGoBack ? _previousPage : null,
-                      icon: const Icon(Icons.chevron_left_rounded),
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.document.title,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    Expanded(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(999),
-                        onTap: _hasPages ? _openJumpToPageDialog : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            pagesCount == null
-                                ? 'PDF wird geladen…'
-                                : 'Seite $_currentPage / $pagesCount',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
-                        ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Die PDF-Vorschau ist im mobilen Browser nicht zuverlässig. '
+                          'Öffne die Datei direkt im Browser oder lade sie herunter.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          openLegalDocumentExternally(
+                            widget.document.assetPath,
+                          );
+                        },
+                        icon: const Icon(Icons.open_in_new_rounded),
+                        label: const Text('Im Browser öffnen'),
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Nächste Seite',
-                      onPressed: _canGoForward ? _nextPage : null,
-                      icon: const Icon(Icons.chevron_right_rounded),
-                    ),
-                    IconButton(
-                      tooltip: 'Letzte Seite',
-                      onPressed: _canGoForward && pagesCount != null
-                          ? () => _goToPage(pagesCount)
-                          : null,
-                      icon: const Icon(Icons.last_page_rounded),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _saving ? null : _saveDocument,
+                        icon: _saving
+                            ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : const Icon(Icons.download_rounded),
+                        label: const Text('Herunterladen'),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          Expanded(
-            child: PdfViewPinch(
-              controller: _controller,
-              onDocumentLoaded: (document) {
-                setState(() => _pagesCount = document.pagesCount);
-              },
-              onPageChanged: (page) {
-                setState(() => _currentPage = page);
-              },
-              onDocumentError: (_) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('PDF konnte nicht geladen werden.'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageControls(BuildContext context) {
+    final canGoBack = !_loading && !_failed && _currentPage > 1;
+    final canGoForward =
+        !_loading && !_failed && _pagesCount > 0 && _currentPage < _pagesCount;
+
+    final pageText = _loading
+        ? 'PDF wird geladen...'
+        : _failed
+        ? 'PDF konnte nicht geladen werden'
+        : '$_currentPage / $_pagesCount';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Erste Seite',
+              onPressed: canGoBack ? () => _goToPage(1) : null,
+              icon: const Icon(Icons.first_page_rounded),
+            ),
+            IconButton(
+              tooltip: 'Vorherige Seite',
+              onPressed: canGoBack ? _goToPreviousPage : null,
+              icon: const Icon(Icons.chevron_left_rounded),
+            ),
+            Expanded(
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 40),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 8,
                   ),
-                );
-              },
-              builders: PdfViewPinchBuilders<DefaultBuilderOptions>(
-                options: const DefaultBuilderOptions(),
-                documentLoaderBuilder: (_) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-                pageLoaderBuilder: (_) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-                errorBuilder: (_, __) => const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('PDF konnte nicht angezeigt werden.'),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    pageText,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
               ),
             ),
+            IconButton(
+              tooltip: 'Nächste Seite',
+              onPressed: canGoForward ? _goToNextPage : null,
+              icon: const Icon(Icons.chevron_right_rounded),
+            ),
+            IconButton(
+              tooltip: 'Letzte Seite',
+              onPressed: canGoForward ? () => _goToPage(_pagesCount) : null,
+              icon: const Icon(Icons.last_page_rounded),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPdfBody(BuildContext context) {
+    if (_failed) {
+      return const Center(
+        child: Text('PDF konnte nicht angezeigt werden.'),
+      );
+    }
+
+    return PdfViewPinch(
+      controller: _controller,
+      onDocumentLoaded: (document) {
+        if (!mounted) return;
+
+        setState(() {
+          _loading = false;
+          _failed = false;
+          _pagesCount = document.pagesCount;
+          _currentPage = 1;
+        });
+      },
+      onDocumentError: (_) {
+        if (!mounted) return;
+
+        setState(() {
+          _loading = false;
+          _failed = true;
+          _pagesCount = 0;
+          _currentPage = 1;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PDF konnte nicht geladen werden.')),
+        );
+      },
+      onPageChanged: (page) {
+        if (!mounted) return;
+
+        setState(() {
+          _currentPage = page;
+        });
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (shouldUseBrowserPdfFallback) {
+      return _buildMobileWebFallback(context);
+    }
+
+    return AppScaffold(
+      title: widget.document.title,
+      actions: [
+        IconButton(
+          tooltip: 'Herunterladen',
+          onPressed: _saving ? null : _saveDocument,
+          icon: _saving
+              ? const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+              : const Icon(Icons.download_rounded),
+        ),
+      ],
+      body: Column(
+        children: [
+          _buildPageControls(context),
+          Expanded(
+            child: _buildPdfBody(context),
           ),
         ],
       ),

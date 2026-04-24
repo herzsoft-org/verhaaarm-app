@@ -2,7 +2,9 @@ import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
 
-Future<void> saveLegalDocumentPlatform({
+import 'legal_document_save_result.dart';
+
+Future<LegalDocumentSaveResult> saveLegalDocumentPlatform({
   required String fileName,
   required String assetPath,
   required Uint8List bytes,
@@ -18,4 +20,6 @@ Future<void> saveLegalDocumentPlatform({
     fileExtension: 'pdf',
     mimeType: MimeType.pdf,
   );
+
+  return LegalDocumentSaveResult.saved;
 }

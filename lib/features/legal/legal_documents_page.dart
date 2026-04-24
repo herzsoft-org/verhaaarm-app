@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../common/widgets/app_scaffold.dart';
 import 'legal_document.dart';
+import 'legal_document_save_result.dart';
 import 'legal_document_saver.dart';
 
 class LegalDocumentsPage extends StatefulWidget {
@@ -30,18 +31,25 @@ class _LegalDocumentsPageState extends State<LegalDocumentsPage> {
         data.lengthInBytes,
       );
 
-      await saveLegalDocument(
+      final result = await saveLegalDocument(
         fileName: doc.fileName,
         assetPath: doc.assetPath,
         bytes: Uint8List.fromList(bytes),
       );
 
       if (!mounted) return;
+
+      final message = switch (result) {
+        LegalDocumentSaveResult.saved => '${doc.title} wird heruntergeladen.',
+        LegalDocumentSaveResult.opened => '${doc.title} wurde im Browser geöffnet.',
+      };
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${doc.title} wurde geöffnet oder gespeichert.')),
+        SnackBar(content: Text(message)),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${doc.title} konnte nicht heruntergeladen werden.'),
