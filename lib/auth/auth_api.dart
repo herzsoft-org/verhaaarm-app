@@ -8,19 +8,33 @@ class AuthApi {
 
   static const _kSkipRefresh = 'skip_auth_refresh';
 
-  Future<TokenResponse> login({required String username, required String password}) async {
+  Future<TokenResponse> login({
+    required String username,
+    required String password,
+    Map<String, dynamic>? deviceInfo,
+  }) async {
     final resp = await _dio.post(
       '/auth/login',
-      data: {'username': username, 'password': password},
+      data: {
+        'username': username,
+        'password': password,
+        if (deviceInfo != null && deviceInfo.isNotEmpty) 'deviceInfo': deviceInfo,
+      },
       options: Options(extra: {_kSkipRefresh: true}),
     );
     return TokenResponse.fromJson(resp.data as Map<String, dynamic>);
   }
 
-  Future<TokenResponse> refresh({required String refreshToken}) async {
+  Future<TokenResponse> refresh({
+    required String refreshToken,
+    Map<String, dynamic>? deviceInfo,
+  }) async {
     final resp = await _dio.post(
       '/auth/refresh',
-      data: {'refreshToken': refreshToken},
+      data: {
+        'refreshToken': refreshToken,
+        if (deviceInfo != null && deviceInfo.isNotEmpty) 'deviceInfo': deviceInfo,
+      },
       options: Options(extra: {_kSkipRefresh: true}),
     );
     return TokenResponse.fromJson(resp.data as Map<String, dynamic>);

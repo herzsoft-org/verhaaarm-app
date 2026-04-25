@@ -6,6 +6,7 @@ import '../../../auth/auth_store.dart';
 import '../../../auth/roles.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
+import '../../../common/format.dart';
 
 class UsersPage extends StatefulWidget {
   final ApiClient api;
@@ -21,6 +22,7 @@ class _UsersPageState extends State<UsersPage> {
   bool _loading = true;
   List<UserDto> _users = const [];
   String _searchQuery = '';
+  String? _onlineFilter; // null, week, month
 
   @override
   void initState() {
@@ -57,8 +59,7 @@ class _UsersPageState extends State<UsersPage> {
         return;
       }
 
-      // Correct admin endpoint: GET /users (no query params)
-      final users = await widget.api.listUsersAdmin();
+      final users = await widget.api.listUsersAdmin(online: _onlineFilter);
 
       users.sort((a, b) {
         final ad = a.displayName.trim().toLowerCase();
@@ -86,6 +87,15 @@ class _UsersPageState extends State<UsersPage> {
   String _singleRoleLabel(UserDto u) {
     if (u.roles.isEmpty) return '—';
     return _roleLabelUi(u.roles.first);
+  }
+
+  String _date(String? iso) {
+    if (iso == null || iso.trim().isEmpty) return 'nie online';
+    try {
+      return Format.dateTimeShort(iso);
+    } catch (_) {
+      return iso;
+    }
   }
 
   Future<void> _openSearch() async {
@@ -148,6 +158,42 @@ class _UsersPageState extends State<UsersPage> {
           : ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Alle'),
+                    selected: _onlineFilter == null,
+                    onSelected: (_) {
+                      setState(() => _onlineFilter = null);
+                      _load();
+                    },
+                  ),
+                  FilterChip(
+                    label: const Text('Online diese Woche'),
+                    selected: _onlineFilter == 'week',
+                    onSelected: (_) {
+                      setState(() => _onlineFilter = 'week');
+                      _load();
+                    },
+                  ),
+                  FilterChip(
+                    label: const Text('Online diesen Monat'),
+                    selected: _onlineFilter == 'month',
+                    onSelected: (_) {
+                      setState(() => _onlineFilter = 'month');
+                      _load();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           if (filteredUsers.isEmpty)
             const Padding(
               padding: EdgeInsets.all(8),
@@ -159,9 +205,11 @@ class _UsersPageState extends State<UsersPage> {
                 leading: Icon(u.disabled ? Icons.block_rounded : Icons.person_rounded),
                 title: Text('${u.displayName} (${u.username})'),
                 subtitle: Text(
-                  'Role: ${_singleRoleLabel(u)}${u.disabled ? '\nDeaktiviert' : ''}',
+                  'Role: ${_singleRoleLabel(u)}'
+                      '\nZuletzt online: ${_date(u.lastOnlineAt)}'
+                      '${u.disabled ? '\nDeaktiviert' : ''}',
                 ),
-                isThreeLine: u.disabled,
+                isThreeLine: true,
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push('/office/users/${u.id}/edit'),
               ),

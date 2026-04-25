@@ -32,6 +32,7 @@ class _OfficePageState extends State<OfficePage> {
     final canPeriods = Roles.canManagePeriods(roles);
     final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
     final canTasks = Roles.canManageTasks(roles);
+    final isAdmin = roles.contains(AppRole.admin);
 
     return AppScaffold(
       title: 'Amtsausführung',
@@ -125,6 +126,19 @@ class _OfficePageState extends State<OfficePage> {
               ],
             ),
           if (canUsers) const SizedBox(height: 12),
+          if (isAdmin)
+            _Section(
+              title: 'Sessions',
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.analytics_rounded),
+                  title: const Text('Session-Statistik'),
+                  subtitle: const Text('Aktive Sessions nach Zeitraum, App-Typ und Browser'),
+                  onTap: () => context.push('/office/session-stats'),
+                ),
+              ],
+            ),
+          if (isAdmin) const SizedBox(height: 12),
         ],
       ),
     );

@@ -7,6 +7,7 @@ import '../auth/auth_api.dart';
 import '../auth/auth_interceptor.dart';
 import '../auth/auth_store.dart';
 import '../models/dtos.dart';
+import '../auth/device_info_payload.dart';
 
 class ApiClient {
   final AuthStore authStore;
@@ -52,8 +53,15 @@ class ApiClient {
   // ----------------------------
   // AUTH convenience (swagger: /auth/login, /auth/refresh, /auth/logout)
   // ----------------------------
-  Future<TokenResponse> login({required String username, required String password}) {
-    return auth.login(username: username, password: password);
+  Future<TokenResponse> login({
+    required String username,
+    required String password,
+  }) async {
+    return auth.login(
+      username: username,
+      password: password,
+      deviceInfo: await collectDeviceInfoPayload(),
+    );
   }
 
   Future<void> logoutOnServer(String refreshToken) async {
@@ -102,8 +110,14 @@ class ApiClient {
     );
   }
 
-  Future<List<UserDto>> listUsersAdmin() async {
-    final r = await dio.get('/users'); // admin endpoint
+  Future<List<UserDto>> listUsersAdmin({String? online}) async {
+    final r = await dio.get(
+      '/users',
+      queryParameters: {
+        if (online != null && online.trim().isNotEmpty) 'online': online.trim(),
+      },
+    );
+
     final list = (r.data as List).cast<dynamic>();
     return list
         .map((e) => UserDto.fromJson((e as Map).cast<String, dynamic>()))
@@ -667,6 +681,34 @@ class ApiClient {
         'raw': raw,
       },
     );
+  }
+
+  // ----------------------------
+// SESSIONS
+// ----------------------------
+
+  Future<List<UserSessionDto>> listMySessions() async {
+    final r = await dio.get('/sessions/me');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => UserSessionDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<void> touchMySession() async {
+    await dio.post(
+      '/sessions/me/touch',
+      data: await collectDeviceInfoPayload(),
+    );
+  }
+
+  Future<void> revokeMySession(String sessionId) async {
+    await dio.delete('/sessions/me/$sessionId');
+  }
+
+  Future<SessionStatsDto> getSessionStats() async {
+    final r = await dio.get('/sessions/admin/stats');
+    return SessionStatsDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
 // ----------------------------

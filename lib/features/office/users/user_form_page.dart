@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../api/api_client.dart';
 import '../../../auth/auth_store.dart';
 import '../../../auth/roles.dart';
+import '../../../common/format.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
 
@@ -37,6 +38,8 @@ class _UserFormPageState extends State<UserFormPage> {
   // Backend: exactly one role
   String _role = 'MEMBER';
 
+  String? _lastOnlineAt;
+
   bool get _isEdit => widget.userId != null;
 
   @override
@@ -66,12 +69,23 @@ class _UserFormPageState extends State<UserFormPage> {
       case 'TREASURER':
         return 'Kassenwart';
       default:
-        return role; // ADMIN, TREASURER, ...
+        return role;
+    }
+  }
+
+  String _date(String? iso) {
+    if (iso == null || iso.trim().isEmpty) return 'nie online';
+
+    try {
+      return Format.dateTimeShort(iso);
+    } catch (_) {
+      return iso;
     }
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
+
     try {
       final roles = Roles.fromAccessToken(widget.authStore.accessToken);
       if (!Roles.canManageUsers(roles)) {
@@ -85,13 +99,16 @@ class _UserFormPageState extends State<UserFormPage> {
 
       if (_isEdit) {
         final u = await widget.api.getUser(widget.userId!);
+
         _usernameCtrl.text = u.username;
         _displayNameCtrl.text = u.displayName;
         _disabled = u.disabled;
         _role = u.roles.isNotEmpty ? u.roles.first : 'MEMBER';
+        _lastOnlineAt = u.lastOnlineAt;
       } else {
         _disabled = false;
         _role = 'MEMBER';
+        _lastOnlineAt = null;
       }
 
       if (!mounted) return;
@@ -111,6 +128,7 @@ class _UserFormPageState extends State<UserFormPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
+
     try {
       if (_isEdit) {
         final req = UpdateUserRequest(
@@ -118,6 +136,7 @@ class _UserFormPageState extends State<UserFormPage> {
           disabled: _disabled,
           roles: [_role],
         );
+
         await widget.api.updateUser(widget.userId!, req);
       } else {
         final req = CreateUserRequest(
@@ -126,6 +145,7 @@ class _UserFormPageState extends State<UserFormPage> {
           password: _passwordCtrl.text,
           roles: [_role],
         );
+
         await widget.api.createUser(req);
       }
 
@@ -172,6 +192,7 @@ class _UserFormPageState extends State<UserFormPage> {
     if (confirmed != true) return;
 
     setState(() => _loading = true);
+
     try {
       await widget.api.deleteUserHard(widget.userId!);
 
@@ -232,7 +253,9 @@ class _UserFormPageState extends State<UserFormPage> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _displayNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Display Name'),
+                      decoration: const InputDecoration(
+                        labelText: 'Display Name',
+                      ),
                       validator: (v) =>
                       ((v ?? '').trim().isEmpty) ? 'Pflichtfeld' : null,
                     ),
@@ -241,15 +264,29 @@ class _UserFormPageState extends State<UserFormPage> {
                       TextFormField(
                         controller: _passwordCtrl,
                         obscureText: true,
-                        decoration:
-                        const InputDecoration(labelText: 'Initiales Passwort'),
-                        validator: (v) => ((v ?? '').isEmpty) ? 'Pflichtfeld' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Initiales Passwort',
+                        ),
+                        validator: (v) =>
+                        ((v ?? '').isEmpty) ? 'Pflichtfeld' : null,
                       ),
                     ],
                   ],
                 ),
               ),
             ),
+
+            if (_isEdit) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.schedule_rounded),
+                  title: const Text('Zuletzt online'),
+                  subtitle: Text(_date(_lastOnlineAt)),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 12),
             Card(
               child: Padding(
@@ -257,7 +294,10 @@ class _UserFormPageState extends State<UserFormPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Rolle', style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      'Rolle',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 6),
                     const Text(
                       'Hinweis: Es muss immer mindestens einen Admin, Sprecher und Schmuckwart geben.',
@@ -271,11 +311,26 @@ class _UserFormPageState extends State<UserFormPage> {
                       },
                       child: Column(
                         children: [
-                          _RoleRadio(label: _roleLabelUi('ADMIN'), value: 'ADMIN'),
-                          _RoleRadio(label: _roleLabelUi('SENIOR'), value: 'SENIOR'),
-                          _RoleRadio(label: _roleLabelUi('HOUSEKEEPING'), value: 'HOUSEKEEPING'),
-                          _RoleRadio(label: _roleLabelUi('TREASURER'), value: 'TREASURER'),
-                          _RoleRadio(label: _roleLabelUi('MEMBER'), value: 'MEMBER'),
+                          _RoleRadio(
+                            label: _roleLabelUi('ADMIN'),
+                            value: 'ADMIN',
+                          ),
+                          _RoleRadio(
+                            label: _roleLabelUi('SENIOR'),
+                            value: 'SENIOR',
+                          ),
+                          _RoleRadio(
+                            label: _roleLabelUi('HOUSEKEEPING'),
+                            value: 'HOUSEKEEPING',
+                          ),
+                          _RoleRadio(
+                            label: _roleLabelUi('TREASURER'),
+                            value: 'TREASURER',
+                          ),
+                          _RoleRadio(
+                            label: _roleLabelUi('MEMBER'),
+                            value: 'MEMBER',
+                          ),
                         ],
                       ),
                     ),
@@ -283,16 +338,20 @@ class _UserFormPageState extends State<UserFormPage> {
                 ),
               ),
             ),
+
             const SizedBox(height: 12),
             if (_isEdit)
               Card(
                 child: SwitchListTile(
                   title: const Text('Deaktiviert'),
-                  subtitle: const Text('Deaktivierte Nutzer können sich nicht einloggen'),
+                  subtitle: const Text(
+                    'Deaktivierte Nutzer können sich nicht einloggen',
+                  ),
                   value: _disabled,
                   onChanged: (v) => setState(() => _disabled = v),
                 ),
               ),
+
             const SizedBox(height: 12),
             if (_isEdit)
               SizedBox(
@@ -304,6 +363,7 @@ class _UserFormPageState extends State<UserFormPage> {
                   label: const Text('Passwort setzen'),
                 ),
               ),
+
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -313,6 +373,7 @@ class _UserFormPageState extends State<UserFormPage> {
                 label: const Text('Speichern'),
               ),
             ),
+
             if (_isEdit) ...[
               const SizedBox(height: 12),
               SizedBox(

@@ -52,6 +52,7 @@ class _LoginPageState extends State<LoginPage> {
       await widget.authStore.setTokens(
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
+        sessionId: tokens.sessionId,
       );
 
       if (!mounted) return;

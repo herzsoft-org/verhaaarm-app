@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 
 import 'auth_store.dart';
 import 'auth_api.dart';
+import 'device_info_payload.dart';
 
 class AuthInterceptor extends Interceptor {
   final AuthStore authStore;
@@ -48,10 +49,14 @@ class AuthInterceptor extends Interceptor {
     try {
       // Start refresh once; others await same future.
       _refreshing ??= () async {
-        final newTokens = await authApi.refresh(refreshToken: refreshToken);
+        final newTokens = await authApi.refresh(
+          refreshToken: refreshToken,
+          deviceInfo: await collectDeviceInfoPayload(),
+        );
         await authStore.setTokens(
           accessToken: newTokens.accessToken,
           refreshToken: newTokens.refreshToken,
+          sessionId: newTokens.sessionId,
         );
       }();
 

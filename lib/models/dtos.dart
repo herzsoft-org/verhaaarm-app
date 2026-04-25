@@ -81,12 +81,18 @@ DateTime _parseLocalDate(String s) {
 class TokenResponse {
   final String accessToken;
   final String refreshToken;
+  final String? sessionId;
 
-  TokenResponse({required this.accessToken, required this.refreshToken});
+  TokenResponse({
+    required this.accessToken,
+    required this.refreshToken,
+    this.sessionId,
+  });
 
   factory TokenResponse.fromJson(Map<String, dynamic> json) => TokenResponse(
     accessToken: _reqString(json, 'accessToken'),
     refreshToken: _reqString(json, 'refreshToken'),
+    sessionId: _optString(json, 'sessionId'),
   );
 }
 
@@ -227,6 +233,7 @@ class UserDto {
   final String displayName;
   final bool disabled;
   final List<String> roles;
+  final String? lastOnlineAt;
 
   UserDto({
     required this.id,
@@ -234,6 +241,7 @@ class UserDto {
     required this.displayName,
     required this.disabled,
     required this.roles,
+    this.lastOnlineAt,
   });
 
   factory UserDto.fromJson(Map<String, dynamic> json) => UserDto(
@@ -242,7 +250,112 @@ class UserDto {
     displayName: _reqString(json, 'displayName'),
     disabled: _optBool(json, 'disabled', fallback: false),
     roles: _optStringList(json, 'roles'),
+    lastOnlineAt: _optString(json, 'lastOnlineAt'),
   );
+}
+
+class UserSessionDto {
+  final String id;
+  final String userId;
+  final String appType;
+  final String? deviceName;
+  final String? deviceModel;
+  final String? osName;
+  final String? osVersion;
+  final String? browserName;
+  final String? browserVersion;
+  final String? userAgent;
+  final String createdAt;
+  final String lastActiveAt;
+  final String expiresAt;
+  final String? revokedAt;
+  final bool current;
+
+  UserSessionDto({
+    required this.id,
+    required this.userId,
+    required this.appType,
+    required this.deviceName,
+    required this.deviceModel,
+    required this.osName,
+    required this.osVersion,
+    required this.browserName,
+    required this.browserVersion,
+    required this.userAgent,
+    required this.createdAt,
+    required this.lastActiveAt,
+    required this.expiresAt,
+    required this.revokedAt,
+    required this.current,
+  });
+
+  factory UserSessionDto.fromJson(Map<String, dynamic> json) => UserSessionDto(
+    id: _reqString(json, 'id'),
+    userId: _reqString(json, 'userId'),
+    appType: _optString(json, 'appType') ?? 'UNKNOWN',
+    deviceName: _optString(json, 'deviceName'),
+    deviceModel: _optString(json, 'deviceModel'),
+    osName: _optString(json, 'osName'),
+    osVersion: _optString(json, 'osVersion'),
+    browserName: _optString(json, 'browserName'),
+    browserVersion: _optString(json, 'browserVersion'),
+    userAgent: _optString(json, 'userAgent'),
+    createdAt: _reqString(json, 'createdAt'),
+    lastActiveAt: _reqString(json, 'lastActiveAt'),
+    expiresAt: _reqString(json, 'expiresAt'),
+    revokedAt: _optString(json, 'revokedAt'),
+    current: _optBool(json, 'current', fallback: false),
+  );
+}
+
+class SessionStatsBucketDto {
+  final String appType;
+  final String browserName;
+  final int count;
+
+  SessionStatsBucketDto({
+    required this.appType,
+    required this.browserName,
+    required this.count,
+  });
+
+  factory SessionStatsBucketDto.fromJson(Map<String, dynamic> json) =>
+      SessionStatsBucketDto(
+        appType: _optString(json, 'appType') ?? 'UNKNOWN',
+        browserName: _optString(json, 'browserName') ?? 'UNKNOWN',
+        count: _optInt(json, 'count'),
+      );
+}
+
+class SessionStatsDto {
+  final List<SessionStatsBucketDto> week;
+  final List<SessionStatsBucketDto> month;
+  final List<SessionStatsBucketDto> year;
+
+  SessionStatsDto({
+    required this.week,
+    required this.month,
+    required this.year,
+  });
+
+  factory SessionStatsDto.fromJson(Map<String, dynamic> json) => SessionStatsDto(
+    week: _statsList(json, 'week'),
+    month: _statsList(json, 'month'),
+    year: _statsList(json, 'year'),
+  );
+
+  static List<SessionStatsBucketDto> _statsList(
+      Map<String, dynamic> json,
+      String key,
+      ) {
+    final v = json[key];
+    if (v is! List) return const [];
+
+    return v
+        .whereType<Map>()
+        .map((e) => SessionStatsBucketDto.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
+  }
 }
 
 class CreateUserRequest {

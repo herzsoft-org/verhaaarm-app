@@ -575,6 +575,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
           const SizedBox(height: 12),
           Card(
+            child: ListTile(
+              leading: const Icon(Icons.devices_rounded),
+              title: const Text('Sessions & Geräte'),
+              subtitle: const Text('Aktive Logins ansehen und andere Geräte abmelden'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push('/profile/sessions'),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          Card(
             child: Column(
               children: [
                 ListTile(

@@ -46,6 +46,9 @@ import '../push/push_fcm.dart' show setPushTapHandler;
 import '../models/dtos.dart';
 import '../auth/roles.dart';
 
+import '../features/profile/sessions_page.dart';
+import '../features/office/session_stats_page.dart';
+
 final GlobalKey<NavigatorState> rootNavKey = GlobalKey<NavigatorState>();
 
 GoRouter? _appRouter;
@@ -105,6 +108,10 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/profile',
         builder: (context, state) => ProfilePage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/profile/sessions',
+        builder: (context, state) => SessionsPage(api: api),
       ),
       GoRoute(
         path: '/notifications',
@@ -267,6 +274,10 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/office/tasks',
         builder: (context, state) => OfficeTasksPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/office/session-stats',
+        builder: (context, state) => SessionStatsPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/office/tasks/new',
