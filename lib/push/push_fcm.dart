@@ -60,10 +60,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = message.data['body']?.toString() ?? '';
 
   await _ln.show(
-    _notificationId(message),
-    title,
-    body,
-    const NotificationDetails(
+    id: _notificationId(message),
+    title: title,
+    body: body,
+    notificationDetails: const NotificationDetails(
       android: AndroidNotificationDetails(
         'verhaarm_push',
         'Push notifications',
@@ -85,7 +85,7 @@ Future<void> _ensureLocalNotificationsInitialized() async {
   const init = InitializationSettings(android: androidInit);
 
   await _ln.initialize(
-    init,
+    settings: init,
     onDidReceiveNotificationResponse: (resp) async {
       await _handleTapPayload(resp.payload);
     },
@@ -150,10 +150,10 @@ class FcmRegistrar {
       final body = msg.notification?.body ?? msg.data['body']?.toString() ?? '';
 
       await _ln.show(
-        _notificationId(msg),
-        title,
-        body,
-        const NotificationDetails(
+        id: _notificationId(msg),
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'verhaarm_push',
             'Push notifications',

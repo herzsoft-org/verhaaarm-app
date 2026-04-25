@@ -104,7 +104,7 @@ class _FinePhotosAddSheetState extends State<_FinePhotosAddSheet> {
 
       // --- WEB: use FilePicker -> bytes (best compatibility incl. iOS Safari)
       if (kIsWeb) {
-        final res = await FilePicker.platform.pickFiles(
+        final res = await FilePicker.pickFiles(
           type: FileType.image,
           allowMultiple: true,
           withData: true, // IMPORTANT: bytes are needed for upload on web

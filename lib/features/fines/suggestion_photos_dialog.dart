@@ -96,7 +96,7 @@ class _SuggestionPhotosAddSheetState extends State<_SuggestionPhotosAddSheet> {
       if (allowedSlots <= 0) return;
 
       if (kIsWeb) {
-        final res = await FilePicker.platform.pickFiles(
+        final res = await FilePicker.pickFiles(
           type: FileType.image,
           allowMultiple: true,
           withData: true,
