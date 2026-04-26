@@ -139,6 +139,8 @@ class _FinesListPageState extends State<FinesListPage> {
 
     return AppScaffold(
       title: 'Beihängungen',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

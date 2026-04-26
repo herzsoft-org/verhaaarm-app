@@ -464,6 +464,8 @@ class _FineFormPageState extends State<FineFormPage> {
 
     return AppScaffold(
       title: title,
+      showNotificationButton: false,
+      showProfileButton: false,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

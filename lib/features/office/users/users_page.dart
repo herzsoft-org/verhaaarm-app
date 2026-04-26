@@ -22,7 +22,7 @@ class _UsersPageState extends State<UsersPage> {
   bool _loading = true;
   List<UserDto> _users = const [];
   String _searchQuery = '';
-  String? _onlineFilter; // null, week, month
+  _OnlineFilter _onlineFilter = _OnlineFilter.all;
 
   @override
   void initState() {
@@ -43,12 +43,30 @@ class _UsersPageState extends State<UsersPage> {
       case 'TREASURER':
         return 'Kassenwart';
       default:
-        return role; // ADMIN, TREASURER, unbekannt
+        return role;
     }
   }
 
+  String? get _backendOnlineFilter {
+    switch (_onlineFilter) {
+      case _OnlineFilter.all:
+        return null;
+      case _OnlineFilter.week:
+        return 'week';
+      case _OnlineFilter.month:
+        return 'month';
+      case _OnlineFilter.today:
+      case _OnlineFilter.year:
+      case _OnlineFilter.never:
+        return null;
+    }
+  }
+
+  bool get _showLastOnline => _onlineFilter != _OnlineFilter.all;
+
   Future<void> _load() async {
     setState(() => _loading = true);
+
     try {
       final roles = Roles.fromAccessToken(widget.authStore.accessToken);
       if (!Roles.canManageUsers(roles)) {
@@ -59,21 +77,25 @@ class _UsersPageState extends State<UsersPage> {
         return;
       }
 
-      final users = await widget.api.listUsersAdmin(online: _onlineFilter);
+      final users = await widget.api.listUsersAdmin(online: _backendOnlineFilter);
+      final filtered = _applyClientOnlineFilter(users);
 
-      users.sort((a, b) {
+      filtered.sort((a, b) {
         final ad = a.displayName.trim().toLowerCase();
         final bd = b.displayName.trim().toLowerCase();
+
         if (ad.isEmpty && bd.isEmpty) {
           return a.username.toLowerCase().compareTo(b.username.toLowerCase());
         }
+
         if (ad.isEmpty) return 1;
         if (bd.isEmpty) return -1;
+
         return ad.compareTo(bd);
       });
 
       if (!mounted) return;
-      setState(() => _users = users);
+      setState(() => _users = filtered);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,6 +106,50 @@ class _UsersPageState extends State<UsersPage> {
     }
   }
 
+  List<UserDto> _applyClientOnlineFilter(List<UserDto> users) {
+    switch (_onlineFilter) {
+      case _OnlineFilter.all:
+      case _OnlineFilter.week:
+      case _OnlineFilter.month:
+        return users;
+
+      case _OnlineFilter.today:
+        final now = DateTime.now();
+        final start = DateTime(now.year, now.month, now.day);
+        final end = start.add(const Duration(days: 1));
+
+        return users.where((u) {
+          final dt = _parseDate(u.lastOnlineAt);
+          if (dt == null) return false;
+
+          return !dt.isBefore(start) && dt.isBefore(end);
+        }).toList(growable: false);
+
+      case _OnlineFilter.year:
+        final now = DateTime.now();
+        final start = DateTime(now.year, 1, 1);
+        final end = DateTime(now.year + 1, 1, 1);
+
+        return users.where((u) {
+          final dt = _parseDate(u.lastOnlineAt);
+          if (dt == null) return false;
+
+          return !dt.isBefore(start) && dt.isBefore(end);
+        }).toList(growable: false);
+
+      case _OnlineFilter.never:
+        return users.where((u) {
+          final raw = u.lastOnlineAt;
+          return raw == null || raw.trim().isEmpty;
+        }).toList(growable: false);
+    }
+  }
+
+  DateTime? _parseDate(String? iso) {
+    if (iso == null || iso.trim().isEmpty) return null;
+    return DateTime.tryParse(iso)?.toLocal();
+  }
+
   String _singleRoleLabel(UserDto u) {
     if (u.roles.isEmpty) return '—';
     return _roleLabelUi(u.roles.first);
@@ -91,6 +157,7 @@ class _UsersPageState extends State<UsersPage> {
 
   String _date(String? iso) {
     if (iso == null || iso.trim().isEmpty) return 'nie online';
+
     try {
       return Format.dateTimeShort(iso);
     } catch (_) {
@@ -123,6 +190,7 @@ class _UsersPageState extends State<UsersPage> {
     return _users.where((u) {
       final username = u.username.toLowerCase();
       final displayName = u.displayName.toLowerCase();
+
       return username.contains(q) || displayName.contains(q);
     }).toList();
   }
@@ -135,6 +203,8 @@ class _UsersPageState extends State<UsersPage> {
 
     return AppScaffold(
       title: 'Nutzer',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Suchen',
@@ -158,40 +228,13 @@ class _UsersPageState extends State<UsersPage> {
           : ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Alle'),
-                    selected: _onlineFilter == null,
-                    onSelected: (_) {
-                      setState(() => _onlineFilter = null);
-                      _load();
-                    },
-                  ),
-                  FilterChip(
-                    label: const Text('Online diese Woche'),
-                    selected: _onlineFilter == 'week',
-                    onSelected: (_) {
-                      setState(() => _onlineFilter = 'week');
-                      _load();
-                    },
-                  ),
-                  FilterChip(
-                    label: const Text('Online diesen Monat'),
-                    selected: _onlineFilter == 'month',
-                    onSelected: (_) {
-                      setState(() => _onlineFilter = 'month');
-                      _load();
-                    },
-                  ),
-                ],
-              ),
-            ),
+          _UsersFilterBar(
+            value: _onlineFilter,
+            count: filteredUsers.length,
+            onChanged: (value) {
+              setState(() => _onlineFilter = value);
+              _load();
+            },
           ),
           const SizedBox(height: 8),
           if (filteredUsers.isEmpty)
@@ -202,19 +245,112 @@ class _UsersPageState extends State<UsersPage> {
           for (final u in filteredUsers)
             Card(
               child: ListTile(
-                leading: Icon(u.disabled ? Icons.block_rounded : Icons.person_rounded),
+                leading: Icon(
+                  u.disabled
+                      ? Icons.block_rounded
+                      : Icons.person_rounded,
+                ),
+                titleAlignment: ListTileTitleAlignment.center,
                 title: Text('${u.displayName} (${u.username})'),
                 subtitle: Text(
-                  'Role: ${_singleRoleLabel(u)}'
+                  _showLastOnline
+                      ? 'Rolle: ${_singleRoleLabel(u)}'
                       '\nZuletzt online: ${_date(u.lastOnlineAt)}'
+                      '${u.disabled ? '\nDeaktiviert' : ''}'
+                      : 'Rolle: ${_singleRoleLabel(u)}'
                       '${u.disabled ? '\nDeaktiviert' : ''}',
                 ),
-                isThreeLine: true,
+                isThreeLine: _showLastOnline || u.disabled,
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push('/office/users/${u.id}/edit'),
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+enum _OnlineFilter {
+  all,
+  today,
+  week,
+  month,
+  year,
+  never,
+}
+
+extension _OnlineFilterUi on _OnlineFilter {
+  String get label {
+    switch (this) {
+      case _OnlineFilter.all:
+        return 'Alle';
+      case _OnlineFilter.today:
+        return 'Online heute';
+      case _OnlineFilter.week:
+        return 'Online diese Woche';
+      case _OnlineFilter.month:
+        return 'Online diesen Monat';
+      case _OnlineFilter.year:
+        return 'Online dieses Jahr';
+      case _OnlineFilter.never:
+        return 'Nie online';
+    }
+  }
+}
+
+class _UsersFilterBar extends StatelessWidget {
+  final _OnlineFilter value;
+  final int count;
+  final ValueChanged<_OnlineFilter> onChanged;
+
+  const _UsersFilterBar({
+    required this.value,
+    required this.count,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<_OnlineFilter>(
+                  value: value,
+                  isExpanded: true,
+                  borderRadius: BorderRadius.circular(12),
+                  icon: const Icon(Icons.expand_more_rounded),
+                  style: theme.textTheme.titleSmall,
+                  items: [
+                    for (final item in _OnlineFilter.values)
+                      DropdownMenuItem(
+                        value: item,
+                        child: Text(
+                          item.label,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (newValue) {
+                    if (newValue == null || newValue == value) return;
+                    onChanged(newValue);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$count',
+              style: theme.textTheme.titleMedium,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -237,6 +373,7 @@ class _UsersSearchDelegate extends SearchDelegate<String?> {
     return users.where((u) {
       final username = u.username.toLowerCase();
       final displayName = u.displayName.toLowerCase();
+
       return username.contains(needle) || displayName.contains(needle);
     }).toList();
   }
@@ -286,11 +423,12 @@ class _UsersSearchDelegate extends SearchDelegate<String?> {
         for (final u in filteredUsers)
           Card(
             child: ListTile(
-              leading: Icon(u.disabled ? Icons.block_rounded : Icons.person_rounded),
-              title: Text('${u.displayName} (${u.username})'),
-              subtitle: Text(
-                u.disabled ? 'Deaktiviert' : '',
+              leading: Icon(
+                u.disabled ? Icons.block_rounded : Icons.person_rounded,
               ),
+              titleAlignment: ListTileTitleAlignment.center,
+              title: Text('${u.displayName} (${u.username})'),
+              subtitle: Text(u.disabled ? 'Deaktiviert' : ''),
               isThreeLine: false,
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => close(context, query),

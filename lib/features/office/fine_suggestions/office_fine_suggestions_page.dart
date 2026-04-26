@@ -169,6 +169,8 @@ class _OfficeFineSuggestionsPageState
 
     return AppScaffold(
       title: 'Vorschläge',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',

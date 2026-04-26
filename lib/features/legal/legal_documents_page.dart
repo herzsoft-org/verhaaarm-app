@@ -66,6 +66,8 @@ class _LegalDocumentsPageState extends State<LegalDocumentsPage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Rechtsgrundlagen',
+      showNotificationButton: false,
+      showProfileButton: false,
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: LegalDocument.all.length,
