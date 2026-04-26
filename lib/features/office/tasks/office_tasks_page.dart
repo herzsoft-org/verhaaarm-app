@@ -29,6 +29,24 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
     _load();
   }
 
+  Future<void> _openCreateTask() async {
+    final changed = await context.push<TaskDto>('/office/tasks/new');
+    if (changed != null && mounted) {
+      await _load(force: true);
+    }
+  }
+
+  Future<void> _openEditTask(TaskDto t) async {
+    final changed = await context.push<TaskDto>(
+      '/office/tasks/${t.id}/edit',
+      extra: t,
+    );
+
+    if (changed != null && mounted) {
+      await _load(force: true);
+    }
+  }
+
   String _fmt(DateTime dt) => Format.dateTimeShort(dt.toIso8601String());
 
   Map<String, _UserGroup> _groupByAssignee() {
@@ -162,7 +180,7 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
         IconButton(
           tooltip: 'Neu',
           icon: const Icon(Icons.add_rounded),
-          onPressed: () => context.push('/office/tasks/new'),
+          onPressed: _openCreateTask,
         ),
       ],
       body: _loading
@@ -208,7 +226,7 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
                                 task: t,
                                 fmt: _fmt,
                                 onToggleSolved: () => _toggleSolved(t),
-                                onEdit: () => context.push('/office/tasks/${t.id}/edit', extra: t),
+                                onEdit: () => _openEditTask(t),
                                 onDelete: () => _deleteTask(t),
                               ),
                               const SizedBox(height: 10),

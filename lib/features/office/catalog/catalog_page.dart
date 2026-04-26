@@ -33,7 +33,7 @@ class _CatalogPageState extends State<CatalogPage> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
@@ -71,6 +71,20 @@ class _CatalogPageState extends State<CatalogPage> {
     }
   }
 
+  Future<void> _openCreateItem() async {
+    final changed = await context.push<bool>('/office/catalog/new');
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
+  Future<void> _openEditItem(FineCatalogItemDto it) async {
+    final changed = await context.push<bool>('/office/catalog/${it.id}/edit');
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
@@ -84,13 +98,13 @@ class _CatalogPageState extends State<CatalogPage> {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(force: true),
         ),
         if (can)
           IconButton(
             tooltip: 'Neuer Eintrag',
             icon: const Icon(Icons.add_rounded),
-            onPressed: () => context.push('/office/catalog/new'),
+            onPressed: _openCreateItem,
           ),
       ],
       body: !can
@@ -132,7 +146,7 @@ class _CatalogPageState extends State<CatalogPage> {
                 ),
                 isThreeLine: _isSystemItem(it) || !it.active,
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => context.push('/office/catalog/${it.id}/edit'),
+                onTap: () => _openEditItem(it),
               ),
             ),
         ],

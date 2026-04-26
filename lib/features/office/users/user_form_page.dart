@@ -153,7 +153,7 @@ class _UserFormPageState extends State<UserFormPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Gespeichert.')),
       );
-      context.pop();
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -189,7 +189,7 @@ class _UserFormPageState extends State<UserFormPage> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (!mounted || confirmed != true) return;
 
     setState(() => _loading = true);
 
@@ -200,7 +200,7 @@ class _UserFormPageState extends State<UserFormPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Nutzer gelöscht.')),
       );
-      context.pop();
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

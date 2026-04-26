@@ -44,7 +44,21 @@ class _PeriodsPageState extends State<PeriodsPage> {
     return (year: 0, term: 0);
   }
 
-  Future<void> _load() async {
+  Future<void> _openCreatePeriod() async {
+    final changed = await context.push<bool>('/office/periods/new');
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
+  Future<void> _openEditPeriod(ConventPeriodDto p) async {
+    final changed = await context.push<bool>('/office/periods/${p.id}/edit');
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
+  Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
     try {
       final roles = Roles.fromAccessToken(widget.authStore.accessToken);
@@ -136,7 +150,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
   Future<void> _onMenuSelected(String v, ConventPeriodDto p) async {
     if (v == 'edit') {
       if (!mounted) return;
-      context.push('/office/periods/${p.id}/edit');
+      await _openEditPeriod(p);
       return;
     }
 
@@ -179,12 +193,12 @@ class _PeriodsPageState extends State<PeriodsPage> {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(force: true),
         ),
         IconButton(
           tooltip: 'Neu',
           icon: const Icon(Icons.add_rounded),
-          onPressed: () => context.push('/office/periods/new'),
+          onPressed: _openCreatePeriod,
         ),
       ],
       body: _loading

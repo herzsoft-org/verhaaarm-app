@@ -169,7 +169,6 @@ class _ProfilePageState extends State<ProfilePage> {
       return (s != null && s.isNotEmpty) ? s : null;
     }
 
-    // 1) Best-effort from JWT (may be minimal for members)
     if (token.isNotEmpty) {
       try {
         final payload = Jwt.parseJwt(token);
@@ -185,8 +184,6 @@ class _ProfilePageState extends State<ProfilePage> {
         if (dn != null) displayName = dn;
         if (un != null) username = un;
 
-        // Your backend sets subject=username. If the JWT doesn't contain a username claim,
-        // fall back to 'sub' as the username (common pattern).
         final sub = pickString(payload['sub']);
         if (username == '—' && sub != null) {
           username = sub;
@@ -196,7 +193,6 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     }
 
-    // 2) Authoritative fallback: GET /users/me (works for all authenticated users)
     if (token.isNotEmpty && (displayName == '—' || username == '—')) {
       try {
         final me = await widget.api.getMe();
@@ -296,7 +292,6 @@ class _ProfilePageState extends State<ProfilePage> {
       setStateDialog(() => submitting = true);
 
       try {
-        // Need userId for PATCH /users/{id}/password
         final me = await widget.api.getMe();
         await widget.api.patchUserPassword(
           userId: me.id,
@@ -449,8 +444,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     await widget.authStore.clearAllUserData();
-
-    // Clear ALL persisted and in-memory cache on logout (prevents cross-user leakage).
     await AppCache.I.clearPersisted();
 
     if (!mounted) return;
@@ -575,23 +568,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
           const SizedBox(height: 12),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.devices_rounded),
-              title: const Text('Sessions & Geräte'),
-              subtitle: const Text('Aktive Logins ansehen und andere Geräte abmelden'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => context.push('/profile/sessions'),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          Card(
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.login_rounded),
-                  title: const Text('Session'),
+                  leading: const Icon(Icons.devices_rounded),
+                  title: const Text('Sessions & Geräte'),
                   subtitle: Text(_sessionLabel),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/profile/sessions'),
                 ),
                 const Divider(height: 1),
                 ListTile(

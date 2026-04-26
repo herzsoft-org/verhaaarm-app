@@ -399,13 +399,14 @@ class _FineFormPageState extends State<FineFormPage> {
             amountCents: totalCents,
           );
 
-          final updated = await widget.api.updateSuggestion(suggestionId, req);
+          await widget.api.updateSuggestion(suggestionId, req);
 
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Vorschlag gespeichert.')),
           );
-          context.go('/suggestions/${updated.id}');
+
+          context.pop(true);
         } else {
           final req = CreateFineSuggestionRequest(
             fineDate: fd,

@@ -46,7 +46,7 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
 
   bool get _isPending => (_suggestion?.status.toUpperCase() == 'PENDING');
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
@@ -77,6 +77,17 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
       );
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openEdit() async {
+    final s = _suggestion;
+    if (s == null) return;
+
+    final changed = await context.push<bool>('/suggestions/${s.id}/edit');
+
+    if (changed == true && mounted) {
+      await _load(force: true);
     }
   }
 
@@ -230,16 +241,15 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: (_loading || _acting) ? null : _load,
+          onPressed: (_loading || _acting) ? null : () => _load(force: true),
         ),
         if (_isPending)
-          IconButton(
-            tooltip: 'Bearbeiten',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: (_loading || _acting || s == null)
-                ? null
-                : () => context.push('/suggestions/${s.id}/edit'),
-          ),
+          if (_isPending)
+            IconButton(
+              tooltip: 'Bearbeiten',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: (_loading || _acting || s == null) ? null : _openEdit,
+            ),
         if (_isPending)
           IconButton(
             tooltip: 'Zurückziehen',

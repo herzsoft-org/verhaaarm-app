@@ -139,7 +139,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gespeichert.')));
-      context.pop();
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
@@ -178,7 +178,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
       await widget.api.deleteFineCatalogItem(widget.itemId!);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gelöscht.')));
-      context.pop();
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));

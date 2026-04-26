@@ -310,21 +310,24 @@ class UserSessionDto {
 
 class SessionStatsBucketDto {
   final String appType;
-  final String browserName;
+  final String detail;
   final int count;
 
   SessionStatsBucketDto({
     required this.appType,
-    required this.browserName,
+    required this.detail,
     required this.count,
   });
 
-  factory SessionStatsBucketDto.fromJson(Map<String, dynamic> json) =>
-      SessionStatsBucketDto(
-        appType: _optString(json, 'appType') ?? 'UNKNOWN',
-        browserName: _optString(json, 'browserName') ?? 'UNKNOWN',
-        count: _optInt(json, 'count'),
-      );
+  factory SessionStatsBucketDto.fromJson(Map<String, dynamic> json) {
+    return SessionStatsBucketDto(
+      appType: (json['appType'] as String?) ?? 'UNKNOWN',
+      detail: (json['detail'] as String?) ??
+          (json['browserName'] as String?) ??
+          'Unbekannt',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 class SessionStatsDto {

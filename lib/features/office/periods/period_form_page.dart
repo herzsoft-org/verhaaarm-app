@@ -300,7 +300,7 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Gespeichert.')),
       );
-      context.pop();
+      context.pop(true);
     } on DioException catch (e) {
       if (!mounted) return;
       final msg = e.response?.data?.toString() ?? e.message ?? 'Unbekannter Fehler';

@@ -324,7 +324,12 @@ class _EventsPageState extends State<EventsPage> {
           IconButton(
             tooltip: 'Neuer Termin',
             icon: const Icon(Icons.add_rounded),
-            onPressed: () => GoRouter.of(context).push('/events/new'),
+            onPressed: () async {
+              final changed = await context.push<bool>('/events/new');
+              if (changed == true && mounted) {
+                await _load(force: true);
+              }
+            },
           ),
       ],
       body: _loading
@@ -352,7 +357,12 @@ class _EventsPageState extends State<EventsPage> {
                 userName: _userName,
                 showPast: _showPast,
                 canEdit: (e) => _canEditEvent(roles, e),
-                onEdit: (id) => GoRouter.of(context).push('/events/$id/edit'),
+                onEdit: (id) async {
+                  final changed = await context.push<bool>('/events/$id/edit');
+                  if (changed == true && mounted) {
+                    await _load(force: true);
+                  }
+                },
               ),
           ],
         ),
@@ -463,7 +473,7 @@ class _SemesterSection extends StatelessWidget {
   final String Function(String userId) userName;
   final bool showPast;
   final bool Function(EventDto e) canEdit;
-  final void Function(String eventId) onEdit;
+  final Future<void> Function(String eventId) onEdit;
 
   const _SemesterSection({
     required this.semester,
@@ -509,7 +519,7 @@ class _PeriodSection extends StatelessWidget {
   final String Function(String userId) userName;
   final bool showPast;
   final bool Function(EventDto e) canEdit;
-  final void Function(String eventId) onEdit;
+  final Future<void> Function(String eventId) onEdit;
 
   const _PeriodSection({
     required this.pg,

@@ -64,7 +64,21 @@ class _UsersPageState extends State<UsersPage> {
 
   bool get _showLastOnline => _onlineFilter != _OnlineFilter.all;
 
-  Future<void> _load() async {
+  Future<void> _openCreateUser() async {
+    final changed = await context.push<bool>('/office/users/new');
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
+  Future<void> _openEditUser(UserDto u) async {
+    final changed = await context.push<bool>('/office/users/${u.id}/edit');
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
+  Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
 
     try {
@@ -214,13 +228,13 @@ class _UsersPageState extends State<UsersPage> {
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          onPressed: _loading ? null : () => _load(force: true),
         ),
         if (canCreate)
           IconButton(
             tooltip: 'Neuer Nutzer',
             icon: const Icon(Icons.add_rounded),
-            onPressed: () => context.push('/office/users/new'),
+            onPressed: _openCreateUser,
           ),
       ],
       body: _loading
@@ -262,7 +276,7 @@ class _UsersPageState extends State<UsersPage> {
                 ),
                 isThreeLine: _showLastOnline || u.disabled,
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => context.push('/office/users/${u.id}/edit'),
+                onTap: () => _openEditUser(u),
               ),
             ),
         ],

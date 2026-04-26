@@ -149,6 +149,8 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
 
       if (!mounted) return;
 
+      setState(() => _usersBusy = false);
+
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
@@ -160,11 +162,12 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
       );
     } catch (e) {
       if (!mounted) return;
+
+      setState(() => _usersBusy = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Nutzer konnten nicht geladen werden: $e')),
       );
-    } finally {
-      if (mounted) setState(() => _usersBusy = false);
     }
   }
 
@@ -249,6 +252,17 @@ class _ActiveSessionsCard extends StatelessWidget {
     return '${value.toStringAsFixed(1)} %';
   }
 
+  String _appTypeLabel(String value) {
+    switch (value.toUpperCase()) {
+      case 'ANDROID':
+        return 'Android App';
+      case 'WEB':
+        return 'Web';
+      default:
+        return 'Unbekannt';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -268,7 +282,7 @@ class _ActiveSessionsCard extends StatelessWidget {
         final app = a.appType.compareTo(b.appType);
         if (app != 0) return app;
 
-        return a.browserName.compareTo(b.browserName);
+        return a.detail.compareTo(b.detail);
       });
 
     return Card(
@@ -354,7 +368,7 @@ class _ActiveSessionsCard extends StatelessWidget {
                           ? Icons.language_rounded
                           : Icons.devices_other_rounded,
                     ),
-                    title: Text('${r.appType} · ${r.browserName}'),
+                    title: Text('${_appTypeLabel(r.appType)} · ${r.detail}'),
                     trailing: Text(
                       '${r.count}',
                       style: theme.textTheme.titleMedium,

@@ -133,6 +133,22 @@ class _FinesListPageState extends State<FinesListPage> {
     }
   }
 
+  Future<void> _openCreateFine() async {
+    if (_loading) return;
+
+    await context.push('/fines/new');
+
+    if (!mounted) return;
+    await _load();
+  }
+
+  Future<void> _openFineDetail(String id) async {
+    await context.push('/fines/$id');
+
+    if (!mounted) return;
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final grouped = _buildGrouped();
@@ -142,6 +158,11 @@ class _FinesListPageState extends State<FinesListPage> {
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
+        IconButton(
+          tooltip: 'Beihängung erstellen',
+          icon: const Icon(Icons.add_rounded),
+          onPressed: _loading ? null : _openCreateFine,
+        ),
         IconButton(
           tooltip: 'Neu laden',
           icon: const Icon(Icons.refresh_rounded),
@@ -166,7 +187,7 @@ class _FinesListPageState extends State<FinesListPage> {
                 periods: sem.periods,
                 fineTitle: _fineTitle,
                 userLabel: _userLabel,
-                onTapFine: (id) => context.push('/fines/$id'),
+                onTapFine: _openFineDetail,
                 isAttendanceFine: _isAttendanceFine,
                 initiallyExpanded: sem.semester == _currentSemester,
                 currentPeriodId: _currentPeriodId,

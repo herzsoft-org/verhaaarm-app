@@ -129,11 +129,17 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   Future<void> _editTask(TaskDto t) async {
-    // route assumed (same pattern as office):
-    // define in router: /tasks/:id/edit
     try {
       if (!mounted) return;
-      context.push('/tasks/${t.id}/edit', extra: t);
+
+      final changed = await context.push<TaskDto>(
+        '/tasks/${t.id}/edit',
+        extra: t,
+      );
+
+      if (changed != null && mounted) {
+        await _load(force: true);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -188,6 +194,8 @@ class _TasksPageState extends State<TasksPage> {
 
     return AppScaffold(
       title: 'Arbeitsaufträge',
+      showNotificationButton: false,
+      showProfileButton: false,
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -197,7 +205,12 @@ class _TasksPageState extends State<TasksPage> {
         IconButton(
           tooltip: 'Neu',
           icon: const Icon(Icons.add_rounded),
-          onPressed: () => context.push('/tasks/new'),
+          onPressed: () async {
+            final changed = await context.push<TaskDto>('/tasks/new');
+            if (changed != null && mounted) {
+              await _load(force: true);
+            }
+          },
         ),
       ],
       body: _loading

@@ -183,7 +183,7 @@ class _EventFormPageState extends State<EventFormPage> {
       }
 
       if (!mounted) return;
-      GoRouter.of(context).pop();
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -222,7 +222,7 @@ class _EventFormPageState extends State<EventFormPage> {
     try {
       await widget.api.deleteEvent(existing.id);
       if (!mounted) return;
-      GoRouter.of(context).pop();
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
