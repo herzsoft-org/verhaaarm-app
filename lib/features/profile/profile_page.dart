@@ -15,6 +15,7 @@ import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../common/widgets/schnupfspruch_button.dart';
+import '../../update/web_app_refresh.dart';
 
 class ProfilePage extends StatefulWidget {
   final ApiClient api;
@@ -32,6 +33,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _loading = true;
   bool _refreshing = false;
+  bool _forceReloadingWebApp = false;
 
   String _displayName = '—';
   String _username = '—';
@@ -433,6 +435,50 @@ class _ProfilePageState extends State<ProfilePage> {
     confirmCtrl.dispose();
   }
 
+  Future<void> _confirmForceReloadWebApp() async {
+    if (!kIsWeb || _forceReloadingWebApp) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('App vollständig neu laden?'),
+        content: const Text(
+          'Dadurch wird der Browser-Cache der PWA geleert und die App neu vom Server geladen. '
+              'Das hilft, wenn nach einem Update noch alte Funktionen angezeigt werden.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Neu laden'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    if (!mounted) return;
+    setState(() => _forceReloadingWebApp = true);
+
+    try {
+      await forceReloadWebApp();
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() => _forceReloadingWebApp = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('App konnte nicht vollständig neu geladen werden.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _logout() async {
     final rt = widget.authStore.refreshToken;
     if (rt != null && rt.isNotEmpty) {
@@ -562,10 +608,8 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
           ),
-
           const SizedBox(height: 12),
           _buildLegalDocumentsCard(context),
-
           const SizedBox(height: 12),
           Card(
             child: Column(
@@ -577,28 +621,35 @@ class _ProfilePageState extends State<ProfilePage> {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/profile/sessions'),
                 ),
+                if (kIsWeb) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.restart_alt_rounded),
+                    title: const Text('App vollständig neu laden'),
+                    subtitle: const Text(
+                      'Browser cache der App leeren',
+                    ),
+                    trailing: _forceReloadingWebApp
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.chevron_right_rounded),
+                    onTap: _forceReloadingWebApp
+                        ? null
+                        : _confirmForceReloadWebApp,
+                  ),
+                ],
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded),
                   title: const Text('App'),
                   subtitle: Text(_appVersion),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.devices_rounded),
-                  title: const Text('Gerät'),
-                  subtitle: Text(_deviceLabel),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.public_rounded),
-                  title: const Text('Plattform / Locale'),
-                  subtitle: Text('$_platformLabel • $_localeLabel'),
-                ),
               ],
             ),
           ),
-
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
@@ -610,7 +661,6 @@ class _ProfilePageState extends State<ProfilePage> {
               label: const Text('Passwort ändern'),
             ),
           ),
-
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,

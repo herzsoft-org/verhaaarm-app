@@ -2,7 +2,7 @@ name: verhaaarm
 description: "Verhåårm App"
 publish_to: 'none'
 
-version: 1.5.2+54
+version: 1.5.3+55
 
 environment:
   sdk: ^3.10.4
@@ -13,7 +13,7 @@ dependencies:
 
   jwt_decode: ^0.3.1
 
-  web: any
+  web: ^1.1.1
 
   cupertino_icons: ^1.0.8
 
