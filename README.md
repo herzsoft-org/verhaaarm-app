@@ -36,3 +36,12 @@ API base URL is configured via build-time config or a simple config file (decide
 - Create fine (SENIOR/HOUSEKEEPING)
 - Exports (role-based)
 - User management (ADMIN + SENIOR)
+
+## License
+
+This project is proprietary and closed source.
+
+Copyright (c) 2026 Valentin Schecklein. All rights reserved.
+
+No permission is granted to use, copy, modify, distribute, host, deploy, or
+otherwise exploit this software without prior written permission.
