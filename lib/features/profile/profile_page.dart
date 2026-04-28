@@ -270,6 +270,33 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _buildConventProtocolsCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => GoRouter.of(context).push('/convent-protocols'),
+      child: Card(
+        color: cs.surfaceContainerLow,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.picture_as_pdf_rounded, color: cs.primary),
+              const SizedBox(width: 10),
+              Text(
+                'Conventsprotokolle',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const Spacer(),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static bool _isStrongEnoughPassword(String s) {
     if (s.length < 8) return false;
     final hasUpper = RegExp(r'[A-Z]').hasMatch(s);
@@ -610,6 +637,8 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const SizedBox(height: 12),
           _buildLegalDocumentsCard(context),
+          const SizedBox(height: 8),
+          _buildConventProtocolsCard(context),
           const SizedBox(height: 12),
           Card(
             child: Column(

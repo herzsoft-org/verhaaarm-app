@@ -219,6 +219,89 @@ class ApiClient {
   }
 
   // ----------------------------
+  // PERIOD PROTOCOLS (/periods/{periodId}/protocol)
+  // ----------------------------
+
+  Future<ConventPeriodProtocolDto> getPeriodProtocol(String periodId) async {
+    final r = await dio.get('/periods/$periodId/protocol');
+    return ConventPeriodProtocolDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<ConventPeriodProtocolDto> uploadPeriodProtocol({
+    required String periodId,
+    String? filePath,
+    Uint8List? bytes,
+    required String filename,
+    String? contentType,
+  }) async {
+    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+      throw ArgumentError('Provide exactly one of filePath or bytes.');
+    }
+
+    final MultipartFile mf = (bytes != null)
+        ? MultipartFile.fromBytes(
+      bytes,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    )
+        : await MultipartFile.fromFile(
+      filePath!,
+      filename: filename,
+      contentType: contentType == null ? null : MediaType.parse(contentType),
+    );
+
+    final form = FormData.fromMap({'file': mf});
+
+    final r = await dio.post(
+      '/periods/$periodId/protocol',
+      data: form,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+
+    return ConventPeriodProtocolDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<Uint8List> getPeriodProtocolFileBytes(String periodId) async {
+    final r = await dio.get(
+      '/periods/$periodId/protocol/file',
+      options: Options(responseType: ResponseType.bytes),
+    );
+
+    final data = r.data;
+    if (data is Uint8List) return data;
+    if (data is List<int>) return Uint8List.fromList(data);
+    if (data is List) {
+      return Uint8List.fromList(data.cast<int>());
+    }
+
+    throw StateError('Unexpected PDF response type: ${data.runtimeType}');
+  }
+
+  Future<Uint8List> downloadPeriodProtocolBytes(String periodId) async {
+    final r = await dio.get(
+      '/periods/$periodId/protocol/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+
+    final data = r.data;
+    if (data is Uint8List) return data;
+    if (data is List<int>) return Uint8List.fromList(data);
+    if (data is List) {
+      return Uint8List.fromList(data.cast<int>());
+    }
+
+    throw StateError('Unexpected PDF response type: ${data.runtimeType}');
+  }
+
+  Future<void> deletePeriodProtocol(String periodId) async {
+    await dio.delete('/periods/$periodId/protocol');
+  }
+
+  // ----------------------------
   // EVENTS (swagger: /events, /events/{id})
   // ----------------------------
 

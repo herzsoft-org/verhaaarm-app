@@ -49,6 +49,9 @@ import '../auth/roles.dart';
 import '../features/profile/sessions_page.dart';
 import '../features/office/session_stats_page.dart';
 
+import '../features/office/periods/period_protocol_page.dart';
+import '../features/profile/convent_protocols_page.dart';
+
 final GlobalKey<NavigatorState> rootNavKey = GlobalKey<NavigatorState>();
 
 GoRouter? _appRouter;
@@ -173,6 +176,24 @@ Future<GoRouter> buildRouter() async {
           }
 
           return LegalDocumentViewerPage(document: doc);
+        },
+      ),
+      GoRoute(
+        path: '/convent-protocols',
+        builder: (context, state) => ConventProtocolsPage(api: api),
+      ),
+      GoRoute(
+        path: '/convent-protocols/:id',
+        builder: (context, state) {
+          final period = state.extra is ConventPeriodDto
+              ? state.extra as ConventPeriodDto
+              : null;
+
+          return PeriodProtocolPage(
+            api: api,
+            periodId: state.pathParameters['id']!,
+            initialPeriod: period,
+          );
         },
       ),
       GoRoute(
@@ -382,7 +403,20 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
+      GoRoute(
+        path: '/office/periods/:id/protocol',
+        builder: (context, state) {
+          final period = state.extra is ConventPeriodDto
+              ? state.extra as ConventPeriodDto
+              : null;
 
+          return PeriodProtocolPage(
+            api: api,
+            periodId: state.pathParameters['id']!,
+            initialPeriod: period,
+          );
+        },
+      ),
       GoRoute(
         path: '/office/users',
         builder: (context, state) {

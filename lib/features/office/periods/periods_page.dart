@@ -58,6 +58,17 @@ class _PeriodsPageState extends State<PeriodsPage> {
     }
   }
 
+  Future<void> _openProtocol(ConventPeriodDto p) async {
+    final changed = await context.push<bool>(
+      '/office/periods/${p.id}/protocol',
+      extra: p,
+    );
+
+    if (changed == true && mounted) {
+      await _load(force: true);
+    }
+  }
+
   Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
     try {
@@ -154,6 +165,12 @@ class _PeriodsPageState extends State<PeriodsPage> {
       return;
     }
 
+    if (v == 'protocol') {
+      if (!mounted) return;
+      await _openProtocol(p);
+      return;
+    }
+
     switch (v) {
       case 'lock':
         await _lock(p.id);
@@ -225,21 +242,35 @@ class _PeriodsPageState extends State<PeriodsPage> {
                     [
                       if (p.active) 'Aktiv',
                       if (p.locked) 'Locked',
-                    ].join(' · ').isEmpty
-                        ? '—'
-                        : [
-                      if (p.active) 'Aktiv',
-                      if (p.locked) 'Locked',
+                      p.hasProtocolPdf ? 'Protokoll vorhanden' : 'Kein Protokoll',
                     ].join(' · '),
                   ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (v) => _onMenuSelected(v, p),
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
-                      if (!p.locked) const PopupMenuItem(value: 'lock', child: Text('Lock')),
-                      if (p.locked) const PopupMenuItem(value: 'unlock', child: Text('Unlock')),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(value: 'delete', child: Text('Löschen')),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: p.hasProtocolPdf
+                            ? 'Protokoll verwalten'
+                            : 'Protokoll hochladen',
+                        onPressed: () => _openProtocol(p),
+                        icon: Icon(
+                          p.hasProtocolPdf
+                              ? Icons.picture_as_pdf_rounded
+                              : Icons.upload_file_rounded,
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (v) => _onMenuSelected(v, p),
+                        itemBuilder: (ctx) => [
+                          const PopupMenuItem(value: 'protocol', child: Text('Protokoll')),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                          if (!p.locked) const PopupMenuItem(value: 'lock', child: Text('Lock')),
+                          if (p.locked) const PopupMenuItem(value: 'unlock', child: Text('Unlock')),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(value: 'delete', child: Text('Löschen')),
+                        ],
+                      ),
                     ],
                   ),
                 ),

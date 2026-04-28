@@ -111,6 +111,8 @@ class ConventPeriodDto {
 
   final bool locked;
 
+  final bool hasProtocolPdf;
+
   ConventPeriodDto({
     required this.id,
     required this.semester,
@@ -118,6 +120,7 @@ class ConventPeriodDto {
     required this.endAt,
     required this.active,
     required this.locked,
+    this.hasProtocolPdf = false,
   });
 
   DateTime get startDateLocal => _parseLocalDate(startAt);
@@ -130,7 +133,42 @@ class ConventPeriodDto {
     endAt: _reqString(json, 'endAt'),
     active: _optBool(json, 'active', fallback: false),
     locked: _optBool(json, 'locked', fallback: false),
+    hasProtocolPdf: _optBool(json, 'hasProtocolPdf', fallback: false),
   );
+}
+
+class ConventPeriodProtocolDto {
+  final String id;
+  final String periodId;
+  final String uploaderUserId;
+  final String originalFilename;
+  final String contentType;
+  final int sizeBytes;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  ConventPeriodProtocolDto({
+    required this.id,
+    required this.periodId,
+    required this.uploaderUserId,
+    required this.originalFilename,
+    required this.contentType,
+    required this.sizeBytes,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory ConventPeriodProtocolDto.fromJson(Map<String, dynamic> json) =>
+      ConventPeriodProtocolDto(
+        id: _reqString(json, 'id'),
+        periodId: _reqString(json, 'periodId'),
+        uploaderUserId: _reqString(json, 'uploaderUserId'),
+        originalFilename: _reqString(json, 'originalFilename'),
+        contentType: _optString(json, 'contentType') ?? 'application/pdf',
+        sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+        createdAt: _reqDateTime(json, 'createdAt'),
+        updatedAt: _reqDateTime(json, 'updatedAt'),
+      );
 }
 
 class UserBalanceDto {
