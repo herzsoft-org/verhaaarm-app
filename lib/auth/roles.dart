@@ -43,6 +43,10 @@ class Roles {
         roles.contains(AppRole.treasurer);
   }
 
+  static bool canViewFineDetails(Set<AppRole> roles) {
+    return canSeeAllFines(roles);
+  }
+
   static bool canAcceptFineSuggestions(Set<AppRole> roles) {
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
   }
@@ -70,7 +74,10 @@ class Roles {
   }
 
   static bool canAccessOffice(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping) ||
+        roles.contains(AppRole.treasurer);
   }
 
   static bool canManageUsers(Set<AppRole> roles) {

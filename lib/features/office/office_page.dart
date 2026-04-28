@@ -27,6 +27,13 @@ class _OfficePageState extends State<OfficePage> {
   Widget build(BuildContext context) {
     final roles = Roles.fromAccessToken(widget.authStore.accessToken);
 
+    if (!Roles.canAccessOffice(roles)) {
+      return const AppScaffold(
+        title: 'Amtsausführung',
+        body: Center(child: Text('Kein Zugriff.')),
+      );
+    }
+
     final canUsers = Roles.canManageUsers(roles);
     final canCatalog = Roles.canManageCatalog(roles);
     final canPeriods = Roles.canManagePeriods(roles);

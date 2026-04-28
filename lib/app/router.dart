@@ -54,6 +54,18 @@ final GlobalKey<NavigatorState> rootNavKey = GlobalKey<NavigatorState>();
 GoRouter? _appRouter;
 GoRouter get appRouter => _appRouter!;
 
+Widget _noAccessPage() {
+  return const Scaffold(
+    body: Center(
+      child: Text('Kein Zugriff.'),
+    ),
+  );
+}
+
+Set<AppRole> _roles(AuthStore authStore) {
+  return Roles.fromAccessToken(authStore.accessToken);
+}
+
 Future<GoRouter> buildRouter() async {
   final authStore = AuthStore();
   await authStore.init();
@@ -186,15 +198,25 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/fines',
-        builder: (context, state) => FinesListPage(api: api),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canSeeAllFines(roles)) return _noAccessPage();
+
+          return FinesListPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/fines/new',
-        builder: (context, state) => FineFormPage(
-          api: api,
-          authStore: authStore,
-          mode: FineFormMode.official,
-        ),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canCreateOfficialFine(roles)) return _noAccessPage();
+
+          return FineFormPage(
+            api: api,
+            authStore: authStore,
+            mode: FineFormMode.official,
+          );
+        },
       ),
       GoRoute(
         path: '/my-fine-suggestions',
@@ -228,10 +250,8 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/fines/:id',
         builder: (context, state) {
-          final roles = Roles.fromAccessToken(authStore.accessToken);
-          if (!Roles.canManageFines(roles)) {
-            return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
-          }
+          final roles = _roles(authStore);
+          if (!Roles.canViewFineDetails(roles)) return _noAccessPage();
 
           return FineDetailPage(
             api: api,
@@ -243,10 +263,15 @@ Future<GoRouter> buildRouter() async {
 
       GoRoute(
         path: '/office/fine-suggestions',
-        builder: (context, state) => OfficeFineSuggestionsPage(
-          api: api,
-          authStore: authStore,
-        ),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canAcceptFineSuggestions(roles)) return _noAccessPage();
+
+          return OfficeFineSuggestionsPage(
+            api: api,
+            authStore: authStore,
+          );
+        },
       ),
 
       GoRoute(
@@ -268,24 +293,37 @@ Future<GoRouter> buildRouter() async {
 
       GoRoute(
         path: '/office',
-        builder: (context, state) => OfficePage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canAccessOffice(roles)) return _noAccessPage();
+
+          return OfficePage(api: api, authStore: authStore);
+        },
       ),
 
       GoRoute(
         path: '/office/tasks',
-        builder: (context, state) => OfficeTasksPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageTasks(roles)) return _noAccessPage();
+
+          return OfficeTasksPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/session-stats',
-        builder: (context, state) => SessionStatsPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!roles.contains(AppRole.admin)) return _noAccessPage();
+
+          return SessionStatsPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/tasks/new',
         builder: (context, state) {
-          final roles = Roles.fromAccessToken(authStore.accessToken);
-          if (!Roles.canManageTasks(roles)) {
-            return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
-          }
+          final roles = _roles(authStore);
+          if (!Roles.canManageTasks(roles)) return _noAccessPage();
 
           return TaskFormPage(
             api: api,
@@ -298,10 +336,8 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/office/tasks/:id/edit',
         builder: (context, state) {
-          final roles = Roles.fromAccessToken(authStore.accessToken);
-          if (!Roles.canManageTasks(roles)) {
-            return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
-          }
+          final roles = _roles(authStore);
+          if (!Roles.canManageTasks(roles)) return _noAccessPage();
 
           final TaskDto? t = state.extra is TaskDto ? state.extra as TaskDto : null;
 
@@ -317,61 +353,111 @@ Future<GoRouter> buildRouter() async {
 
       GoRoute(
         path: '/office/periods',
-        builder: (context, state) => PeriodsPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManagePeriods(roles)) return _noAccessPage();
+
+          return PeriodsPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/periods/new',
-        builder: (context, state) => PeriodFormPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManagePeriods(roles)) return _noAccessPage();
+
+          return PeriodFormPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/periods/:id/edit',
-        builder: (context, state) => PeriodFormPage(
-          api: api,
-          authStore: authStore,
-          periodId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManagePeriods(roles)) return _noAccessPage();
+
+          return PeriodFormPage(
+            api: api,
+            authStore: authStore,
+            periodId: state.pathParameters['id']!,
+          );
+        },
       ),
 
       GoRoute(
         path: '/office/users',
-        builder: (context, state) => UsersPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageUsers(roles)) return _noAccessPage();
+
+          return UsersPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/users/new',
-        builder: (context, state) => UserFormPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageUsers(roles)) return _noAccessPage();
+
+          return UserFormPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/users/:id/edit',
-        builder: (context, state) => UserFormPage(
-          api: api,
-          authStore: authStore,
-          userId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageUsers(roles)) return _noAccessPage();
+
+          return UserFormPage(
+            api: api,
+            authStore: authStore,
+            userId: state.pathParameters['id']!,
+          );
+        },
       ),
       GoRoute(
         path: '/office/users/:id/password',
-        builder: (context, state) => UserPasswordPage(
-          api: api,
-          authStore: authStore,
-          userId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageUsers(roles)) return _noAccessPage();
+
+          return UserPasswordPage(
+            api: api,
+            authStore: authStore,
+            userId: state.pathParameters['id']!,
+          );
+        },
       ),
 
       GoRoute(
         path: '/office/catalog',
-        builder: (context, state) => CatalogPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageCatalog(roles)) return _noAccessPage();
+
+          return CatalogPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/catalog/new',
-        builder: (context, state) => CatalogFormPage(api: api, authStore: authStore),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageCatalog(roles)) return _noAccessPage();
+
+          return CatalogFormPage(api: api, authStore: authStore);
+        },
       ),
       GoRoute(
         path: '/office/catalog/:id/edit',
-        builder: (context, state) => CatalogFormPage(
-          api: api,
-          authStore: authStore,
-          itemId: state.pathParameters['id']!,
-        ),
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageCatalog(roles)) return _noAccessPage();
+
+          return CatalogFormPage(
+            api: api,
+            authStore: authStore,
+            itemId: state.pathParameters['id']!,
+          );
+        },
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

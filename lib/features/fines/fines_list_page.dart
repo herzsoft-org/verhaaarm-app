@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../auth/auth_store.dart';
+import '../../auth/roles.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 
 class FinesListPage extends StatefulWidget {
   final ApiClient api;
+  final AuthStore authStore;
 
-  const FinesListPage({super.key, required this.api});
+  const FinesListPage({
+    super.key,
+    required this.api,
+    required this.authStore,
+  });
 
   @override
   State<FinesListPage> createState() => _FinesListPageState();
@@ -30,6 +37,13 @@ class _FinesListPageState extends State<FinesListPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  Set<AppRole> get _roles => Roles.fromAccessToken(widget.authStore.accessToken);
+
+  bool get _isTreasurerOnlyCreator {
+    final roles = _roles;
+    return roles.contains(AppRole.treasurer) && !Roles.canCreateOfficialFine(roles);
   }
 
   bool _canResolveAllTargetUsers(FineDto f) {
@@ -102,15 +116,25 @@ class _FinesListPageState extends State<FinesListPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final periods = await widget.api.listPeriods();
-      final fines = await widget.api.listFines();
+      final periodsFuture = widget.api.listPeriods();
+      final finesFuture = widget.api.listFines();
+      final usersFuture = widget.api.pickerUsers();
+      final catalogFuture = widget.api.listFineCatalog(active: null);
 
-      final users = await widget.api.pickerUsers();
+      final periods = await periodsFuture;
+      final fines = await finesFuture;
+
+      final users = await usersFuture;
       users.sort((a, b) => a.displayName.compareTo(b.displayName));
       final userById = {for (final u in users) u.id: u};
 
-      final catalog = await widget.api.listFineCatalog(active: null);
-      final catalogById = {for (final c in catalog) c.id: c};
+      Map<String, FineCatalogItemDto> catalogById = const {};
+      try {
+        final catalog = await catalogFuture;
+        catalogById = {for (final c in catalog) c.id: c};
+      } catch (_) {
+        catalogById = const {};
+      }
 
       final currentPeriod = _detectCurrentPeriod(periods);
 
@@ -133,13 +157,32 @@ class _FinesListPageState extends State<FinesListPage> {
     }
   }
 
-  Future<void> _openCreateFine() async {
+  Future<void> _openCreateFromPlus() async {
     if (_loading) return;
 
-    await context.push('/fines/new');
+    final roles = _roles;
 
-    if (!mounted) return;
-    await _load();
+    if (Roles.canCreateOfficialFine(roles)) {
+      await context.push('/fines/new');
+
+      if (!mounted) return;
+      await _load();
+      return;
+    }
+
+    if (roles.contains(AppRole.treasurer)) {
+      final changed = await context.push<bool>('/suggestions/new');
+
+      if (!mounted) return;
+      if (changed == true) {
+        await _load();
+      }
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Keine Berechtigung zum Hinzufügen.')),
+    );
   }
 
   Future<void> _openFineDetail(String id) async {
@@ -159,9 +202,11 @@ class _FinesListPageState extends State<FinesListPage> {
       showProfileButton: false,
       actions: [
         IconButton(
-          tooltip: 'Beihängung erstellen',
+          tooltip: _isTreasurerOnlyCreator
+              ? 'Beihängung vorschlagen'
+              : 'Beihängung erstellen',
           icon: const Icon(Icons.add_rounded),
-          onPressed: _loading ? null : _openCreateFine,
+          onPressed: _loading ? null : _openCreateFromPlus,
         ),
         IconButton(
           tooltip: 'Neu laden',
