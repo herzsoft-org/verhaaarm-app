@@ -22,6 +22,8 @@ class EventsPage extends StatefulWidget {
 class _EventsPageState extends State<EventsPage> {
   static const _ttlEvents = Duration(minutes: 3);
 
+  final ScrollController _scrollController = ScrollController();
+
   static const _kEventsPeriods = 'events.periods';
   static const _kEventsEvents = 'events.events';
   static const _kEventsUsers = 'events.users';
@@ -76,6 +78,12 @@ class _EventsPageState extends State<EventsPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   static ({int year, int term}) _semesterKey(String semester) {
@@ -217,6 +225,21 @@ class _EventsPageState extends State<EventsPage> {
     }
   }
 
+  Future<void> _scrollToTopAfterFrame() async {
+    if (!mounted) return;
+
+    await WidgetsBinding.instance.endOfFrame;
+
+    if (!mounted || !_scrollController.hasClients) return;
+
+    _scrollController.jumpTo(0);
+  }
+
+  Future<void> _reloadAfterChange() async {
+    await _load(force: true);
+    await _scrollToTopAfterFrame();
+  }
+
   bool _canEditEvent(Set<AppRole> roles, EventDto e) {
     if (Roles.canManageAnyEvent(roles)) return true;
     if (Roles.isHousekeeping(roles) &&
@@ -327,7 +350,7 @@ class _EventsPageState extends State<EventsPage> {
             onPressed: () async {
               final changed = await context.push<bool>('/events/new');
               if (changed == true && mounted) {
-                await _load(force: true);
+                await _reloadAfterChange();
               }
             },
           ),
@@ -337,6 +360,7 @@ class _EventsPageState extends State<EventsPage> {
           : RefreshIndicator(
         onRefresh: () => _load(force: true),
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(12),
           children: [
             if (_refreshing)
@@ -358,9 +382,10 @@ class _EventsPageState extends State<EventsPage> {
                 showPast: _showPast,
                 canEdit: (e) => _canEditEvent(roles, e),
                 onEdit: (id) async {
-                  final changed = await context.push<bool>('/events/$id/edit');
+                  final changed =
+                  await context.push<bool>('/events/$id/edit');
                   if (changed == true && mounted) {
-                    await _load(force: true);
+                    await _reloadAfterChange();
                   }
                 },
               ),
