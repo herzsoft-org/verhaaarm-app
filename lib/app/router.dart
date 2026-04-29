@@ -16,6 +16,7 @@ import '../features/office/office_page.dart';
 import '../features/office/users/users_page.dart';
 import '../features/office/users/user_form_page.dart';
 import '../features/office/users/user_password_page.dart';
+import '../features/office/users/active_member_stats_page.dart';
 import '../features/office/catalog/catalog_page.dart';
 import '../features/office/catalog/catalog_form_page.dart';
 import '../features/office/periods/periods_page.dart';
@@ -461,7 +462,21 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
+      GoRoute(
+        path: '/office/active-member-stats',
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          final allowed =
+              roles.contains(AppRole.admin) ||
+                  roles.contains(AppRole.senior) ||
+                  roles.contains(AppRole.housekeeping) ||
+                  roles.contains(AppRole.treasurer);
 
+          if (!allowed) return _noAccessPage();
+
+          return ActiveMemberStatsPage(api: api, authStore: authStore);
+        },
+      ),
       GoRoute(
         path: '/office/catalog',
         builder: (context, state) {

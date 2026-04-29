@@ -87,6 +87,11 @@ class _OfficePageState extends State<OfficePage> {
     final canPeriods = Roles.canManagePeriods(roles);
     final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
     final canTasks = Roles.canManageTasks(roles);
+    final canSeeActiveMemberStats =
+        roles.contains(AppRole.admin) ||
+            roles.contains(AppRole.senior) ||
+            roles.contains(AppRole.housekeeping) ||
+            roles.contains(AppRole.treasurer);
     final isAdmin = roles.contains(AppRole.admin);
 
     return AppScaffold(
@@ -182,21 +187,31 @@ class _OfficePageState extends State<OfficePage> {
               ],
             ),
           if (canPeriods) const SizedBox(height: 12),
-          if (canUsers)
+          if (canUsers || canSeeActiveMemberStats)
             _Section(
               title: 'Nutzerverwaltung',
               children: [
-                ListTile(
-                  leading: const Icon(Icons.people_rounded),
-                  title: const Text('Nutzer verwalten'),
-                  subtitle: const Text(
-                    'Erstellen, Rollen, deaktivieren, Passwort setzen',
+                if (canSeeActiveMemberStats)
+                  ListTile(
+                    leading: const Icon(Icons.bar_chart_rounded),
+                    title: const Text('Aktivenstände'),
+                    subtitle: const Text('Füxe, Aktive und Inaktive der Aktivitas'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/office/active-member-stats'),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/office/users'),
-                ),
+                if (canUsers)
+                  ListTile(
+                    leading: const Icon(Icons.people_rounded),
+                    title: const Text('Nutzer verwalten'),
+                    subtitle: const Text(
+                      'Erstellen, Rollen, deaktivieren, Passwort setzen',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/office/users'),
+                  ),
               ],
             ),
+          if (canUsers || canSeeActiveMemberStats) const SizedBox(height: 12),
           if (canUsers) const SizedBox(height: 12),
           if (isAdmin)
             _Section(
