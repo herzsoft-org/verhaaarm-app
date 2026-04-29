@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../api/api_client.dart';
+import '../../common/member_picker_settings.dart';
 import '../../models/dtos.dart';
+import '../../models/member_status.dart';
 
 class MemberPickerSheet extends StatefulWidget {
   final ApiClient api;
@@ -24,6 +26,7 @@ class _MemberPickerSheetState extends State<MemberPickerSheet> {
   Timer? _debounce;
 
   bool _loading = true;
+  bool _hidePhilister = false;
   List<UserPickerDto> _users = const [];
   late Set<String> _selected;
 
@@ -43,11 +46,30 @@ class _MemberPickerSheetState extends State<MemberPickerSheet> {
 
   Future<void> _load({String? query}) async {
     setState(() => _loading = true);
+
     try {
+      final hidePhilister = await MemberPickerSettings.hidePhilister();
       final users = await widget.api.pickerUsers(query: query);
-      users.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+
+      final filtered = users.where((u) {
+        return MemberStatuses.shouldShowInPicker(
+          memberStatus: u.memberStatus,
+          hidePhilister: hidePhilister,
+          forceShow: _selected.contains(u.id),
+        );
+      }).toList(growable: false);
+
+      filtered.sort(
+            (a, b) => a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        ),
+      );
+
       if (!mounted) return;
-      setState(() => _users = users);
+      setState(() {
+        _hidePhilister = hidePhilister;
+        _users = filtered;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -67,6 +89,10 @@ class _MemberPickerSheetState extends State<MemberPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = _hidePhilister
+        ? 'Philister werden ausgeblendet'
+        : 'Alle Mitglieder werden angezeigt';
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -74,16 +100,24 @@ class _MemberPickerSheetState extends State<MemberPickerSheet> {
           children: [
             Row(
               children: [
-                Text(
-                  'Mitglieder auswählen',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Expanded(
+                  child: Text(
+                    'Mitglieder auswählen',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 ),
-                const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(_selected),
                   child: const Text('Fertig'),
                 ),
               ],
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -114,7 +148,12 @@ class _MemberPickerSheetState extends State<MemberPickerSheet> {
                         }
                       });
                     },
-                    title: Text(u.displayName),
+                    title: Text(
+                      MemberStatuses.pickerDisplayName(
+                        displayName: u.displayName,
+                        memberStatus: u.memberStatus,
+                      ),
+                    ),
                     controlAffinity: ListTileControlAffinity.leading,
                   );
                 },

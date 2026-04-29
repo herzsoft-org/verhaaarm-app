@@ -113,5 +113,17 @@ class AppCache {
 
   void clear() => _map.clear();
 
+  Future<bool?> getPersistedBool(String key) async {
+    final prefs = _prefs;
+    if (prefs == null) return null;
+    return prefs.getBool(_pkey(key));
+  }
+
+  Future<void> setPersistedBool(String key, bool value) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    await prefs.setBool(_pkey(key), value);
+  }
+
   String _pkey(String key) => 'appcache.$key';
 }

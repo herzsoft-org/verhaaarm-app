@@ -21,7 +21,55 @@ class OfficePage extends StatefulWidget {
 }
 
 class _OfficePageState extends State<OfficePage> {
+  static const String _statusOpenSuggestion = 'PENDING';
+
   bool _csvBusy = false;
+  int _openSuggestions = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOpenSuggestionsCount();
+  }
+
+  Future<void> _loadOpenSuggestionsCount() async {
+    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    if (!Roles.canAcceptFineSuggestions(roles)) return;
+
+    try {
+      final suggestions = await widget.api.listSuggestions(
+        status: _statusOpenSuggestion,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _openSuggestions = suggestions.length;
+      });
+    } catch (_) {
+      // Silent: the office page should still be usable if the badge count fails.
+    }
+  }
+
+  Widget _countBadge(BuildContext context, int n) {
+    if (n <= 0) return const SizedBox.shrink();
+
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$n',
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: cs.onPrimaryContainer,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +102,7 @@ class _OfficePageState extends State<OfficePage> {
                   leading: const Icon(Icons.assignment_rounded),
                   title: const Text('Arbeitsaufträge verwalten'),
                   subtitle: const Text('Alle Nutzer · bearbeiten · löschen'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/office/tasks'),
                 ),
               ],
@@ -69,6 +118,7 @@ class _OfficePageState extends State<OfficePage> {
                 subtitle: const Text(
                   'Alle Nutzer, alle Conventsperioden (nach Backend-Rechten)',
                 ),
+                trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push('/fines'),
               ),
               if (canAcceptSuggestions)
@@ -76,13 +126,26 @@ class _OfficePageState extends State<OfficePage> {
                   leading: const Icon(Icons.inbox_rounded),
                   title: const Text('Vorgeschlagene Beihängungen'),
                   subtitle: const Text('Ansehen, akzeptieren oder ablehnen'),
-                  onTap: () => context.push('/office/fine-suggestions'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _countBadge(context, _openSuggestions),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right_rounded),
+                    ],
+                  ),
+                  onTap: () async {
+                    await context.push('/office/fine-suggestions');
+                    if (!mounted) return;
+                    await _loadOpenSuggestionsCount();
+                  },
                 ),
               if (canCatalog)
                 ListTile(
                   leading: const Icon(Icons.rule_rounded),
                   title: const Text('Beihängungskatalog verwalten'),
                   subtitle: const Text('Gründe + Default Beträge'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/office/catalog'),
                 ),
               ListTile(
@@ -99,7 +162,7 @@ class _OfficePageState extends State<OfficePage> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-                    : null,
+                    : const Icon(Icons.chevron_right_rounded),
                 onTap: _csvBusy ? null : _startCsvExportFlow,
               ),
             ],
@@ -113,6 +176,7 @@ class _OfficePageState extends State<OfficePage> {
                   leading: const Icon(Icons.date_range_rounded),
                   title: const Text('Semester / Conventsperioden verwalten'),
                   subtitle: const Text('Erstellen, ändern, aktivieren, locken'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/office/periods'),
                 ),
               ],
@@ -128,6 +192,7 @@ class _OfficePageState extends State<OfficePage> {
                   subtitle: const Text(
                     'Erstellen, Rollen, deaktivieren, Passwort setzen',
                   ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/office/users'),
                 ),
               ],
@@ -140,7 +205,10 @@ class _OfficePageState extends State<OfficePage> {
                 ListTile(
                   leading: const Icon(Icons.analytics_rounded),
                   title: const Text('Session-Statistik'),
-                  subtitle: const Text('Aktive Sessions nach Zeitraum, App-Typ und Browser'),
+                  subtitle: const Text(
+                    'Aktive Sessions nach Zeitraum, App-Typ und Browser',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/office/session-stats'),
                 ),
               ],

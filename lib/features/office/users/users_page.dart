@@ -4,9 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../../api/api_client.dart';
 import '../../../auth/auth_store.dart';
 import '../../../auth/roles.dart';
+import '../../../common/format.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
-import '../../../common/format.dart';
+import '../../../models/member_status.dart';
 
 class UsersPage extends StatefulWidget {
   final ApiClient api;
@@ -204,8 +205,11 @@ class _UsersPageState extends State<UsersPage> {
     return _users.where((u) {
       final username = u.username.toLowerCase();
       final displayName = u.displayName.toLowerCase();
+      final status = MemberStatuses.label(u.memberStatus).toLowerCase();
 
-      return username.contains(q) || displayName.contains(q);
+      return username.contains(q) ||
+          displayName.contains(q) ||
+          status.contains(q);
     }).toList();
   }
 
@@ -260,21 +264,21 @@ class _UsersPageState extends State<UsersPage> {
             Card(
               child: ListTile(
                 leading: Icon(
-                  u.disabled
-                      ? Icons.block_rounded
-                      : Icons.person_rounded,
+                  u.disabled ? Icons.block_rounded : Icons.person_rounded,
                 ),
                 titleAlignment: ListTileTitleAlignment.center,
                 title: Text('${u.displayName} (${u.username})'),
                 subtitle: Text(
                   _showLastOnline
                       ? 'Rolle: ${_singleRoleLabel(u)}'
+                      '\nStatus: ${MemberStatuses.label(u.memberStatus)}'
                       '\nZuletzt online: ${_date(u.lastOnlineAt)}'
                       '${u.disabled ? '\nDeaktiviert' : ''}'
                       : 'Rolle: ${_singleRoleLabel(u)}'
+                      '\nStatus: ${MemberStatuses.label(u.memberStatus)}'
                       '${u.disabled ? '\nDeaktiviert' : ''}',
                 ),
-                isThreeLine: _showLastOnline || u.disabled,
+                isThreeLine: true,
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => _openEditUser(u),
               ),
@@ -387,13 +391,16 @@ class _UsersSearchDelegate extends SearchDelegate<String?> {
     return users.where((u) {
       final username = u.username.toLowerCase();
       final displayName = u.displayName.toLowerCase();
+      final status = MemberStatuses.label(u.memberStatus).toLowerCase();
 
-      return username.contains(needle) || displayName.contains(needle);
+      return username.contains(needle) ||
+          displayName.contains(needle) ||
+          status.contains(needle);
     }).toList();
   }
 
   @override
-  String get searchFieldLabel => 'Nach Username oder Anzeigename suchen';
+  String get searchFieldLabel => 'Nach Username, Anzeigename oder Status suchen';
 
   @override
   List<Widget>? buildActions(BuildContext context) {
@@ -442,8 +449,11 @@ class _UsersSearchDelegate extends SearchDelegate<String?> {
               ),
               titleAlignment: ListTileTitleAlignment.center,
               title: Text('${u.displayName} (${u.username})'),
-              subtitle: Text(u.disabled ? 'Deaktiviert' : ''),
-              isThreeLine: false,
+              subtitle: Text(
+                'Status: ${MemberStatuses.label(u.memberStatus)}'
+                    '${u.disabled ? '\nDeaktiviert' : ''}',
+              ),
+              isThreeLine: u.disabled,
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => close(context, query),
             ),

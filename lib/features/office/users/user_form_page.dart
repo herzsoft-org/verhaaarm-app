@@ -7,6 +7,7 @@ import '../../../auth/roles.dart';
 import '../../../common/format.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
+import '../../../models/member_status.dart';
 
 class UserFormPage extends StatefulWidget {
   final ApiClient api;
@@ -37,10 +38,16 @@ class _UserFormPageState extends State<UserFormPage> {
 
   // Backend: exactly one role
   String _role = 'MEMBER';
+  String _memberStatus = MemberStatuses.defaultBackendValue;
 
   String? _lastOnlineAt;
 
   bool get _isEdit => widget.userId != null;
+
+  bool get _canChangeMemberStatus {
+    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    return roles.contains(AppRole.admin);
+  }
 
   @override
   void initState() {
@@ -104,10 +111,12 @@ class _UserFormPageState extends State<UserFormPage> {
         _displayNameCtrl.text = u.displayName;
         _disabled = u.disabled;
         _role = u.roles.isNotEmpty ? u.roles.first : 'MEMBER';
+        _memberStatus = u.memberStatus;
         _lastOnlineAt = u.lastOnlineAt;
       } else {
         _disabled = false;
         _role = 'MEMBER';
+        _memberStatus = MemberStatuses.defaultBackendValue;
         _lastOnlineAt = null;
       }
 
@@ -135,6 +144,7 @@ class _UserFormPageState extends State<UserFormPage> {
           displayName: _displayNameCtrl.text.trim(),
           disabled: _disabled,
           roles: [_role],
+          memberStatus: _canChangeMemberStatus ? _memberStatus : null,
         );
 
         await widget.api.updateUser(widget.userId!, req);
@@ -144,6 +154,7 @@ class _UserFormPageState extends State<UserFormPage> {
           displayName: _displayNameCtrl.text.trim(),
           password: _passwordCtrl.text,
           roles: [_role],
+          memberStatus: _memberStatus,
         );
 
         await widget.api.createUser(req);
@@ -214,6 +225,7 @@ class _UserFormPageState extends State<UserFormPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEdit ? 'Nutzer bearbeiten' : 'Nutzer anlegen';
+    final canChangeMemberStatus = _canChangeMemberStatus;
 
     return AppScaffold(
       title: title,
@@ -256,8 +268,9 @@ class _UserFormPageState extends State<UserFormPage> {
                       decoration: const InputDecoration(
                         labelText: 'Display Name',
                       ),
-                      validator: (v) =>
-                      ((v ?? '').trim().isEmpty) ? 'Pflichtfeld' : null,
+                      validator: (v) => ((v ?? '').trim().isEmpty)
+                          ? 'Pflichtfeld'
+                          : null,
                     ),
                     if (!_isEdit) ...[
                       const SizedBox(height: 12),
@@ -275,7 +288,6 @@ class _UserFormPageState extends State<UserFormPage> {
                 ),
               ),
             ),
-
             if (_isEdit) ...[
               const SizedBox(height: 12),
               Card(
@@ -283,10 +295,35 @@ class _UserFormPageState extends State<UserFormPage> {
                   leading: const Icon(Icons.schedule_rounded),
                   title: const Text('Zuletzt online'),
                   subtitle: Text(_date(_lastOnlineAt)),
+                  titleAlignment: ListTileTitleAlignment.center,
                 ),
               ),
             ],
-
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: DropdownButtonFormField<String>(
+                  value: _memberStatus,
+                  decoration: const InputDecoration(
+                    labelText: 'Mitgliedsstatus',
+                  ),
+                  items: [
+                    for (final status in MemberStatuses.backendValues)
+                      DropdownMenuItem(
+                        value: status,
+                        child: Text(MemberStatuses.label(status)),
+                      ),
+                  ],
+                  onChanged: canChangeMemberStatus
+                      ? (v) {
+                    if (v == null) return;
+                    setState(() => _memberStatus = v);
+                  }
+                      : null,
+                ),
+              ),
+            ),
             const SizedBox(height: 12),
             Card(
               child: Padding(
@@ -338,7 +375,6 @@ class _UserFormPageState extends State<UserFormPage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 12),
             if (_isEdit)
               Card(
@@ -351,7 +387,6 @@ class _UserFormPageState extends State<UserFormPage> {
                   onChanged: (v) => setState(() => _disabled = v),
                 ),
               ),
-
             const SizedBox(height: 12),
             if (_isEdit)
               SizedBox(
@@ -363,7 +398,6 @@ class _UserFormPageState extends State<UserFormPage> {
                   label: const Text('Passwort setzen'),
                 ),
               ),
-
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -373,7 +407,6 @@ class _UserFormPageState extends State<UserFormPage> {
                 label: const Text('Speichern'),
               ),
             ),
-
             if (_isEdit) ...[
               const SizedBox(height: 12),
               SizedBox(

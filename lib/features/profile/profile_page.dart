@@ -13,8 +13,10 @@ import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
+import '../../common/member_picker_settings.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../common/widgets/schnupfspruch_button.dart';
+import '../../models/member_status.dart';
 import '../../update/web_app_refresh.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -34,10 +36,12 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   bool _refreshing = false;
   bool _forceReloadingWebApp = false;
+  bool _hidePhilisterInPickers = false;
 
   String _displayName = '—';
   String _username = '—';
-  String _roleLabel = 'Member';
+  String _roleLabel = 'Mitglied';
+  String _memberStatus = MemberStatuses.defaultBackendValue;
 
   String _appVersion = '—';
   String _platformLabel = '—';
@@ -53,6 +57,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _load({bool force = false}) async {
     try {
+      final hidePhilister = await MemberPickerSettings.hidePhilister();
+      if (mounted) {
+        setState(() => _hidePhilisterInPickers = hidePhilister);
+      }
+
       final c = await AppCache.I.entryOrLoadPersisted<_ProfileSnapshot>(
         _kProfile,
         decode: (json) =>
@@ -110,6 +119,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _displayName = s.displayName;
     _username = s.username;
     _roleLabel = s.roleLabel;
+    _memberStatus = s.memberStatus;
 
     _appVersion = s.appVersion;
     _platformLabel = s.platformLabel;
@@ -165,6 +175,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     String displayName = '—';
     String username = '—';
+    String memberStatus = MemberStatuses.defaultBackendValue;
 
     String? pickString(dynamic v) {
       final s = v?.toString().trim();
@@ -183,8 +194,12 @@ class _ProfilePageState extends State<ProfilePage> {
             pickString(payload['preferred_username']) ??
             pickString(payload['login']);
 
+        final ms = pickString(payload['memberStatus']) ??
+            pickString(payload['member_status']);
+
         if (dn != null) displayName = dn;
         if (un != null) username = un;
+        if (ms != null) memberStatus = ms;
 
         final sub = pickString(payload['sub']);
         if (username == '—' && sub != null) {
@@ -193,9 +208,7 @@ class _ProfilePageState extends State<ProfilePage> {
       } catch (_) {
         // ignore
       }
-    }
 
-    if (token.isNotEmpty && (displayName == '—' || username == '—')) {
       try {
         final me = await widget.api.getMe();
 
@@ -204,6 +217,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
         if (displayName == '—' && dn2.isNotEmpty) displayName = dn2;
         if (username == '—' && un2.isNotEmpty) username = un2;
+
+        memberStatus = me.memberStatus;
       } catch (_) {
         // ignore
       }
@@ -213,6 +228,7 @@ class _ProfilePageState extends State<ProfilePage> {
       displayName: displayName,
       username: username,
       roleLabel: roleLabel,
+      memberStatus: memberStatus,
       sessionLabel: sessionLabel,
       appVersion: appVersion,
       platformLabel: platformLabel,
@@ -294,6 +310,151 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _openAppSettingsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final cs = theme.colorScheme;
+
+        return StatefulBuilder(
+          builder: (ctx, setStateSheet) {
+            Future<void> setHidePhilister(bool value) async {
+              setState(() => _hidePhilisterInPickers = value);
+              setStateSheet(() => _hidePhilisterInPickers = value);
+              await MemberPickerSettings.setHidePhilister(value);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: cs.primaryContainer,
+                          foregroundColor: cs.onPrimaryContainer,
+                          child: const Icon(Icons.settings_rounded),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'App-Einstellungen',
+                                style: theme.textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Darstellung und Verhalten der App anpassen',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      color: cs.surfaceContainerLow,
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            secondary: const Icon(Icons.group_off_rounded),
+                            title: const Text(
+                              'Philister in Auswahllisten ausblenden',
+                            ),
+                            subtitle: const Text(
+                              'Gilt nur für Auswahlfenster, nicht für Berechtigungen.',
+                            ),
+                            value: _hidePhilisterInPickers,
+                            onChanged: setHidePhilister,
+                          ),
+                          if (kIsWeb) ...[
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.restart_alt_rounded),
+                              title: const Text('App vollständig neu laden'),
+                              subtitle: const Text(
+                                'Browser-Cache der App leeren, falls nach einem Update noch alte Inhalte erscheinen.',
+                              ),
+                              trailing: _forceReloadingWebApp
+                                  ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                                  : const Icon(Icons.chevron_right_rounded),
+                              onTap: _forceReloadingWebApp
+                                  ? null
+                                  : _confirmForceReloadWebApp,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      color: cs.surfaceContainerLow,
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.info_outline_rounded),
+                            title: const Text('App-Version'),
+                            subtitle: Text(_appVersion),
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.phone_android_rounded),
+                            title: const Text('Plattform'),
+                            subtitle: Text(_platformLabel),
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.devices_other_rounded),
+                            title: const Text('Gerät'),
+                            subtitle: Text(_deviceLabel),
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.language_rounded),
+                            title: const Text('Sprache'),
+                            subtitle: Text(_localeLabel),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Fertig'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -628,6 +789,23 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.group_rounded,
+                              size: 18,
+                              color:
+                              Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              MemberStatuses.label(_memberStatus),
+                              style:
+                              Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -637,8 +815,10 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const SizedBox(height: 12),
           _buildLegalDocumentsCard(context),
-          const SizedBox(height: 8),
-          _buildConventProtocolsCard(context),
+          if (MemberStatuses.isAktivitas(_memberStatus)) ...[
+            const SizedBox(height: 8),
+            _buildConventProtocolsCard(context),
+          ],
           const SizedBox(height: 12),
           Card(
             child: Column(
@@ -650,31 +830,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.push('/profile/sessions'),
                 ),
-                if (kIsWeb) ...[
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.restart_alt_rounded),
-                    title: const Text('App vollständig neu laden'),
-                    subtitle: const Text(
-                      'Browser cache der App leeren',
-                    ),
-                    trailing: _forceReloadingWebApp
-                        ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : const Icon(Icons.chevron_right_rounded),
-                    onTap: _forceReloadingWebApp
-                        ? null
-                        : _confirmForceReloadWebApp,
-                  ),
-                ],
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.info_outline_rounded),
-                  title: const Text('App'),
-                  subtitle: Text(_appVersion),
+                  leading: const Icon(Icons.settings_rounded),
+                  title: const Text('App-Einstellungen'),
+                  subtitle: const Text('App-Verhalten und lokale Einstellungen'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _openAppSettingsSheet,
                 ),
               ],
             ),
@@ -733,6 +895,7 @@ class _ProfileSnapshot {
   final String displayName;
   final String username;
   final String roleLabel;
+  final String memberStatus;
 
   final String appVersion;
   final String platformLabel;
@@ -744,6 +907,7 @@ class _ProfileSnapshot {
     required this.displayName,
     required this.username,
     required this.roleLabel,
+    required this.memberStatus,
     required this.sessionLabel,
     required this.appVersion,
     required this.platformLabel,
@@ -755,6 +919,7 @@ class _ProfileSnapshot {
     'displayName': displayName,
     'username': username,
     'roleLabel': roleLabel,
+    'memberStatus': memberStatus,
     'appVersion': appVersion,
     'platformLabel': platformLabel,
     'deviceLabel': deviceLabel,
@@ -767,6 +932,8 @@ class _ProfileSnapshot {
         displayName: (json['displayName'] as String?) ?? '—',
         username: (json['username'] as String?) ?? '—',
         roleLabel: (json['roleLabel'] as String?) ?? 'Mitglied',
+        memberStatus: (json['memberStatus'] as String?) ??
+            MemberStatuses.defaultBackendValue,
         sessionLabel: (json['sessionLabel'] as String?) ?? '—',
         appVersion: (json['appVersion'] as String?) ?? '—',
         platformLabel: (json['platformLabel'] as String?) ?? '—',

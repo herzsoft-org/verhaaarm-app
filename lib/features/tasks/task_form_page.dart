@@ -5,6 +5,8 @@ import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
+import '../../common/member_picker_settings.dart';
+import '../../models/member_status.dart';
 
 class TaskFormPage extends StatefulWidget {
   final ApiClient api;
@@ -664,8 +666,19 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
   Future<void> _load({String? query}) async {
     setState(() => _loading = true);
     try {
-      final users = await widget.api.pickerUsers(query: query);
-      users.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      final hidePhilister = await MemberPickerSettings.hidePhilister();
+      final rawUsers = await widget.api.pickerUsers(query: query);
+      final users = rawUsers.where((u) {
+        return MemberStatuses.shouldShowInPicker(
+          memberStatus: u.memberStatus,
+          hidePhilister: hidePhilister,
+          forceShow: _selected.contains(u.id),
+        );
+      }).toList(growable: false);
+
+      users.sort(
+            (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
 
       for (final u in users) {
         if (_selected.contains(u.id)) {
@@ -756,7 +769,12 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                     return CheckboxListTile(
                       value: checked,
                       onChanged: (_) => _toggle(u),
-                      title: Text(u.displayName),
+                      title: Text(
+                        MemberStatuses.pickerDisplayName(
+                          displayName: u.displayName,
+                          memberStatus: u.memberStatus,
+                        ),
+                      ),
                       subtitle: null,
                     );
                   },

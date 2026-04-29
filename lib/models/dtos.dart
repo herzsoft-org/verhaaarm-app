@@ -251,17 +251,25 @@ class UserPickerDto {
   final String id;
   final String username;
   final String displayName;
+  final String memberStatus;
+  final bool actividad;
+
+  bool get aktivitas => actividad;
 
   UserPickerDto({
     required this.id,
     required this.username,
     required this.displayName,
+    required this.memberStatus,
+    required this.actividad,
   });
 
   factory UserPickerDto.fromJson(Map<String, dynamic> json) => UserPickerDto(
     id: _reqString(json, 'id'),
     username: _reqString(json, 'username'),
     displayName: _reqString(json, 'displayName'),
+    memberStatus: _optString(json, 'memberStatus') ?? 'BURSCH',
+    actividad: _optBool(json, 'aktivitas', fallback: true),
   );
 }
 
@@ -271,7 +279,11 @@ class UserDto {
   final String displayName;
   final bool disabled;
   final List<String> roles;
+  final String memberStatus;
+  final bool actividad;
   final String? lastOnlineAt;
+
+  bool get aktivitas => actividad;
 
   UserDto({
     required this.id,
@@ -279,6 +291,8 @@ class UserDto {
     required this.displayName,
     required this.disabled,
     required this.roles,
+    required this.memberStatus,
+    required this.actividad,
     this.lastOnlineAt,
   });
 
@@ -288,6 +302,8 @@ class UserDto {
     displayName: _reqString(json, 'displayName'),
     disabled: _optBool(json, 'disabled', fallback: false),
     roles: _optStringList(json, 'roles'),
+    memberStatus: _optString(json, 'memberStatus') ?? 'BURSCH',
+    actividad: _optBool(json, 'aktivitas', fallback: true),
     lastOnlineAt: _optString(json, 'lastOnlineAt'),
   );
 }
@@ -404,12 +420,14 @@ class CreateUserRequest {
   final String displayName;
   final String password;
   final List<String> roles;
+  final String memberStatus;
 
   CreateUserRequest({
     required this.username,
     required this.displayName,
     required this.password,
     required this.roles,
+    this.memberStatus = 'BURSCH',
   });
 
   Map<String, dynamic> toJson() => {
@@ -417,6 +435,7 @@ class CreateUserRequest {
     'displayName': displayName,
     'password': password,
     'roles': roles,
+    'memberStatus': memberStatus,
   };
 }
 
@@ -424,13 +443,20 @@ class UpdateUserRequest {
   final String? displayName;
   final bool? disabled;
   final List<String>? roles;
+  final String? memberStatus;
 
-  UpdateUserRequest({this.displayName, this.disabled, this.roles});
+  UpdateUserRequest({
+    this.displayName,
+    this.disabled,
+    this.roles,
+    this.memberStatus,
+  });
 
   Map<String, dynamic> toJson() => {
     if (displayName != null) 'displayName': displayName,
     if (disabled != null) 'disabled': disabled,
     if (roles != null) 'roles': roles,
+    if (memberStatus != null) 'memberStatus': memberStatus,
   };
 }
 
