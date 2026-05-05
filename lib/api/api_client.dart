@@ -794,6 +794,18 @@ class ApiClient {
     return SessionStatsDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
+  Future<List<UserSessionDto>> listAdminSessions() async {
+    final r = await dio.get('/sessions/admin');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => UserSessionDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<void> revokeAdminSession(String sessionId) async {
+    await dio.delete('/sessions/admin/$sessionId');
+  }
+
 // ----------------------------
 // ATTENDANCE: swagger includes DELETE returning 200 (no body). Keep void.
 // ----------------------------

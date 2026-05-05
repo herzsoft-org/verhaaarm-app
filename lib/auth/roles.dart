@@ -65,6 +65,10 @@ class Roles {
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
   }
 
+  static bool canManageSessions(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin);
+  }
+
   static bool canManageAnyEvent(Set<AppRole> roles) {
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
   }

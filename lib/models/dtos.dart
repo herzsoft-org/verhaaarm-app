@@ -312,7 +312,9 @@ class UserDto {
 
 class UserSessionDto {
   final String id;
-  final String userId;
+  final String? userId;
+  final String? username;
+  final String? displayName;
   final String appType;
   final String? deviceName;
   final String? deviceModel;
@@ -321,15 +323,19 @@ class UserSessionDto {
   final String? browserName;
   final String? browserVersion;
   final String? userAgent;
-  final String createdAt;
-  final String lastActiveAt;
-  final String expiresAt;
+  final String? ipAddress;
+  final String? countryCode;
+  final String? createdAt;
+  final String? lastActiveAt;
+  final String? expiresAt;
   final String? revokedAt;
   final bool current;
 
   UserSessionDto({
     required this.id,
     required this.userId,
+    required this.username,
+    required this.displayName,
     required this.appType,
     required this.deviceName,
     required this.deviceModel,
@@ -338,6 +344,8 @@ class UserSessionDto {
     required this.browserName,
     required this.browserVersion,
     required this.userAgent,
+    required this.ipAddress,
+    required this.countryCode,
     required this.createdAt,
     required this.lastActiveAt,
     required this.expiresAt,
@@ -347,7 +355,9 @@ class UserSessionDto {
 
   factory UserSessionDto.fromJson(Map<String, dynamic> json) => UserSessionDto(
     id: _reqString(json, 'id'),
-    userId: _reqString(json, 'userId'),
+    userId: _optString(json, 'userId'),
+    username: _optString(json, 'username'),
+    displayName: _optString(json, 'displayName'),
     appType: _optString(json, 'appType') ?? 'UNKNOWN',
     deviceName: _optString(json, 'deviceName'),
     deviceModel: _optString(json, 'deviceModel'),
@@ -356,9 +366,11 @@ class UserSessionDto {
     browserName: _optString(json, 'browserName'),
     browserVersion: _optString(json, 'browserVersion'),
     userAgent: _optString(json, 'userAgent'),
-    createdAt: _reqString(json, 'createdAt'),
-    lastActiveAt: _reqString(json, 'lastActiveAt'),
-    expiresAt: _reqString(json, 'expiresAt'),
+    ipAddress: _optString(json, 'ipAddress'),
+    countryCode: _optString(json, 'countryCode'),
+    createdAt: _optString(json, 'createdAt'),
+    lastActiveAt: _optString(json, 'lastActiveAt'),
+    expiresAt: _optString(json, 'expiresAt'),
     revokedAt: _optString(json, 'revokedAt'),
     current: _optBool(json, 'current', fallback: false),
   );

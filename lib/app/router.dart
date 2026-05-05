@@ -53,6 +53,9 @@ import '../features/office/session_stats_page.dart';
 import '../features/office/periods/period_protocol_page.dart';
 import '../features/profile/convent_protocols_page.dart';
 
+import '../features/office/admin_sessions_page.dart';
+import '../features/office/admin_user_sessions_page.dart';
+
 final GlobalKey<NavigatorState> rootNavKey = GlobalKey<NavigatorState>();
 
 GoRouter? _appRouter;
@@ -336,9 +339,32 @@ Future<GoRouter> buildRouter() async {
         path: '/office/session-stats',
         builder: (context, state) {
           final roles = _roles(authStore);
-          if (!roles.contains(AppRole.admin)) return _noAccessPage();
+          if (!Roles.canManageSessions(roles)) return _noAccessPage();
 
           return SessionStatsPage(api: api, authStore: authStore);
+        },
+      ),
+      GoRoute(
+        path: '/office/sessions',
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageSessions(roles)) return _noAccessPage();
+
+          return AdminSessionsPage(api: api, authStore: authStore);
+        },
+      ),
+      GoRoute(
+        path: '/office/sessions/users/:userId',
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManageSessions(roles)) return _noAccessPage();
+
+          final userId = state.pathParameters['userId']!;
+          return AdminUserSessionsPage(
+            api: api,
+            authStore: authStore,
+            userId: userId,
+          );
         },
       ),
       GoRoute(

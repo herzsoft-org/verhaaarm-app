@@ -49,7 +49,7 @@ class _SessionsPageState extends State<SessionsPage> {
         if (!aRevoked && bRevoked) return -1;
         if (aRevoked && !bRevoked) return 1;
 
-        return b.lastActiveAt.compareTo(a.lastActiveAt);
+        return (b.lastActiveAt ?? '').compareTo(a.lastActiveAt ?? '');
       });
 
       if (!mounted) return;

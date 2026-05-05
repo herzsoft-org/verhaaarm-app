@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
@@ -23,7 +24,6 @@ class SessionStatsPage extends StatefulWidget {
 
 class _SessionStatsPageState extends State<SessionStatsPage> {
   bool _loading = true;
-  bool _usersBusy = false;
 
   SessionStatsDto? _stats;
 
@@ -128,49 +128,6 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
     return groups;
   }
 
-  Future<void> _openActiveUsers() async {
-    if (_usersBusy) return;
-
-    setState(() => _usersBusy = true);
-
-    try {
-      final users = await widget.api.listUsersAdmin(online: 'week');
-
-      users.sort((a, b) {
-        final ao = a.lastOnlineAt ?? '';
-        final bo = b.lastOnlineAt ?? '';
-        final c = bo.compareTo(ao);
-        if (c != 0) return c;
-
-        final ad = a.displayName.trim().toLowerCase();
-        final bd = b.displayName.trim().toLowerCase();
-        return ad.compareTo(bd);
-      });
-
-      if (!mounted) return;
-
-      setState(() => _usersBusy = false);
-
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (ctx) => _OnlineUsersSheet(
-          title: 'Aktive Nutzer',
-          users: users,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() => _usersBusy = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nutzer konnten nicht geladen werden: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final stats = _stats;
@@ -191,11 +148,6 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
           : ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          if (_usersBusy)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: LinearProgressIndicator(),
-            ),
           if (stats == null)
             const Card(
               child: Padding(
@@ -208,7 +160,7 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
               total: _sum(_activeRows(stats)),
               groups: _groupByAppType(_activeRows(stats)),
               rows: _activeRows(stats),
-              onTap: _openActiveUsers,
+              onTap: () => context.push('/office/sessions'),
             ),
         ],
       ),
