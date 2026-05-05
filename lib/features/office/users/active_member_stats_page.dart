@@ -83,23 +83,36 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
     }
   }
 
-  int _countByStatus(MemberStatus status) {
-    return _activeMembers.where((u) {
-      return MemberStatuses.parse(u.memberStatus) == status;
-    }).length;
-  }
-
   List<UserDto> _usersByStatus(MemberStatus status) {
     return _activeMembers.where((u) {
       return MemberStatuses.parse(u.memberStatus) == status;
     }).toList(growable: false);
   }
 
+  Widget _sectionWithSpacing({
+    required String title,
+    required IconData icon,
+    required List<UserDto> users,
+  }) {
+    if (users.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: _StatusSection(
+        title: title,
+        icon: icon,
+        users: users,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final fuxCount = _countByStatus(MemberStatus.fux);
-    final burschCount = _countByStatus(MemberStatus.bursch);
-    final inaktiverCount = _countByStatus(MemberStatus.inaktiver);
+    final fuxUsers = _usersByStatus(MemberStatus.fux);
+    final schuelerfuxUsers = _usersByStatus(MemberStatus.schuelerfux);
+    final konkneipantUsers = _usersByStatus(MemberStatus.konkneipant);
+    final burschUsers = _usersByStatus(MemberStatus.bursch);
+    final inaktiverUsers = _usersByStatus(MemberStatus.inaktiver);
     final total = _activeMembers.length;
 
     return AppScaffold(
@@ -120,29 +133,31 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            _SummaryCard(
-              total: total,
-              fuxCount: fuxCount,
-              burschCount: burschCount,
-              inaktiverCount: inaktiverCount,
-            ),
-            const SizedBox(height: 12),
-            _StatusSection(
+            _SummaryCard(total: total),
+            _sectionWithSpacing(
               title: 'Füxe',
               icon: Icons.school_rounded,
-              users: _usersByStatus(MemberStatus.fux),
+              users: fuxUsers,
             ),
-            const SizedBox(height: 12),
-            _StatusSection(
+            _sectionWithSpacing(
+              title: 'Schüler-/Militärfüxe',
+              icon: Icons.school_rounded,
+              users: schuelerfuxUsers,
+            ),
+            _sectionWithSpacing(
+              title: 'Konkneipanten',
+              icon: Icons.person_add_alt_1_rounded,
+              users: konkneipantUsers,
+            ),
+            _sectionWithSpacing(
               title: 'Aktive Burschen',
               icon: Icons.groups_rounded,
-              users: _usersByStatus(MemberStatus.bursch),
+              users: burschUsers,
             ),
-            const SizedBox(height: 12),
-            _StatusSection(
+            _sectionWithSpacing(
               title: 'Inaktive Burschen',
               icon: Icons.person_off_rounded,
-              users: _usersByStatus(MemberStatus.inaktiver),
+              users: inaktiverUsers,
             ),
           ],
         ),
@@ -153,15 +168,9 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
 
 class _SummaryCard extends StatelessWidget {
   final int total;
-  final int fuxCount;
-  final int burschCount;
-  final int inaktiverCount;
 
   const _SummaryCard({
     required this.total,
-    required this.fuxCount,
-    required this.burschCount,
-    required this.inaktiverCount,
   });
 
   @override
@@ -172,48 +181,29 @@ class _SummaryCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text('Aktivitas gesamt', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
+            Icon(
+              Icons.groups_rounded,
+              color: cs.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Aktivitas gesamt',
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
             Text(
               '$total',
-              style: theme.textTheme.displaySmall?.copyWith(
+              style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w800,
                 color: cs.primary,
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _CountChip(label: 'Füxe', count: fuxCount),
-                _CountChip(label: 'Aktive Burschen', count: burschCount),
-                _CountChip(label: 'Inaktive Burschen', count: inaktiverCount),
-              ],
-            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _CountChip extends StatelessWidget {
-  final String label;
-  final int count;
-
-  const _CountChip({
-    required this.label,
-    required this.count,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      label: Text('$label: $count'),
     );
   }
 }
@@ -235,29 +225,23 @@ class _StatusSection extends StatelessWidget {
 
     return Card(
       child: ExpansionTile(
-        initiallyExpanded: true,
+        initiallyExpanded: false,
         leading: Icon(icon),
         title: Text(title),
         subtitle: Text('${users.length} Nutzer'),
         children: [
-          if (users.isEmpty)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Keine Nutzer.'),
+          ...users.map(
+                (u) => ListTile(
+              dense: true,
+              titleAlignment: ListTileTitleAlignment.center,
+              title: Text(
+                u.displayName.trim().isEmpty
+                    ? 'Ohne Anzeigename'
+                    : u.displayName,
+                style: theme.textTheme.bodyLarge,
               ),
-            )
-          else
-            ...users.map(
-                  (u) => ListTile(
-                    dense: true,
-                    title: Text(
-                      u.displayName.trim().isEmpty ? 'Ohne Anzeigename' : u.displayName,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                  ),
-            )
+            ),
+          ),
         ],
       ),
     );

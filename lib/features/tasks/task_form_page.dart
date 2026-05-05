@@ -776,6 +776,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                         ),
                       ),
                       subtitle: null,
+                      titleAlignment: ListTileTitleAlignment.center,
                     );
                   },
                 ),

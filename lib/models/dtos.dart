@@ -1,3 +1,5 @@
+import 'member_status.dart';
+
 // ---- tiny JSON helpers (robust against null + wrong types) ----
 String _reqString(Map<String, dynamic> j, String k) => (j[k] ?? '').toString();
 
@@ -268,8 +270,8 @@ class UserPickerDto {
     id: _reqString(json, 'id'),
     username: _reqString(json, 'username'),
     displayName: _reqString(json, 'displayName'),
-    memberStatus: _optString(json, 'memberStatus') ?? 'BURSCH',
-    actividad: _optBool(json, 'aktivitas', fallback: true),
+    memberStatus: _memberStatusFromJson(json),
+    actividad: _aktivitasFromJson(json),
   );
 }
 
@@ -302,8 +304,8 @@ class UserDto {
     displayName: _reqString(json, 'displayName'),
     disabled: _optBool(json, 'disabled', fallback: false),
     roles: _optStringList(json, 'roles'),
-    memberStatus: _optString(json, 'memberStatus') ?? 'BURSCH',
-    actividad: _optBool(json, 'aktivitas', fallback: true),
+    memberStatus: _memberStatusFromJson(json),
+    actividad: _aktivitasFromJson(json),
     lastOnlineAt: _optString(json, 'lastOnlineAt'),
   );
 }
@@ -458,6 +460,30 @@ class UpdateUserRequest {
     if (roles != null) 'roles': roles,
     if (memberStatus != null) 'memberStatus': memberStatus,
   };
+
+}
+
+String _memberStatusFromJson(Map<String, dynamic> json) {
+  final raw = _optString(json, 'memberStatus');
+
+  if (raw != null && raw.trim().isNotEmpty) {
+    return raw.trim().toUpperCase();
+  }
+
+  final actividad = _optBool(json, 'aktivitas', fallback: true);
+
+  if (!actividad) return 'PHILISTER';
+
+  return 'BURSCH';
+}
+
+bool _aktivitasFromJson(Map<String, dynamic> json) {
+  final explicit = json['aktivitas'];
+
+  if (explicit is bool) return explicit;
+
+  final rawStatus = _optString(json, 'memberStatus');
+  return MemberStatuses.isAktivitas(rawStatus);
 }
 
 // ---------- TASKS ----------

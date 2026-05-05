@@ -41,7 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _displayName = '—';
   String _username = '—';
   String _roleLabel = 'Mitglied';
-  String _memberStatus = MemberStatuses.defaultBackendValue;
+  String _memberStatus = '';
 
   String _appVersion = '—';
   String _platformLabel = '—';
@@ -175,7 +175,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     String displayName = '—';
     String username = '—';
-    String memberStatus = MemberStatuses.defaultBackendValue;
+    String memberStatus = '';
 
     String? pickString(dynamic v) {
       final s = v?.toString().trim();
@@ -932,8 +932,7 @@ class _ProfileSnapshot {
         displayName: (json['displayName'] as String?) ?? '—',
         username: (json['username'] as String?) ?? '—',
         roleLabel: (json['roleLabel'] as String?) ?? 'Mitglied',
-        memberStatus: (json['memberStatus'] as String?) ??
-            MemberStatuses.defaultBackendValue,
+        memberStatus: (json['memberStatus'] as String?) ?? '',
         sessionLabel: (json['sessionLabel'] as String?) ?? '—',
         appVersion: (json['appVersion'] as String?) ?? '—',
         platformLabel: (json['platformLabel'] as String?) ?? '—',

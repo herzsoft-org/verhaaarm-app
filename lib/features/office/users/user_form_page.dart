@@ -304,24 +304,27 @@ class _UserFormPageState extends State<UserFormPage> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: DropdownButtonFormField<String>(
-                  value: _memberStatus,
+                  initialValue: MemberStatuses.backendValues.contains(_memberStatus)
+                      ? _memberStatus
+                      : MemberStatuses.defaultBackendValue,
                   decoration: const InputDecoration(
                     labelText: 'Mitgliedsstatus',
                   ),
-                  items: [
-                    for (final status in MemberStatuses.backendValues)
-                      DropdownMenuItem(
-                        value: status,
-                        child: Text(MemberStatuses.label(status)),
-                      ),
-                  ],
+                  items: MemberStatuses.backendValues
+                      .map(
+                        (value) => DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(MemberStatuses.label(value)),
+                    ),
+                  )
+                      .toList(),
                   onChanged: canChangeMemberStatus
-                      ? (v) {
-                    if (v == null) return;
-                    setState(() => _memberStatus = v);
+                      ? (value) {
+                    if (value == null) return;
+                    setState(() => _memberStatus = value);
                   }
                       : null,
-                ),
+                )
               ),
             ),
             const SizedBox(height: 12),
