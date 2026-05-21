@@ -1,13 +1,17 @@
-import 'cache/app_cache.dart';
+import '../api/api_client.dart';
+import 'settings/app_settings_store.dart';
 
 class MemberPickerSettings {
-  static const hidePhilisterKey = 'member_picker.hide_philister';
-
   static Future<bool> hidePhilister() async {
-    return await AppCache.I.getPersistedBool(hidePhilisterKey) ?? false;
+    return AppSettingsStore.I.hidePhilister;
   }
 
-  static Future<void> setHidePhilister(bool value) async {
-    await AppCache.I.setPersistedBool(hidePhilisterKey, value);
+  static Future<void> setHidePhilister(
+      bool value, {
+        ApiClient? api,
+      }) async {
+    if (api == null) return;
+
+    await AppSettingsStore.I.setHidePhilister(api, value);
   }
 }

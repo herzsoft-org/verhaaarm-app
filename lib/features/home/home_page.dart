@@ -285,6 +285,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   Future<void> _load({bool force = false}) async {
     try {
+      unawaited(widget.authStore.refreshMeIfStale(widget.api));
+
       final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
         _kHomeActivePeriod,
         decode: _decodePeriod,

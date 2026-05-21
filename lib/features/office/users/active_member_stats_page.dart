@@ -141,7 +141,7 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
             ),
             _sectionWithSpacing(
               title: 'Schüler-/Militärfüxe',
-              icon: Icons.school_rounded,
+              icon: Icons.military_tech,
               users: schuelerfuxUsers,
             ),
             _sectionWithSpacing(

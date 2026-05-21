@@ -284,6 +284,7 @@ class UserDto {
   final String memberStatus;
   final bool actividad;
   final String? lastOnlineAt;
+  final DateTime? updatedAt;
 
   bool get aktivitas => actividad;
 
@@ -296,6 +297,7 @@ class UserDto {
     required this.memberStatus,
     required this.actividad,
     this.lastOnlineAt,
+    this.updatedAt,
   });
 
   factory UserDto.fromJson(Map<String, dynamic> json) => UserDto(
@@ -307,6 +309,7 @@ class UserDto {
     memberStatus: _memberStatusFromJson(json),
     actividad: _aktivitasFromJson(json),
     lastOnlineAt: _optString(json, 'lastOnlineAt'),
+    updatedAt: _optDateTime(json, 'updatedAt'),
   );
 }
 
@@ -1384,4 +1387,72 @@ class UnreadCountDto {
   factory UnreadCountDto.fromJson(Map<String, dynamic> json) => UnreadCountDto(
     unread: _optInt(json, 'unread', fallback: 0),
   );
+}
+
+class UserSettingValueDto {
+  final String value;
+  final DateTime? updatedAt;
+
+  const UserSettingValueDto({
+    required this.value,
+    required this.updatedAt,
+  });
+
+  factory UserSettingValueDto.fromJson(Map<String, dynamic> json) {
+    return UserSettingValueDto(
+      value: (json['value'] ?? '').toString(),
+      updatedAt: _optDateTime(json, 'updatedAt'),
+    );
+  }
+}
+
+class UserSettingsResponseDto {
+  final DateTime? serverTime;
+  final Map<String, UserSettingValueDto> settings;
+
+  const UserSettingsResponseDto({
+    required this.serverTime,
+    required this.settings,
+  });
+
+  factory UserSettingsResponseDto.fromJson(Map<String, dynamic> json) {
+    final rawSettings = json['settings'];
+    final parsed = <String, UserSettingValueDto>{};
+
+    if (rawSettings is Map) {
+      for (final entry in rawSettings.entries) {
+        final key = entry.key.toString();
+        final value = entry.value;
+
+        if (value is Map) {
+          parsed[key] = UserSettingValueDto.fromJson(
+            value.cast<String, dynamic>(),
+          );
+        }
+      }
+    }
+
+    return UserSettingsResponseDto(
+      serverTime: _optDateTime(json, 'serverTime'),
+      settings: Map.unmodifiable(parsed),
+    );
+  }
+}
+
+class UserSettingPatchDto {
+  final String key;
+  final String value;
+  final DateTime changedAt;
+
+  const UserSettingPatchDto({
+    required this.key,
+    required this.value,
+    required this.changedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'value': value,
+    'changedAt': changedAt.toUtc().toIso8601String(),
+  };
 }

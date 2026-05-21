@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
+import '../models/dtos.dart';
+import 'roles.dart';
 import 'token_storage.dart';
 import 'device_info_payload.dart';
 
@@ -60,6 +62,9 @@ class AuthStore extends ChangeNotifier {
     _accessToken = null;
     _refreshToken = null;
     _sessionId = null;
+    _currentUser = null;
+    _lastMeRefreshAt = null;
+
     await _storage.delete(_kSessionId);
 
     await _storage.delete(_kAccessToken);
@@ -93,8 +98,87 @@ class AuthStore extends ChangeNotifier {
     _accessToken = null;
     _refreshToken = null;
     _sessionId = null;
+    _currentUser = null;
+    _lastMeRefreshAt = null;
 
     await _storage.deleteAll();
     notifyListeners();
   }
+
+  UserDto? _currentUser;
+  Future<void>? _refreshMeInFlight;
+  DateTime? _lastMeRefreshAt;
+
+  UserDto? get currentUser => _currentUser;
+
+  Set<AppRole> get currentRoles {
+    final user = _currentUser;
+    if (user != null) return Roles.fromRoleNames(user.roles);
+    return Roles.fromAccessToken(_accessToken);
+  }
+
+  Future<bool> refreshMe(
+      ApiClient api, {
+        bool force = false,
+      }) async {
+    if (!isLoggedIn) return false;
+
+    if (!force && _refreshMeInFlight != null) {
+      await _refreshMeInFlight;
+      return false;
+    }
+
+    bool changed = false;
+
+    _refreshMeInFlight = () async {
+      final beforeRoles = currentRoles;
+      final beforeUpdatedAt = _currentUser?.updatedAt;
+
+      final fresh = await api.getMe();
+
+      _currentUser = fresh;
+      _lastMeRefreshAt = DateTime.now();
+
+      final afterRoles = currentRoles;
+      final rolesChanged = !_sameRoleSet(beforeRoles, afterRoles);
+      final updatedAtChanged = beforeUpdatedAt != fresh.updatedAt;
+
+      changed = rolesChanged || updatedAtChanged;
+      if (changed) notifyListeners();
+    }();
+
+    try {
+      await _refreshMeInFlight;
+    } finally {
+      _refreshMeInFlight = null;
+    }
+
+    return changed;
+  }
+
+  Future<void> refreshMeIfStale(
+      ApiClient api, {
+        Duration ttl = const Duration(minutes: 2),
+      }) async {
+    if (!isLoggedIn) return;
+
+    final last = _lastMeRefreshAt;
+    if (last != null && DateTime.now().difference(last) < ttl) return;
+
+    try {
+      await refreshMe(api);
+    } catch (_) {
+      // Keep current local state.
+    }
+  }
+
+  bool _sameRoleSet(Set<AppRole> a, Set<AppRole> b) {
+    if (a.length != b.length) return false;
+    for (final role in a) {
+      if (!b.contains(role)) return false;
+    }
+    return true;
+  }
+
 }
+

@@ -55,6 +55,10 @@ class Roles {
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
   }
 
+  static Set<AppRole> fromRoleNames(Iterable<String> rawRoles) {
+    return rawRoles.map((e) => _mapRole(e.toString())).whereType<AppRole>().toSet();
+  }
+
   // --- Events
   static bool canViewEvents(Set<AppRole> roles) {
     // all authenticated users can view scheduled events

@@ -172,6 +172,24 @@ class ApiClient {
     return UserBalanceDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
+  Future<UserSettingsResponseDto> getMySettings() async {
+    final r = await dio.get('/settings/me');
+    return UserSettingsResponseDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<void> patchMySettings(List<UserSettingPatchDto> settings) async {
+    if (settings.isEmpty) return;
+
+    await dio.patch(
+      '/settings/me',
+      data: {
+        'settings': settings.map((s) => s.toJson()).toList(growable: false),
+      },
+    );
+  }
+
   // ----------------------------
   // PERIODS (swagger: /periods, /periods/active, /periods/{id}, /lock, /activate)
   // ----------------------------

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api/api_client.dart';
 import '../common/api_error_text.dart';
+import '../common/settings/app_settings_store.dart';
 import 'auth_store.dart';
 
 class LoginPage extends StatefulWidget {
@@ -25,6 +26,7 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordFocus = FocusNode();
 
   bool _loading = false;
+  String? _loginError;
 
   @override
   void dispose() {
@@ -42,7 +44,11 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loginError = null;
+    });
+
     try {
       final tokens = await widget.api.login(
         username: _username.text.trim(),
@@ -54,6 +60,14 @@ class _LoginPageState extends State<LoginPage> {
         refreshToken: tokens.refreshToken,
         sessionId: tokens.sessionId,
       );
+
+      await AppSettingsStore.I.syncWithBackend(widget.api);
+
+      try {
+        await widget.authStore.refreshMe(widget.api, force: true);
+      } catch (_) {
+        // Login still succeeded; token roles remain fallback.
+      }
 
       if (!mounted) return;
       context.go('/home');
@@ -67,14 +81,10 @@ class _LoginPageState extends State<LoginPage> {
         message = userFriendlyApiError(e, fallback: 'Login fehlgeschlagen.');
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      setState(() => _loginError = message);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login fehlgeschlagen.')),
-      );
+      setState(() => _loginError = 'Login fehlgeschlagen.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -126,7 +136,8 @@ class _LoginPageState extends State<LoginPage> {
                                   ? 'Bitte Benutzername eingeben.'
                                   : null,
                               textInputAction: TextInputAction.next,
-                              onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                              onFieldSubmitted: (_) =>
+                                  _passwordFocus.requestFocus(),
                               autofillHints: const [AutofillHints.username],
                             ),
 
@@ -148,6 +159,48 @@ class _LoginPageState extends State<LoginPage> {
                               autofillHints: const [AutofillHints.password],
                             ),
 
+                            const SizedBox(height: 12),
+
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: _loginError == null
+                                  ? const SizedBox.shrink()
+                                  : Container(
+                                key: const ValueKey('login-error'),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.errorContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline_rounded,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onErrorContainer,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _loginError!,
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onErrorContainer,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
                             const SizedBox(height: 16),
 
                             SizedBox(
@@ -158,10 +211,14 @@ class _LoginPageState extends State<LoginPage> {
                                     ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                                     : const Icon(Icons.login_rounded),
-                                label: Text(_loading ? 'Anmelden…' : 'Anmelden'),
+                                label: Text(
+                                  _loading ? 'Anmelden…' : 'Anmelden',
+                                ),
                               ),
                             ),
                           ],

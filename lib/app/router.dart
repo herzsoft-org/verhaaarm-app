@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'route_observer.dart';
+import 'dart:async';
 
+import '../common/settings/app_settings_store.dart';
 import '../api/api_client.dart';
 import '../auth/auth_store.dart';
 import '../auth/login_page.dart';
@@ -70,7 +72,67 @@ Widget _noAccessPage() {
 }
 
 Set<AppRole> _roles(AuthStore authStore) {
-  return Roles.fromAccessToken(authStore.accessToken);
+  return authStore.currentRoles;
+}
+
+bool _canAccessLocation(String location, Set<AppRole> roles) {
+  if (location == '/login') return true;
+  if (location == '/home') return true;
+  if (location == '/profile' || location.startsWith('/profile/')) return true;
+  if (location == '/notifications' || location.startsWith('/notifications/')) return true;
+  if (location == '/legal-documents' || location.startsWith('/legal-documents/')) return true;
+  if (location == '/convent-protocols' || location.startsWith('/convent-protocols/')) return true;
+  if (location == '/events' || location.startsWith('/events/')) return true;
+  if (location == '/tasks' || location.startsWith('/tasks/')) return true;
+  if (location == '/my-fines' || location.startsWith('/my-fines/')) return true;
+  if (location == '/my-fine-suggestions' || location.startsWith('/my-fine-suggestions/')) return true;
+  if (location == '/suggestions/new') return true;
+  if (location.startsWith('/suggestions/')) return true;
+  if (location == '/live-events' || location.startsWith('/live-events/')) return true;
+
+  if (location == '/fines' || location.startsWith('/fines/')) {
+    if (location == '/fines/new') return Roles.canCreateOfficialFine(roles);
+    return Roles.canSeeAllFines(roles);
+  }
+
+  if (location == '/office') return Roles.canAccessOffice(roles);
+
+  if (location.startsWith('/office/fine-suggestions')) {
+    return Roles.canAcceptFineSuggestions(roles);
+  }
+
+  if (location.startsWith('/office/tasks')) {
+    return Roles.canManageTasks(roles);
+  }
+
+  if (location.startsWith('/office/session-stats')) {
+    return Roles.canManageSessions(roles);
+  }
+
+  if (location.startsWith('/office/sessions')) {
+    return Roles.canManageSessions(roles);
+  }
+
+  if (location.startsWith('/office/periods')) {
+    return Roles.canManagePeriods(roles);
+  }
+
+  if (location.startsWith('/office/users')) {
+    return Roles.canManageUsers(roles);
+  }
+
+  if (location.startsWith('/office/active-member-stats')) {
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping) ||
+        roles.contains(AppRole.treasurer);
+  }
+
+  if (location.startsWith('/office/catalog')) {
+    return Roles.canManageCatalog(roles);
+  }
+
+  return true;
 }
 
 Future<GoRouter> buildRouter() async {
@@ -83,6 +145,16 @@ Future<GoRouter> buildRouter() async {
     await authStore.tryRefresh(api);
   }
 
+  if (authStore.isLoggedIn) {
+    await AppSettingsStore.I.syncWithBackend(api);
+
+    try {
+      await authStore.refreshMe(api, force: true);
+    } catch (_) {
+      // Keep token-derived roles until /users/me is reachable.
+    }
+  }
+
   NotificationCenter.I.init(api: api, authStore: authStore);
 
   final push = PushManager(api: api, authStore: authStore);
@@ -91,6 +163,9 @@ Future<GoRouter> buildRouter() async {
     if (authStore.isLoggedIn) {
       push.initAndRegisterBestEffort();
       NotificationCenter.I.refreshUnreadCount();
+
+      unawaited(AppSettingsStore.I.syncWithBackend(api));
+      unawaited(authStore.refreshMeIfStale(api));
     } else {
       push.stop();
       NotificationCenter.I.reset();
@@ -113,6 +188,18 @@ Future<GoRouter> buildRouter() async {
 
       if (!loggedIn && !goingToLogin) return '/login';
       if (loggedIn && goingToLogin) return '/home';
+
+      if (loggedIn) {
+        unawaited(authStore.refreshMeIfStale(api));
+
+        final location = state.matchedLocation;
+        final roles = _roles(authStore);
+
+        if (!_canAccessLocation(location, roles)) {
+          return '/home';
+        }
+      }
+
       return null;
     },
     routes: [

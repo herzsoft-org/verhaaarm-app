@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
-ThemeData buildAppTheme() {
+ThemeData buildAppTheme(Brightness brightness) {
   const seed = Color(0xFF7B61FF);
 
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
-    brightness: Brightness.dark,
+    brightness: brightness,
   );
 
   return ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     snackBarTheme: SnackBarThemeData(

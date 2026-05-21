@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'common/cache/app_cache.dart';
+import 'common/settings/app_settings_store.dart';
 
 // Firebase (only initialize on non-web)
 import 'package:firebase_core/firebase_core.dart';
@@ -15,6 +17,7 @@ import 'push/push_fcm.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppCache.I.init();
+  await AppSettingsStore.I.initLocal();
   await initializeDateFormatting('de_DE', null);
 
   if (!kIsWeb) {
@@ -35,23 +38,26 @@ class VerhaaarmApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Verhåårm',
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      darkTheme: buildAppTheme(),
-      themeMode: ThemeMode.dark,
-      routerConfig: router,
-
-      // Keep your global bottom safe-area protection.
-      builder: (context, child) {
-        if (child == null) return const SizedBox.shrink();
-        return SafeArea(
-          top: false,
-          bottom: true,
-          left: false,
-          right: false,
-          child: child,
+    return AnimatedBuilder(
+      animation: AppSettingsStore.I,
+      builder: (context, _) {
+        return MaterialApp.router(
+          title: 'Verhåårm',
+          debugShowCheckedModeBanner: false,
+          theme: buildAppTheme(Brightness.light),
+          darkTheme: buildAppTheme(Brightness.dark),
+          themeMode: AppSettingsStore.I.themeMode,
+          routerConfig: router,
+          builder: (context, child) {
+            if (child == null) return const SizedBox.shrink();
+            return SafeArea(
+              top: false,
+              bottom: true,
+              left: false,
+              right: false,
+              child: child,
+            );
+          },
         );
       },
     );

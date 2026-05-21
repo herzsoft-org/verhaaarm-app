@@ -16,6 +16,7 @@ import '../../common/cache/app_cache.dart';
 import '../../common/member_picker_settings.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../common/widgets/schnupfspruch_button.dart';
+import '../../common/settings/app_settings_store.dart';
 import '../../models/member_status.dart';
 import '../../update/web_app_refresh.dart';
 
@@ -36,7 +37,6 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   bool _refreshing = false;
   bool _forceReloadingWebApp = false;
-  bool _hidePhilisterInPickers = false;
 
   String _displayName = '—';
   String _username = '—';
@@ -57,10 +57,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      final hidePhilister = await MemberPickerSettings.hidePhilister();
-      if (mounted) {
-        setState(() => _hidePhilisterInPickers = hidePhilister);
-      }
+      await AppSettingsStore.I.syncWithBackend(widget.api);
 
       final c = await AppCache.I.entryOrLoadPersisted<_ProfileSnapshot>(
         _kProfile,
@@ -326,9 +323,13 @@ class _ProfilePageState extends State<ProfilePage> {
         return StatefulBuilder(
           builder: (ctx, setStateSheet) {
             Future<void> setHidePhilister(bool value) async {
-              setState(() => _hidePhilisterInPickers = value);
-              setStateSheet(() => _hidePhilisterInPickers = value);
-              await MemberPickerSettings.setHidePhilister(value);
+              await AppSettingsStore.I.setHidePhilister(widget.api, value);
+              setStateSheet(() {});
+            }
+
+            Future<void> setThemeMode(ThemeMode mode) async {
+              await AppSettingsStore.I.setThemeMode(widget.api, mode);
+              setStateSheet(() {});
             }
 
             return Padding(
@@ -375,16 +376,58 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: cs.surfaceContainerLow,
                       child: Column(
                         children: [
-                          SwitchListTile(
-                            secondary: const Icon(Icons.group_off_rounded),
-                            title: const Text(
-                              'Philister in Auswahllisten ausblenden',
-                            ),
-                            subtitle: const Text(
-                              'Gilt nur für Auswahlfenster, nicht für Berechtigungen.',
-                            ),
-                            value: _hidePhilisterInPickers,
-                            onChanged: setHidePhilister,
+                          AnimatedBuilder(
+                            animation: AppSettingsStore.I,
+                            builder: (context, _) {
+                              final selected = AppSettingsStore.I.themeMode == ThemeMode.light
+                                  ? ThemeMode.light
+                                  : ThemeMode.dark;
+
+                              return ListTile(
+                                leading: const Icon(Icons.contrast_rounded),
+                                title: const Text('Darstellung'),
+                                subtitle: const Text('Hell oder dunkel anzeigen.'),
+                                trailing: SegmentedButton<ThemeMode>(
+                                  segments: const [
+                                    ButtonSegment<ThemeMode>(
+                                      value: ThemeMode.dark,
+                                      icon: Icon(Icons.dark_mode_rounded),
+                                      label: Text('Dunkel'),
+                                    ),
+                                    ButtonSegment<ThemeMode>(
+                                      value: ThemeMode.light,
+                                      icon: Icon(Icons.light_mode_rounded),
+                                      label: Text('Hell'),
+                                    ),
+                                  ],
+                                  selected: {selected},
+                                  onSelectionChanged: (selection) async {
+                                    await AppSettingsStore.I.setThemeMode(
+                                      widget.api,
+                                      selection.first,
+                                    );
+                                    setStateSheet(() {});
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                          const Divider(height: 1),
+                          AnimatedBuilder(
+                            animation: AppSettingsStore.I,
+                            builder: (context, _) {
+                              return SwitchListTile(
+                                secondary: const Icon(Icons.group_off_rounded),
+                                title: const Text(
+                                  'Philister in Auswahllisten ausblenden',
+                                ),
+                                subtitle: const Text(
+                                  'Gilt nur für Auswahlfenster, nicht für Berechtigungen.',
+                                ),
+                                value: AppSettingsStore.I.hidePhilister,
+                                onChanged: setHidePhilister,
+                              );
+                            },
                           ),
                           if (kIsWeb) ...[
                             const Divider(height: 1),
@@ -678,6 +721,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     await widget.authStore.clearAllUserData();
+    await AppSettingsStore.I.clearLocalSettings();
     await AppCache.I.clearPersisted();
 
     if (!mounted) return;
