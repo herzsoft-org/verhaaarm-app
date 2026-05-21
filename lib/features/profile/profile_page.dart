@@ -389,31 +389,49 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ? ThemeMode.light
                                   : ThemeMode.dark;
 
-                              return ListTile(
-                                leading: const Icon(Icons.contrast_rounded),
-                                title: const Text('Darstellung'),
-                                subtitle: const Text('Hell oder dunkel anzeigen.'),
-                                trailing: SegmentedButton<ThemeMode>(
-                                  segments: const [
-                                    ButtonSegment<ThemeMode>(
-                                      value: ThemeMode.dark,
-                                      icon: Icon(Icons.dark_mode_rounded),
-                                      label: Text('Dunkel'),
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.contrast_rounded),
+                                        const SizedBox(width: 16),
+                                        Text(
+                                          'Darstellung',
+                                          style: theme.textTheme.titleMedium,
+                                        ),
+                                      ],
                                     ),
-                                    ButtonSegment<ThemeMode>(
-                                      value: ThemeMode.light,
-                                      icon: Icon(Icons.light_mode_rounded),
-                                      label: Text('Hell'),
+                                    const SizedBox(height: 12),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: SegmentedButton<ThemeMode>(
+                                        showSelectedIcon: false,
+                                        segments: const [
+                                          ButtonSegment<ThemeMode>(
+                                            value: ThemeMode.dark,
+                                            icon: Icon(Icons.dark_mode_rounded),
+                                            label: Text('Dunkel'),
+                                          ),
+                                          ButtonSegment<ThemeMode>(
+                                            value: ThemeMode.light,
+                                            icon: Icon(Icons.light_mode_rounded),
+                                            label: Text('Hell'),
+                                          ),
+                                        ],
+                                        selected: {selected},
+                                        onSelectionChanged: (selection) async {
+                                          await AppSettingsStore.I.setThemeMode(
+                                            widget.api,
+                                            selection.first,
+                                          );
+                                          setStateSheet(() {});
+                                        },
+                                      ),
                                     ),
                                   ],
-                                  selected: {selected},
-                                  onSelectionChanged: (selection) async {
-                                    await AppSettingsStore.I.setThemeMode(
-                                      widget.api,
-                                      selection.first,
-                                    );
-                                    setStateSheet(() {});
-                                  },
                                 ),
                               );
                             },

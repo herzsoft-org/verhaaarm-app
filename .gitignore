@@ -13,6 +13,7 @@
 .idea/**/tasks.xml
 .idea/**/usage.statistics.xml
 .idea/**/shelf/
+.idea/*
 
 # Device / emulator junk
 .idea/**/deviceStreaming.xml
