@@ -285,7 +285,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   Future<void> _load({bool force = false}) async {
     try {
-      unawaited(widget.authStore.refreshMeIfStale(widget.api));
+      if (force) {
+        await widget.authStore.refreshMe(widget.api, force: true);
+      } else {
+        unawaited(widget.authStore.refreshMeIfStale(widget.api));
+      }
 
       final cPeriod = await AppCache.I.entryOrLoadPersisted<ConventPeriodDto>(
         _kHomeActivePeriod,
@@ -891,7 +895,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   Widget _buildQuickActions(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final canOffice = Roles.canAccessOffice(roles);
     final canOfficial = Roles.canCreateOfficialFine(roles);
 

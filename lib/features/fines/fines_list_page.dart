@@ -39,7 +39,7 @@ class _FinesListPageState extends State<FinesListPage> {
     _load();
   }
 
-  Set<AppRole> get _roles => Roles.fromAccessToken(widget.authStore.accessToken);
+  Set<AppRole> get _roles => widget.authStore.currentRoles;
 
   bool get _isTreasurerOnlyCreator {
     final roles = _roles;

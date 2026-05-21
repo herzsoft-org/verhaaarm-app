@@ -295,7 +295,7 @@ class _EventsPageState extends State<EventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final canCreate = Roles.canCreateEvent(roles);
 
     final grouped = _buildGrouped(

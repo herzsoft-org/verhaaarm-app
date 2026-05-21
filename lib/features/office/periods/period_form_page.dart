@@ -123,7 +123,7 @@ class _PeriodFormPageState extends State<PeriodFormPage> {
     setState(() => _loading = true);
 
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!Roles.canManagePeriods(roles)) {
         if (mounted) context.go('/home');
         return;

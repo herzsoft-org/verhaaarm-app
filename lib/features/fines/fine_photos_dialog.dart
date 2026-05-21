@@ -267,7 +267,7 @@ class _FinePhotosGalleryScreenState extends State<_FinePhotosGalleryScreen> {
   String? _meId;
 
   bool get _isAdminOrSenior {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     return roles.contains(AppRole.admin) || roles.contains(AppRole.senior);
   }
 

@@ -59,7 +59,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!Roles.canManageCatalog(roles)) {
         if (!mounted) return;
         context.pop();
@@ -189,7 +189,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final can = Roles.canManageCatalog(roles);
 
     return AppScaffold(

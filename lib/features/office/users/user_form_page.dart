@@ -45,7 +45,7 @@ class _UserFormPageState extends State<UserFormPage> {
   bool get _isEdit => widget.userId != null;
 
   bool get _canChangeMemberStatus {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     return roles.contains(AppRole.admin);
   }
 
@@ -94,7 +94,7 @@ class _UserFormPageState extends State<UserFormPage> {
     setState(() => _loading = true);
 
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!Roles.canManageUsers(roles)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

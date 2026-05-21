@@ -72,7 +72,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
   Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!Roles.canManagePeriods(roles)) {
         if (!mounted) return;
         context.go('/home');

@@ -51,7 +51,7 @@ class _UserPasswordPageState extends State<UserPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     if (!Roles.canManageUsers(roles)) {
       return AppScaffold(
         title: 'Passwort setzen',

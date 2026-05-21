@@ -150,7 +150,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
     final fine = _fine;
     if (fine == null) return;
 
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     if (!Roles.canManageFines(roles)) return;
 
     // Attendance fines are system-generated and not deletable.
@@ -233,7 +233,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
 
     final fine = _fine;
     final p = (fine == null) ? null : _periodForFine(fine);

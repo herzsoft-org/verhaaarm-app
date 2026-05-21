@@ -35,7 +35,7 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
     setState(() => _loading = true);
 
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       final allowed =
           roles.contains(AppRole.admin) ||
               roles.contains(AppRole.senior) ||

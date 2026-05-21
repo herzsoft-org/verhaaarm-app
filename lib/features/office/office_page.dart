@@ -33,7 +33,7 @@ class _OfficePageState extends State<OfficePage> {
   }
 
   Future<void> _loadOpenSuggestionsCount() async {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     if (!Roles.canAcceptFineSuggestions(roles)) return;
 
     try {
@@ -73,7 +73,7 @@ class _OfficePageState extends State<OfficePage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
 
     if (!Roles.canAccessOffice(roles)) {
       return const AppScaffold(

@@ -19,6 +19,7 @@ import '../../common/widgets/schnupfspruch_button.dart';
 import '../../common/settings/app_settings_store.dart';
 import '../../models/member_status.dart';
 import '../../update/web_app_refresh.dart';
+import 'dart:async';
 
 class ProfilePage extends StatefulWidget {
   final ApiClient api;
@@ -57,7 +58,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      await AppSettingsStore.I.syncWithBackend(widget.api);
+      unawaited(AppSettingsStore.I.syncWithBackend(widget.api));
 
       final c = await AppCache.I.entryOrLoadPersisted<_ProfileSnapshot>(
         _kProfile,
@@ -82,7 +83,7 @@ class _ProfilePageState extends State<ProfilePage> {
       }
 
       try {
-        final snap = await _buildSnapshot();
+        final snap = await _buildSnapshot(forceCurrentUserRefresh: force);
 
         await AppCache.I.setPersisted<_ProfileSnapshot>(
           _kProfile,
@@ -125,11 +126,16 @@ class _ProfilePageState extends State<ProfilePage> {
     _sessionLabel = s.sessionLabel;
   }
 
-  Future<_ProfileSnapshot> _buildSnapshot() async {
+  Future<_ProfileSnapshot> _buildSnapshot({bool forceCurrentUserRefresh = false}) async {
     final token = widget.authStore.accessToken ?? '';
 
-    final roleSet = Roles.fromAccessToken(token);
-    final roleLabel = _roleLabelFromRoleSet(roleSet);
+    if (forceCurrentUserRefresh) {
+      await widget.authStore.refreshMe(widget.api, force: true);
+    } else {
+      await widget.authStore.refreshMeIfStale(widget.api);
+    }
+
+    final roleLabel = _roleLabelFromRoleSet(widget.authStore.currentRoles);
 
     final sessionLabel =
     widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
@@ -212,8 +218,8 @@ class _ProfilePageState extends State<ProfilePage> {
         final dn2 = me.displayName.trim();
         final un2 = me.username.trim();
 
-        if (displayName == '—' && dn2.isNotEmpty) displayName = dn2;
-        if (username == '—' && un2.isNotEmpty) username = un2;
+        if (dn2.isNotEmpty) displayName = dn2;
+        if (un2.isNotEmpty) username = un2;
 
         memberStatus = me.memberStatus;
       } catch (_) {

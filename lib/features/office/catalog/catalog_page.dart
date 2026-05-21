@@ -87,7 +87,7 @@ class _CatalogPageState extends State<CatalogPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final can = Roles.canManageCatalog(roles);
 
     return AppScaffold(

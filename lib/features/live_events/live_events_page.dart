@@ -136,7 +136,7 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final cs = Theme.of(context).colorScheme;
 
     return AppScaffold(

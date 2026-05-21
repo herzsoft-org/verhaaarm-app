@@ -56,7 +56,7 @@ class _EventFormPageState extends State<EventFormPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!Roles.canCreateEvent(roles)) {
         if (!mounted) return;
         setState(() => _loading = false);
@@ -348,7 +348,7 @@ class _EventFormPageState extends State<EventFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final allowed = Roles.canCreateEvent(roles);
 
     final startsAtText = (_startsAtLocal == null)

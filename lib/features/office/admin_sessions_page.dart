@@ -36,7 +36,7 @@ class _AdminSessionsPageState extends State<AdminSessionsPage> {
     setState(() => _loading = true);
 
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!roles.contains(AppRole.admin)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

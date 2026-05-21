@@ -41,7 +41,7 @@ class _OfficeFineSuggestionsPageState
   }
 
   bool _canDecide() {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     return roles.contains(AppRole.admin) ||
         roles.contains(AppRole.senior) ||
         roles.contains(AppRole.housekeeping);

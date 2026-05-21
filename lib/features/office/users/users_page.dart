@@ -83,7 +83,7 @@ class _UsersPageState extends State<UsersPage> {
     setState(() => _loading = true);
 
     try {
-      final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+      final roles = widget.authStore.currentRoles;
       if (!Roles.canManageUsers(roles)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -215,7 +215,7 @@ class _UsersPageState extends State<UsersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final roles = Roles.fromAccessToken(widget.authStore.accessToken);
+    final roles = widget.authStore.currentRoles;
     final canCreate = Roles.canManageUsers(roles);
     final filteredUsers = _filteredUsers;
 
