@@ -128,15 +128,16 @@ class ConventPeriodDto {
   DateTime get startDateLocal => _parseLocalDate(startAt);
   DateTime get endDateLocal => _parseLocalDate(endAt);
 
-  factory ConventPeriodDto.fromJson(Map<String, dynamic> json) => ConventPeriodDto(
-    id: _reqString(json, 'id'),
-    semester: _reqString(json, 'semester'),
-    startAt: _reqString(json, 'startAt'),
-    endAt: _reqString(json, 'endAt'),
-    active: _optBool(json, 'active', fallback: false),
-    locked: _optBool(json, 'locked', fallback: false),
-    hasProtocolPdf: _optBool(json, 'hasProtocolPdf', fallback: false),
-  );
+  factory ConventPeriodDto.fromJson(Map<String, dynamic> json) =>
+      ConventPeriodDto(
+        id: _reqString(json, 'id'),
+        semester: _reqString(json, 'semester'),
+        startAt: _reqString(json, 'startAt'),
+        endAt: _reqString(json, 'endAt'),
+        active: _optBool(json, 'active', fallback: false),
+        locked: _optBool(json, 'locked', fallback: false),
+        hasProtocolPdf: _optBool(json, 'hasProtocolPdf', fallback: false),
+      );
 }
 
 class ConventPeriodProtocolDto {
@@ -393,7 +394,8 @@ class SessionStatsBucketDto {
   factory SessionStatsBucketDto.fromJson(Map<String, dynamic> json) {
     return SessionStatsBucketDto(
       appType: (json['appType'] as String?) ?? 'UNKNOWN',
-      detail: (json['detail'] as String?) ??
+      detail:
+          (json['detail'] as String?) ??
           (json['browserName'] as String?) ??
           'Unbekannt',
       count: (json['count'] as num?)?.toInt() ?? 0,
@@ -412,16 +414,17 @@ class SessionStatsDto {
     required this.year,
   });
 
-  factory SessionStatsDto.fromJson(Map<String, dynamic> json) => SessionStatsDto(
-    week: _statsList(json, 'week'),
-    month: _statsList(json, 'month'),
-    year: _statsList(json, 'year'),
-  );
+  factory SessionStatsDto.fromJson(Map<String, dynamic> json) =>
+      SessionStatsDto(
+        week: _statsList(json, 'week'),
+        month: _statsList(json, 'month'),
+        year: _statsList(json, 'year'),
+      );
 
   static List<SessionStatsBucketDto> _statsList(
-      Map<String, dynamic> json,
-      String key,
-      ) {
+    Map<String, dynamic> json,
+    String key,
+  ) {
     final v = json[key];
     if (v is! List) return const [];
 
@@ -475,7 +478,246 @@ class UpdateUserRequest {
     if (roles != null) 'roles': roles,
     if (memberStatus != null) 'memberStatus': memberStatus,
   };
+}
 
+class PaukstundenParticipantDto {
+  final String id;
+  final String username;
+  final String displayName;
+  final String memberStatus;
+
+  PaukstundenParticipantDto({
+    required this.id,
+    required this.username,
+    required this.displayName,
+    required this.memberStatus,
+  });
+
+  factory PaukstundenParticipantDto.fromJson(Map<String, dynamic> json) {
+    return PaukstundenParticipantDto(
+      id: _reqString(json, 'id'),
+      username: _reqString(json, 'username'),
+      displayName: _reqString(json, 'displayName'),
+      memberStatus: _memberStatusFromJson(json),
+    );
+  }
+}
+
+class PaukstundenEntryDto {
+  final String id;
+  final String date;
+  final int hours;
+  final List<PaukstundenParticipantDto> participants;
+  final String createdByUserId;
+  final String createdByDisplayName;
+  final String createdAt;
+  final String updatedAt;
+
+  PaukstundenEntryDto({
+    required this.id,
+    required this.date,
+    required this.hours,
+    required this.participants,
+    required this.createdByUserId,
+    required this.createdByDisplayName,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory PaukstundenEntryDto.fromJson(Map<String, dynamic> json) {
+    return PaukstundenEntryDto(
+      id: _reqString(json, 'id'),
+      date: _reqString(json, 'date'),
+      hours: _optInt(json, 'hours'),
+      participants: _optList(
+        json,
+        'participants',
+      ).map(PaukstundenParticipantDto.fromJson).toList(growable: false),
+      createdByUserId: _reqString(json, 'createdByUserId'),
+      createdByDisplayName: _reqString(json, 'createdByDisplayName'),
+      createdAt: _reqString(json, 'createdAt'),
+      updatedAt: _reqString(json, 'updatedAt'),
+    );
+  }
+}
+
+class CreatePaukstundeRequest {
+  final String date;
+  final int hours;
+  final List<String> participantUserIds;
+
+  CreatePaukstundeRequest({
+    required this.date,
+    required this.hours,
+    required this.participantUserIds,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'date': date,
+    'hours': hours,
+    'participantUserIds': participantUserIds,
+  };
+}
+
+class UpdatePaukstundeRequest {
+  final String? date;
+  final int? hours;
+  final List<String>? participantUserIds;
+
+  UpdatePaukstundeRequest({this.date, this.hours, this.participantUserIds});
+
+  Map<String, dynamic> toJson() => {
+    if (date != null) 'date': date,
+    if (hours != null) 'hours': hours,
+    if (participantUserIds != null) 'participantUserIds': participantUserIds,
+  };
+}
+
+class PaukstundenUserSummaryDto {
+  final String userId;
+  final String username;
+  final String displayName;
+  final String memberStatus;
+  final int totalHours;
+  final int entryCount;
+  final List<PaukstundenEntryDto> entries;
+
+  PaukstundenUserSummaryDto({
+    required this.userId,
+    required this.username,
+    required this.displayName,
+    required this.memberStatus,
+    required this.totalHours,
+    required this.entryCount,
+    required this.entries,
+  });
+
+  factory PaukstundenUserSummaryDto.fromJson(Map<String, dynamic> json) {
+    final entries = _extractPaukstundenEntries(json);
+    final id = _optString(json, 'userId') ?? _optString(json, 'id') ?? '';
+    return PaukstundenUserSummaryDto(
+      userId: id,
+      username: _reqString(json, 'username'),
+      displayName: _reqString(json, 'displayName'),
+      memberStatus: _memberStatusFromJson(json),
+      totalHours: _optInt(
+        json,
+        'totalHours',
+        fallback: entries.fold<int>(0, (sum, e) => sum + e.hours),
+      ),
+      entryCount: _optInt(json, 'entryCount', fallback: entries.length),
+      entries: entries,
+    );
+  }
+}
+
+class PaukstundenListDto {
+  final int totalHours;
+  final int entryCount;
+  final List<PaukstundenEntryDto> entries;
+
+  PaukstundenListDto({
+    required this.totalHours,
+    required this.entryCount,
+    required this.entries,
+  });
+
+  factory PaukstundenListDto.fromJson(Object data) {
+    if (data is List) {
+      final entries = data
+          .whereType<Map>()
+          .map((e) => PaukstundenEntryDto.fromJson(e.cast<String, dynamic>()))
+          .toList(growable: false);
+      return PaukstundenListDto.fromEntries(entries);
+    }
+
+    if (data is Map) {
+      final json = data.cast<String, dynamic>();
+      final entries = _extractPaukstundenEntries(json);
+      return PaukstundenListDto(
+        totalHours: _optInt(
+          json,
+          'totalHours',
+          fallback: entries.fold<int>(0, (sum, e) => sum + e.hours),
+        ),
+        entryCount: _optInt(json, 'entryCount', fallback: entries.length),
+        entries: entries,
+      );
+    }
+
+    return PaukstundenListDto.fromEntries(const []);
+  }
+
+  factory PaukstundenListDto.fromEntries(List<PaukstundenEntryDto> entries) {
+    return PaukstundenListDto(
+      totalHours: entries.fold<int>(0, (sum, e) => sum + e.hours),
+      entryCount: entries.length,
+      entries: entries,
+    );
+  }
+}
+
+class PaukstundenSummaryDto {
+  final String? periodId;
+  final String? periodLabel;
+  final List<PaukstundenUserSummaryDto> users;
+
+  PaukstundenSummaryDto({required this.users, this.periodId, this.periodLabel});
+
+  factory PaukstundenSummaryDto.fromJson(Object data) {
+    if (data is List) {
+      return PaukstundenSummaryDto(
+        users: data
+            .whereType<Map>()
+            .map(
+              (e) =>
+                  PaukstundenUserSummaryDto.fromJson(e.cast<String, dynamic>()),
+            )
+            .toList(growable: false),
+      );
+    }
+
+    if (data is Map) {
+      final json = data.cast<String, dynamic>();
+      final rawUsers =
+          json['users'] ?? json['summaries'] ?? json['items'] ?? json['data'];
+      final users = rawUsers is List
+          ? rawUsers
+                .whereType<Map>()
+                .map(
+                  (e) => PaukstundenUserSummaryDto.fromJson(
+                    e.cast<String, dynamic>(),
+                  ),
+                )
+                .toList(growable: false)
+          : const <PaukstundenUserSummaryDto>[];
+
+      return PaukstundenSummaryDto(
+        periodId:
+            _optString(json, 'periodId') ??
+            _optString(json, 'conventsperiodeId'),
+        periodLabel:
+            _optString(json, 'periodLabel') ??
+            _optString(json, 'conventsperiodeLabel') ??
+            _optString(json, 'semester'),
+        users: users,
+      );
+    }
+
+    return PaukstundenSummaryDto(users: const []);
+  }
+}
+
+List<PaukstundenEntryDto> _extractPaukstundenEntries(
+  Map<String, dynamic> json,
+) {
+  final raw =
+      json['entries'] ?? json['paukstunden'] ?? json['items'] ?? json['data'];
+  if (raw is! List) return const <PaukstundenEntryDto>[];
+  return raw
+      .whereType<Map>()
+      .map((e) => PaukstundenEntryDto.fromJson(e.cast<String, dynamic>()))
+      .toList(growable: false);
 }
 
 String _memberStatusFromJson(Map<String, dynamic> json) {
@@ -545,9 +787,10 @@ class TaskDto {
     recurringEnabled: _optBool(json, 'recurringEnabled'),
     recurringWeekdays: _optStringList(json, 'recurringWeekdays'),
     recurringDueTime: _optString(json, 'recurringDueTime'),
-    assignees: _optList(json, 'assignees')
-        .map((e) => UserPickerDto.fromJson(e))
-        .toList(growable: false),
+    assignees: _optList(
+      json,
+      'assignees',
+    ).map((e) => UserPickerDto.fromJson(e)).toList(growable: false),
     createdAt: _optDateTimeOrEpoch(json, 'createdAt'),
   );
 }
@@ -656,12 +899,15 @@ class FineCatalogItemDto {
     required this.active,
   });
 
-  factory FineCatalogItemDto.fromJson(Map<String, dynamic> json) => FineCatalogItemDto(
-    id: _reqString(json, 'id'),
-    title: _reqString(json, 'title'),
-    defaultAmountCents: json['defaultAmountCents'] == null ? null : _optInt(json, 'defaultAmountCents'),
-    active: _optBool(json, 'active', fallback: true),
-  );
+  factory FineCatalogItemDto.fromJson(Map<String, dynamic> json) =>
+      FineCatalogItemDto(
+        id: _reqString(json, 'id'),
+        title: _reqString(json, 'title'),
+        defaultAmountCents: json['defaultAmountCents'] == null
+            ? null
+            : _optInt(json, 'defaultAmountCents'),
+        active: _optBool(json, 'active', fallback: true),
+      );
 }
 
 class CreateFineCatalogItemRequest {
@@ -687,7 +933,11 @@ class UpdateFineCatalogItemRequest {
   final int? defaultAmountCents;
   final bool? active;
 
-  UpdateFineCatalogItemRequest({this.title, this.defaultAmountCents, this.active});
+  UpdateFineCatalogItemRequest({
+    this.title,
+    this.defaultAmountCents,
+    this.active,
+  });
 
   Map<String, dynamic> toJson() => {
     if (title != null) 'title': title,
@@ -699,7 +949,8 @@ class UpdateFineCatalogItemRequest {
 // ---------- Fines ----------
 enum FineType { catalog, custom }
 
-FineType _fineTypeFromJson(String s) => (s == 'CATALOG') ? FineType.catalog : FineType.custom;
+FineType _fineTypeFromJson(String s) =>
+    (s == 'CATALOG') ? FineType.catalog : FineType.custom;
 
 class FineDto {
   final String id;
@@ -740,7 +991,9 @@ class FineDto {
     creatorUserId: _reqString(json, 'creatorUserId'),
     catalogItemId: _optString(json, 'catalogItemId'),
     reason: _optString(json, 'reason'),
-    amountCents: json['amountCents'] == null ? null : _optInt(json, 'amountCents'),
+    amountCents: json['amountCents'] == null
+        ? null
+        : _optInt(json, 'amountCents'),
     type: _fineTypeFromJson(_reqString(json, 'type')),
     targetUserIds: _optStringList(json, 'targetUserIds'),
     createdAt: _reqString(json, 'createdAt'),
@@ -815,10 +1068,7 @@ class QuoteDto {
     author: _optString(json, 'author')?.trim(),
   );
 
-  Map<String, dynamic> toJson() => {
-    'text': text,
-    'author': author,
-  };
+  Map<String, dynamic> toJson() => {'text': text, 'author': author};
 }
 
 // ---------- Fine Suggestions ----------
@@ -853,21 +1103,24 @@ class FineSuggestionDto {
     required this.createdAt,
   });
 
-  factory FineSuggestionDto.fromJson(Map<String, dynamic> json) => FineSuggestionDto(
-    id: _reqString(json, 'id'),
-    fineDate: _reqString(json, 'fineDate'),
-    creatorUserId: _reqString(json, 'creatorUserId'),
-    catalogItemId: _optString(json, 'catalogItemId'),
-    reason: _optString(json, 'reason'),
-    amountCents: json['amountCents'] == null ? null : _optInt(json, 'amountCents'),
-    type: _fineTypeFromJson(_reqString(json, 'type')),
-    status: _reqString(json, 'status'),
-    decidedByUserId: _optString(json, 'decidedByUserId'),
-    decidedAt: _optString(json, 'decidedAt'),
-    acceptedFineId: _optString(json, 'acceptedFineId'),
-    targetUserIds: _optStringList(json, 'targetUserIds'),
-    createdAt: _reqString(json, 'createdAt'),
-  );
+  factory FineSuggestionDto.fromJson(Map<String, dynamic> json) =>
+      FineSuggestionDto(
+        id: _reqString(json, 'id'),
+        fineDate: _reqString(json, 'fineDate'),
+        creatorUserId: _reqString(json, 'creatorUserId'),
+        catalogItemId: _optString(json, 'catalogItemId'),
+        reason: _optString(json, 'reason'),
+        amountCents: json['amountCents'] == null
+            ? null
+            : _optInt(json, 'amountCents'),
+        type: _fineTypeFromJson(_reqString(json, 'type')),
+        status: _reqString(json, 'status'),
+        decidedByUserId: _optString(json, 'decidedByUserId'),
+        decidedAt: _optString(json, 'decidedAt'),
+        acceptedFineId: _optString(json, 'acceptedFineId'),
+        targetUserIds: _optStringList(json, 'targetUserIds'),
+        createdAt: _reqString(json, 'createdAt'),
+      );
 }
 
 class UpdateFineSuggestionRequest {
@@ -918,8 +1171,6 @@ class CreateFineSuggestionRequest {
   };
 }
 
-
-
 class FineSuggestionPhotoDto {
   final String id;
   final String suggestionId;
@@ -947,8 +1198,6 @@ class FineSuggestionPhotoDto {
         createdAt: _reqString(json, 'createdAt'),
       );
 }
-
-
 
 // ---------- Update Fine ----------
 class UpdateFineRequest {
@@ -982,10 +1231,13 @@ class FineDtoAcceptResult {
 
   FineDtoAcceptResult({this.fineId, this.fine});
 
-  factory FineDtoAcceptResult.fromJson(Map<String, dynamic> json) => FineDtoAcceptResult(
-    fineId: _optString(json, 'fineId'),
-    fine: (json['fine'] is Map<String, dynamic>) ? FineDto.fromJson(json['fine'] as Map<String, dynamic>) : null,
-  );
+  factory FineDtoAcceptResult.fromJson(Map<String, dynamic> json) =>
+      FineDtoAcceptResult(
+        fineId: _optString(json, 'fineId'),
+        fine: (json['fine'] is Map<String, dynamic>)
+            ? FineDto.fromJson(json['fine'] as Map<String, dynamic>)
+            : null,
+      );
 }
 
 // ---------- Scheduled Events ----------
@@ -1040,7 +1292,9 @@ class EventDto {
     title: _reqString(json, 'title'),
     startsAt: _reqString(json, 'startsAt'),
     mandatory: _optBool(json, 'mandatory', fallback: false),
-    eventKind: _eventKindFromJson(_reqString({'eventKind': json['eventKind'] ?? 'MAIN'}, 'eventKind')),
+    eventKind: _eventKindFromJson(
+      _reqString({'eventKind': json['eventKind'] ?? 'MAIN'}, 'eventKind'),
+    ),
     ownerType: _eventOwnerTypeFromJson(_reqString(json, 'ownerType')),
     createdAt: _reqString(json, 'createdAt'),
   );
@@ -1091,9 +1345,11 @@ class UpdateEventRequest {
 // ---------- Attendance ----------
 enum AttendanceStatus { late, absent }
 
-AttendanceStatus _attendanceStatusFromJson(String s) => (s == 'ABSENT') ? AttendanceStatus.absent : AttendanceStatus.late;
+AttendanceStatus _attendanceStatusFromJson(String s) =>
+    (s == 'ABSENT') ? AttendanceStatus.absent : AttendanceStatus.late;
 
-String _attendanceStatusToJson(AttendanceStatus s) => (s == AttendanceStatus.absent) ? 'ABSENT' : 'LATE';
+String _attendanceStatusToJson(AttendanceStatus s) =>
+    (s == AttendanceStatus.absent) ? 'ABSENT' : 'LATE';
 
 class AttendanceDto {
   final String id;
@@ -1122,7 +1378,9 @@ class AttendanceDto {
     periodId: _optString(json, 'periodId'),
     userId: _reqString(json, 'userId'),
     status: _attendanceStatusFromJson(_reqString(json, 'status')),
-    lateMinutes: json['lateMinutes'] == null ? null : _optInt(json, 'lateMinutes'),
+    lateMinutes: json['lateMinutes'] == null
+        ? null
+        : _optInt(json, 'lateMinutes'),
     fineId: _optString(json, 'fineId'),
     createdAt: _reqString(json, 'createdAt'),
   );
@@ -1167,15 +1425,16 @@ class AttendanceFineConfigDto {
     required this.absentAmountCents,
   });
 
-  factory AttendanceFineConfigDto.fromJson(Map<String, dynamic> json) => AttendanceFineConfigDto(
-    periodId: _optString(json, 'periodId'),
-    lateCatalogItemId: _optString(json, 'lateCatalogItemId'),
-    lateReason: _optString(json, 'lateReason'),
-    lateAmountCents: _optInt(json, 'lateAmountCents', fallback: 0),
-    absentCatalogItemId: _optString(json, 'absentCatalogItemId'),
-    absentReason: _optString(json, 'absentReason'),
-    absentAmountCents: _optInt(json, 'absentAmountCents', fallback: 0),
-  );
+  factory AttendanceFineConfigDto.fromJson(Map<String, dynamic> json) =>
+      AttendanceFineConfigDto(
+        periodId: _optString(json, 'periodId'),
+        lateCatalogItemId: _optString(json, 'lateCatalogItemId'),
+        lateReason: _optString(json, 'lateReason'),
+        lateAmountCents: _optInt(json, 'lateAmountCents', fallback: 0),
+        absentCatalogItemId: _optString(json, 'absentCatalogItemId'),
+        absentReason: _optString(json, 'absentReason'),
+        absentAmountCents: _optInt(json, 'absentAmountCents', fallback: 0),
+      );
 }
 
 // ---------- Attendance fines: requests/results ----------
@@ -1225,13 +1484,16 @@ class GenerateAttendanceFinesResultDto {
     required this.fineIds,
   });
 
-  factory GenerateAttendanceFinesResultDto.fromJson(Map<String, dynamic> json) =>
-      GenerateAttendanceFinesResultDto(
-        createdCount: _optInt(json, 'createdCount', fallback: 0),
-        fineIds: (json['fineIds'] is List)
-            ? (json['fineIds'] as List).map((e) => e.toString()).toList(growable: false)
-            : const <String>[],
-      );
+  factory GenerateAttendanceFinesResultDto.fromJson(
+    Map<String, dynamic> json,
+  ) => GenerateAttendanceFinesResultDto(
+    createdCount: _optInt(json, 'createdCount', fallback: 0),
+    fineIds: (json['fineIds'] is List)
+        ? (json['fineIds'] as List)
+              .map((e) => e.toString())
+              .toList(growable: false)
+        : const <String>[],
+  );
 }
 
 // ---------- Live Events ----------
@@ -1258,11 +1520,7 @@ class UpdateLiveEventRequest {
   final String? place;
   final String? description;
 
-  UpdateLiveEventRequest({
-    this.title,
-    this.place,
-    this.description,
-  });
+  UpdateLiveEventRequest({this.title, this.place, this.description});
 
   Map<String, dynamic> toJson() => {
     if (title != null) 'title': title,
@@ -1343,7 +1601,9 @@ class NotificationDto {
   });
 
   factory NotificationDto.fromJson(Map<String, dynamic> json) {
-    final rawData = (json['data'] is Map) ? (json['data'] as Map).cast<String, dynamic>() : <String, dynamic>{};
+    final rawData = (json['data'] is Map)
+        ? (json['data'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
     final data = <String, String>{};
     for (final e in rawData.entries) {
       final v = e.value;
@@ -1363,9 +1623,7 @@ class NotificationDto {
     );
   }
 
-  NotificationDto copyWith({
-    DateTime? readAt,
-  }) {
+  NotificationDto copyWith({DateTime? readAt}) {
     return NotificationDto(
       id: id,
       userId: userId,
@@ -1384,19 +1642,15 @@ class UnreadCountDto {
 
   UnreadCountDto({required this.unread});
 
-  factory UnreadCountDto.fromJson(Map<String, dynamic> json) => UnreadCountDto(
-    unread: _optInt(json, 'unread', fallback: 0),
-  );
+  factory UnreadCountDto.fromJson(Map<String, dynamic> json) =>
+      UnreadCountDto(unread: _optInt(json, 'unread', fallback: 0));
 }
 
 class UserSettingValueDto {
   final String value;
   final DateTime? updatedAt;
 
-  const UserSettingValueDto({
-    required this.value,
-    required this.updatedAt,
-  });
+  const UserSettingValueDto({required this.value, required this.updatedAt});
 
   factory UserSettingValueDto.fromJson(Map<String, dynamic> json) {
     return UserSettingValueDto(

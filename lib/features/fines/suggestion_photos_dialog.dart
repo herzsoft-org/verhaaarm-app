@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -412,7 +410,7 @@ class _SuggestionPhotosGalleryScreenState extends State<_SuggestionPhotosGallery
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               scrollDirection: Axis.horizontal,
               itemCount: _photos.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (ctx, i) {
                 final p = _photos[i];
                 final selected = i == _index;

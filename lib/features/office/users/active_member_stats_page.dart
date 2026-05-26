@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../api/api_client.dart';
 import '../../../auth/auth_store.dart';
-import '../../../auth/roles.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
 import '../../../models/member_status.dart';
@@ -23,7 +22,7 @@ class ActiveMemberStatsPage extends StatefulWidget {
 
 class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
   bool _loading = true;
-  List<UserDto> _activeMembers = const [];
+  List<UserPickerDto> _activeMembers = const [];
 
   @override
   void initState() {
@@ -35,27 +34,13 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
     setState(() => _loading = true);
 
     try {
-      final roles = widget.authStore.currentRoles;
-      final allowed =
-          roles.contains(AppRole.admin) ||
-              roles.contains(AppRole.senior) ||
-              roles.contains(AppRole.housekeeping) ||
-              roles.contains(AppRole.treasurer);
+      final users = await widget.api.pickerUsers();
 
-      if (!allowed) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keine Berechtigung.')),
-        );
-        setState(() => _activeMembers = const []);
-        return;
-      }
-
-      final users = await widget.api.listUsersAdmin();
-
-      final activeMembers = users.where((u) {
-        return !u.disabled && u.aktivitas;
-      }).toList(growable: false);
+      final activeMembers = users
+          .where((u) {
+            return u.aktivitas;
+          })
+          .toList(growable: false);
 
       activeMembers.sort((a, b) {
         final ad = a.displayName.trim().toLowerCase();
@@ -83,26 +68,24 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
     }
   }
 
-  List<UserDto> _usersByStatus(MemberStatus status) {
-    return _activeMembers.where((u) {
-      return MemberStatuses.parse(u.memberStatus) == status;
-    }).toList(growable: false);
+  List<UserPickerDto> _usersByStatus(MemberStatus status) {
+    return _activeMembers
+        .where((u) {
+          return MemberStatuses.parse(u.memberStatus) == status;
+        })
+        .toList(growable: false);
   }
 
   Widget _sectionWithSpacing({
     required String title,
     required IconData icon,
-    required List<UserDto> users,
+    required List<UserPickerDto> users,
   }) {
     if (users.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: _StatusSection(
-        title: title,
-        icon: icon,
-        users: users,
-      ),
+      child: _StatusSection(title: title, icon: icon, users: users),
     );
   }
 
@@ -129,39 +112,39 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            _SummaryCard(total: total),
-            _sectionWithSpacing(
-              title: 'Füxe',
-              icon: Icons.school_rounded,
-              users: fuxUsers,
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  _SummaryCard(total: total),
+                  _sectionWithSpacing(
+                    title: 'Füxe',
+                    icon: Icons.school_rounded,
+                    users: fuxUsers,
+                  ),
+                  _sectionWithSpacing(
+                    title: 'Schüler-/Militärfüxe',
+                    icon: Icons.military_tech,
+                    users: schuelerfuxUsers,
+                  ),
+                  _sectionWithSpacing(
+                    title: 'Konkneipanten',
+                    icon: Icons.person_add_alt_1_rounded,
+                    users: konkneipantUsers,
+                  ),
+                  _sectionWithSpacing(
+                    title: 'Aktive Burschen',
+                    icon: Icons.groups_rounded,
+                    users: burschUsers,
+                  ),
+                  _sectionWithSpacing(
+                    title: 'Inaktive Burschen',
+                    icon: Icons.person_off_rounded,
+                    users: inaktiverUsers,
+                  ),
+                ],
+              ),
             ),
-            _sectionWithSpacing(
-              title: 'Schüler-/Militärfüxe',
-              icon: Icons.military_tech,
-              users: schuelerfuxUsers,
-            ),
-            _sectionWithSpacing(
-              title: 'Konkneipanten',
-              icon: Icons.person_add_alt_1_rounded,
-              users: konkneipantUsers,
-            ),
-            _sectionWithSpacing(
-              title: 'Aktive Burschen',
-              icon: Icons.groups_rounded,
-              users: burschUsers,
-            ),
-            _sectionWithSpacing(
-              title: 'Inaktive Burschen',
-              icon: Icons.person_off_rounded,
-              users: inaktiverUsers,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -169,9 +152,7 @@ class _ActiveMemberStatsPageState extends State<ActiveMemberStatsPage> {
 class _SummaryCard extends StatelessWidget {
   final int total;
 
-  const _SummaryCard({
-    required this.total,
-  });
+  const _SummaryCard({required this.total});
 
   @override
   Widget build(BuildContext context) {
@@ -183,10 +164,7 @@ class _SummaryCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(
-              Icons.groups_rounded,
-              color: cs.primary,
-            ),
+            Icon(Icons.groups_rounded, color: cs.primary),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -211,7 +189,7 @@ class _SummaryCard extends StatelessWidget {
 class _StatusSection extends StatelessWidget {
   final String title;
   final IconData icon;
-  final List<UserDto> users;
+  final List<UserPickerDto> users;
 
   const _StatusSection({
     required this.title,
@@ -231,7 +209,7 @@ class _StatusSection extends StatelessWidget {
         subtitle: Text('${users.length} Nutzer'),
         children: [
           ...users.map(
-                (u) => ListTile(
+            (u) => ListTile(
               dense: true,
               titleAlignment: ListTileTitleAlignment.center,
               title: Text(

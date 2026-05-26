@@ -11,7 +11,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../api/api_client.dart';
 import '../../app/route_observer.dart';
 import '../../auth/auth_store.dart';
-import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
@@ -42,7 +41,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   static const _kHomeLiveEvents = 'home.liveEvents';
   static const _kHomeEvents = 'home.events';
   static const _kHomeQuote = 'home.quote';
-  static const _kHomeTasksUnsolved = 'home.tasks.unsolved';
+  static const _kHomeTaskStats = 'home.taskStats';
 
   static const _quoteUrl = 'https://verhaarmapi.herz.moe/public/quotes';
 
@@ -51,8 +50,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   List<LiveEventDto> _liveEvents = const [];
   EventDto? _nextEvent;
   QuoteDto? _quote;
-
-  int _unsolvedTasks = 0;
+  _TaskStats _taskStats = const _TaskStats(unsolved: 0, overdue: 0);
 
   bool _loading = true;
   bool _refreshing = false;
@@ -188,10 +186,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
   QuoteDto _decodeQuote(Object json) =>
       QuoteDto.fromJson((json as Map).cast<String, dynamic>());
 
-  int _decodeInt(Object json) {
-    if (json is int) return json;
-    if (json is num) return json.toInt();
-    return int.tryParse(json.toString()) ?? 0;
+  Map<String, dynamic> _encodeTaskStats(_TaskStats stats) => {
+    'unsolved': stats.unsolved,
+    'overdue': stats.overdue,
+  };
+
+  _TaskStats _decodeTaskStats(Object json) {
+    final m = (json as Map).cast<String, dynamic>();
+    return _TaskStats(
+      unsolved: (m['unsolved'] as num?)?.toInt() ?? 0,
+      overdue: (m['overdue'] as num?)?.toInt() ?? 0,
+    );
   }
 
   void _startLiveTimer() {
@@ -257,7 +262,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       final List<dynamic> rawList = switch (decoded) {
         List<dynamic>() => decoded,
         Map<String, dynamic>() =>
-        (decoded['quotes'] as List<dynamic>? ?? const <dynamic>[]),
+          (decoded['quotes'] as List<dynamic>? ?? const <dynamic>[]),
         _ => const <dynamic>[],
       };
 
@@ -311,36 +316,41 @@ class _HomePageState extends State<HomePage> with RouteAware {
             .map((e) => _decodeEvent(e as Object))
             .toList(growable: false),
       );
-      final cTasks = await AppCache.I.entryOrLoadPersisted<int>(
-        _kHomeTasksUnsolved,
-        decode: _decodeInt,
+      final cTaskStats = await AppCache.I.entryOrLoadPersisted<_TaskStats>(
+        _kHomeTaskStats,
+        decode: _decodeTaskStats,
       );
-
-      final hasAnyCache = (cPeriod != null) ||
+      final hasAnyCache =
+          (cPeriod != null) ||
           (cBalance != null) ||
           (cLive != null) ||
           (cEvents != null) ||
-          (cTasks != null);
+          (cTaskStats != null);
 
       if (hasAnyCache && mounted) {
-        final events = List<EventDto>.from(cEvents?.value ?? const <EventDto>[]);
+        final events = List<EventDto>.from(
+          cEvents?.value ?? const <EventDto>[],
+        );
         final next = _pickNextEvent(events, period: cPeriod?.value);
 
         setState(() {
           _activePeriod = cPeriod?.value;
           _balance = cBalance?.value;
-          _liveEvents =
-          List<LiveEventDto>.unmodifiable(cLive?.value ?? const <LiveEventDto>[]);
+          _liveEvents = List<LiveEventDto>.unmodifiable(
+            cLive?.value ?? const <LiveEventDto>[],
+          );
           _nextEvent = next;
-          _unsolvedTasks = cTasks?.value ?? 0;
+          _taskStats =
+              cTaskStats?.value ?? const _TaskStats(unsolved: 0, overdue: 0);
           _loading = false;
         });
       }
 
-      final baseFresh = (cPeriod != null && cPeriod.isFresh(_ttlHomeBase)) &&
+      final baseFresh =
+          (cPeriod != null && cPeriod.isFresh(_ttlHomeBase)) &&
           (cBalance != null && cBalance.isFresh(_ttlHomeBase)) &&
           (cEvents != null && cEvents.isFresh(_ttlHomeBase)) &&
-          (cTasks != null && cTasks.isFresh(_ttlHomeBase));
+          (cTaskStats != null && cTaskStats.isFresh(_ttlHomeBase));
 
       final liveFresh = (cLive != null && cLive.isFresh(_ttlHomeLive));
 
@@ -402,10 +412,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
         final live = await widget.api.listLiveEvents();
         final events = await widget.api.listEvents();
-        final next = _pickNextEvent(events, period: period);
-
         final tasks = await widget.api.listMyTasks();
-        final unsolved = tasks.where((t) => !t.solved).length;
+        final next = _pickNextEvent(events, period: period);
+        final taskStats = _computeTaskStats(tasks);
 
         final frozenLive = List<LiveEventDto>.unmodifiable(live);
         final frozenEvents = List<EventDto>.unmodifiable(events);
@@ -440,25 +449,24 @@ class _HomePageState extends State<HomePage> with RouteAware {
           frozenEvents,
           encode: (v) => v.map(_encodeEvent).toList(growable: false),
         );
-        await AppCache.I.setPersisted<int>(
-          _kHomeTasksUnsolved,
-          unsolved,
-          encode: (v) => v,
+        await AppCache.I.setPersisted<_TaskStats>(
+          _kHomeTaskStats,
+          taskStats,
+          encode: _encodeTaskStats,
         );
-
         if (!mounted) return;
         setState(() {
           _activePeriod = period;
           _balance = balance;
           _liveEvents = frozenLive;
           _nextEvent = next;
-          _unsolvedTasks = unsolved;
+          _taskStats = taskStats;
         });
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Laden fehlgeschlagen: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
       } finally {
         if (mounted) {
           setState(() {
@@ -593,13 +601,25 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return s.startsWith('-') ? s : '-$s';
   }
 
+  _TaskStats _computeTaskStats(List<TaskDto> tasks) {
+    final nowUtc = DateTime.now().toUtc();
+    final unsolved = tasks.where((t) => !t.solved).toList(growable: false);
+    final overdue = unsolved.where((t) {
+      final due = t.dueAt;
+      return due != null && due.toUtc().isBefore(nowUtc);
+    }).length;
+
+    return _TaskStats(unsolved: unsolved.length, overdue: overdue);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Verhåårm',
       titleWidget: Builder(
         builder: (context) {
-          final titleStyle = Theme.of(context).appBarTheme.titleTextStyle ??
+          final titleStyle =
+              Theme.of(context).appBarTheme.titleTextStyle ??
               Theme.of(context).textTheme.titleLarge;
 
           final titleColor =
@@ -616,10 +636,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                 colorFilter: ColorFilter.mode(titleColor, BlendMode.srcIn),
               ),
               const SizedBox(width: 8),
-              Text(
-                'Verhåårm',
-                style: titleStyle,
-              ),
+              Text('Verhåårm', style: titleStyle),
             ],
           );
         },
@@ -634,41 +651,41 @@ class _HomePageState extends State<HomePage> with RouteAware {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: () => _load(force: true),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (_refreshing)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: LinearProgressIndicator(),
+              onRefresh: () => _load(force: true),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_refreshing)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: LinearProgressIndicator(),
+                    ),
+                  if (_isAndroidApp) ...[
+                    OtaUpdateBanner(controller: _ota),
+                    const SizedBox(height: 12),
+                  ],
+                  _buildLiveEventsCard(context),
+                  const SizedBox(height: 12),
+                  _buildBalanceCard(context),
+                  const SizedBox(height: 12),
+                  _buildNextEventCard(context),
+                  if (_taskStats.unsolved > 0) ...[
+                    const SizedBox(height: 12),
+                    _buildTasksCard(context),
+                  ],
+                  if (_quote != null) ...[
+                    const SizedBox(height: 12),
+                    QuoteOfTheDayCard(quote: _quote!),
+                  ],
+                ],
               ),
-            if (_isAndroidApp) ...[
-              OtaUpdateBanner(controller: _ota),
-              const SizedBox(height: 12),
-            ],
-            _buildLiveEventsCard(context),
-            const SizedBox(height: 12),
-            _buildBalanceCard(context),
-            const SizedBox(height: 12),
-            _buildNextEventCard(context),
-            const SizedBox(height: 12),
-            _buildTasksCard(context),
-            const SizedBox(height: 12),
-            _buildQuickActions(context),
-            if (_quote != null) ...[
-              const SizedBox(height: 12),
-              QuoteOfTheDayCard(quote: _quote!),
-            ],
-          ],
-        ),
-      ),
+            ),
     );
   }
 
   Widget _buildTasksCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final n = _unsolvedTasks;
+    final stats = _taskStats;
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -681,27 +698,56 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               Icon(Icons.assignment_rounded, color: cs.primary),
               const SizedBox(width: 10),
-              Text(
-                'Arbeitsaufträge',
-                style: Theme.of(context).textTheme.titleMedium,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Arbeitsaufträge',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('${stats.unsolved} unerledigt'),
+                  ],
+                ),
               ),
-              const Spacer(),
-              if (n > 0)
+              if (stats.overdue > 0) ...[
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: cs.primaryContainer,
+                    color: cs.errorContainer,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    '$n',
+                    '${stats.overdue} spät',
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: cs.onPrimaryContainer,
+                      color: cs.onErrorContainer,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+              ],
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${stats.unsolved}',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: cs.onPrimaryContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
               const SizedBox(width: 8),
               const Icon(Icons.chevron_right_rounded),
             ],
@@ -840,7 +886,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final cs = Theme.of(context).colorScheme;
     final e = _nextEvent;
 
-    final cardColor = e == null ? cs.surfaceContainerLow : _cardColorForEvent(context, e);
+    final cardColor = e == null
+        ? cs.surfaceContainerLow
+        : _cardColorForEvent(context, e);
     final iconColor = e == null ? cs.primary : _colorForEvent(context, e);
     final iconData = e == null ? Icons.event_rounded : _iconForEvent(e);
 
@@ -893,68 +941,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
       ),
     );
   }
-
-  Widget _buildQuickActions(BuildContext context) {
-    final roles = widget.authStore.currentRoles;
-    final canOffice = Roles.canAccessOffice(roles);
-    final canOfficial = Roles.canCreateOfficialFine(roles);
-
-    return Column(
-      children: [
-        if (canOffice) ...[
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => GoRouter.of(context).push('/office'),
-              icon: const Icon(Icons.badge_rounded),
-              label: const Text('Amtsausführung'),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // CHANGED: make both buttons same height by letting the Row take the max height
-        // and stretching the other child to match.
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: () =>
-                      GoRouter.of(context).push('/my-fine-suggestions'),
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.add_comment_rounded),
-                      SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Beihängung vorschlagen',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: canOfficial
-                      ? () => GoRouter.of(context).push('/fines/new')
-                      : null,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Beihängen'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _LiveEventPreviewTile extends StatelessWidget {
@@ -1005,4 +991,11 @@ class _LiveEventPreviewTile extends StatelessWidget {
       ],
     );
   }
+}
+
+class _TaskStats {
+  final int unsolved;
+  final int overdue;
+
+  const _TaskStats({required this.unsolved, required this.overdue});
 }

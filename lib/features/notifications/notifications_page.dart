@@ -6,6 +6,7 @@ import '../../auth/auth_store.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 import '../../notifications/notification_center.dart';
+import '../../notifications/notification_router.dart';
 import '../../push/push_manager.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -56,7 +57,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
     setState(() {
       _items = _items
-          .map((x) => x.id == n.id ? x.copyWith(readAt: DateTime.now().toUtc()) : x)
+          .map(
+            (x) =>
+                x.id == n.id ? x.copyWith(readAt: DateTime.now().toUtc()) : x,
+          )
           .toList(growable: false);
     });
     NotificationCenter.I.decrementUnread(by: 1);
@@ -70,7 +74,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _delete(NotificationDto n) async {
     final prev = _items;
-    setState(() => _items = _items.where((x) => x.id != n.id).toList(growable: false));
+    setState(
+      () => _items = _items.where((x) => x.id != n.id).toList(growable: false),
+    );
 
     if (n.readAt == null) NotificationCenter.I.decrementUnread(by: 1);
 
@@ -117,22 +123,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
-  void _openFromNotification(NotificationDto n) {
-    final data = n.data;
-    final type = n.type.toUpperCase();
-
-    final fineId = (data['fineId'] ?? '').trim();
-    final taskId = (data['taskId'] ?? '').trim();
-
-    if (taskId.isNotEmpty || type.contains('TASK')) {
-      context.push('/tasks');
-      return;
-    }
-
-    if (fineId.isNotEmpty || type.contains('FINE')) {
-      context.push('/my-fines');
-      return;
-    }
+  Future<void> _openFromNotification(NotificationDto n) async {
+    await routeNotificationClick(GoRouter.of(context), {
+      ...n.data,
+      'type': n.type,
+      'notificationType': n.type,
+    });
   }
 
   String _pushStatusLabel(PushStatus status) {
@@ -179,117 +175,124 @@ class _NotificationsPageState extends State<NotificationsPage> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-              child: Row(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _items.isEmpty || _clearing ? null : _clearAll,
-                    icon: const Icon(Icons.delete_sweep),
-                    label: const Text('Alle löschen'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _items.isEmpty || _clearing
+                              ? null
+                              : _clearAll,
+                          icon: const Icon(Icons.delete_sweep),
+                          label: const Text('Alle löschen'),
+                        ),
+                      ],
+                    ),
                   ),
+                  if (_items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 40),
+                      child: Column(
+                        children: [
+                          Icon(Icons.notifications_none, size: 48),
+                          SizedBox(height: 12),
+                          Text('Keine Benachrichtigungen'),
+                        ],
+                      ),
+                    ),
+                  if (_items.isNotEmpty)
+                    ..._items.map((n) {
+                      final unread = n.readAt == null;
+
+                      return Dismissible(
+                        key: ValueKey(n.id),
+                        background: Container(
+                          color: Theme.of(context).colorScheme.errorContainer,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: const Icon(Icons.delete),
+                        ),
+                        direction: DismissDirection.endToStart,
+                        onDismissed: (_) => _delete(n),
+                        child: ListTile(
+                          title: Text(
+                            n.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: unread
+                                ? const TextStyle(fontWeight: FontWeight.w600)
+                                : null,
+                          ),
+                          subtitle: Text(
+                            n.body,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          leading: unread
+                              ? const Icon(Icons.circle, size: 10)
+                              : const Icon(Icons.circle_outlined, size: 10),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await _markRead(n);
+                            if (!context.mounted) return;
+                            await _openFromNotification(n);
+                          },
+                        ),
+                      );
+                    }),
+
+                  const SizedBox(height: 24),
+
+                  if (kIsWeb) ...[
+                    const SizedBox(height: 24),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: OutlinedButton.icon(
+                        onPressed: _enablingWebPush ? null : _enableWebPush,
+                        icon: _enablingWebPush
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.notifications_active),
+                        label: Text(
+                          _enablingWebPush
+                              ? 'Aktiviere Web-Benachrichtigungen ...'
+                              : 'Web-Benachrichtigungen aktivieren',
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: StreamBuilder<PushStatus>(
+                        stream: NotificationCenter.I.pushStatusStream,
+                        initialData: NotificationCenter.I.pushStatus,
+                        builder: (context, snapshot) {
+                          final status = snapshot.data ?? PushStatus.unknown;
+                          final label = _pushStatusLabel(status);
+                          if (label.isEmpty) return const SizedBox.shrink();
+
+                          return Text(
+                            label,
+                            style: TextStyle(
+                              color: _pushStatusColor(context, status),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
                 ],
               ),
-            ),
-            if (_items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 40),
-                child: Column(
-                  children: [
-                    Icon(Icons.notifications_none, size: 48),
-                    SizedBox(height: 12),
-                    Text('Keine Benachrichtigungen'),
-                  ],
-                ),
-              ),
-            if (_items.isNotEmpty)
-              ..._items.map((n) {
-                final unread = n.readAt == null;
-
-                return Dismissible(
-                  key: ValueKey(n.id),
-                  background: Container(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: const Icon(Icons.delete),
-                  ),
-                  direction: DismissDirection.endToStart,
-                  onDismissed: (_) => _delete(n),
-                  child: ListTile(
-                    title: Text(
-                      n.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: unread ? const TextStyle(fontWeight: FontWeight.w600) : null,
-                    ),
-                    subtitle: Text(
-                      n.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    leading: unread
-                        ? const Icon(Icons.circle, size: 10)
-                        : const Icon(Icons.circle_outlined, size: 10),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await _markRead(n);
-                      _openFromNotification(n);
-                    },
-                  ),
-                );
-              }),
-
-            const SizedBox(height: 24),
-
-            if (kIsWeb) ...[
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: OutlinedButton.icon(
-                  onPressed: _enablingWebPush ? null : _enableWebPush,
-                  icon: _enablingWebPush
-                      ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                      : const Icon(Icons.notifications_active),
-                  label: Text(
-                    _enablingWebPush
-                        ? 'Aktiviere Web-Benachrichtigungen ...'
-                        : 'Web-Benachrichtigungen aktivieren',
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: StreamBuilder<PushStatus>(
-                  stream: NotificationCenter.I.pushStatusStream,
-                  initialData: NotificationCenter.I.pushStatus,
-                  builder: (context, snapshot) {
-                    final status = snapshot.data ?? PushStatus.unknown;
-                    final label = _pushStatusLabel(status);
-                    if (label.isEmpty) return const SizedBox.shrink();
-
-                    return Text(
-                      label,
-                      style: TextStyle(
-                        color: _pushStatusColor(context, status),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-          ],
-        ),
       ),
     );
   }

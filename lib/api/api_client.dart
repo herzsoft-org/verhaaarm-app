@@ -49,7 +49,6 @@ class ApiClient {
     return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-
   // ----------------------------
   // AUTH convenience (swagger: /auth/login, /auth/refresh, /auth/logout)
   // ----------------------------
@@ -88,7 +87,10 @@ class ApiClient {
         .toList(growable: false);
   }
 
-  Future<List<UserDto>> listUsersFull({required bool active, String? query}) async {
+  Future<List<UserDto>> listUsersFull({
+    required bool active,
+    String? query,
+  }) async {
     final r = await dio.get(
       '/users',
       queryParameters: {
@@ -103,11 +105,11 @@ class ApiClient {
         .toList(growable: false);
   }
 
-  Future<void> patchUserPassword({required String userId, required String newPassword}) async {
-    await dio.patch(
-      '/users/$userId/password',
-      data: {'password': newPassword},
-    );
+  Future<void> patchUserPassword({
+    required String userId,
+    required String newPassword,
+  }) async {
+    await dio.patch('/users/$userId/password', data: {'password': newPassword});
   }
 
   Future<List<UserDto>> listUsersAdmin({String? online}) async {
@@ -156,17 +158,22 @@ class ApiClient {
     final r = await dio.get(
       '/users/me/balance',
       queryParameters: {
-        if (periodId != null && periodId.trim().isNotEmpty) 'periodId': periodId.trim(),
+        if (periodId != null && periodId.trim().isNotEmpty)
+          'periodId': periodId.trim(),
       },
     );
     return UserBalanceDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<UserBalanceDto> getUserBalance(String userId, {String? periodId}) async {
+  Future<UserBalanceDto> getUserBalance(
+    String userId, {
+    String? periodId,
+  }) async {
     final r = await dio.get(
       '/users/$userId/balance',
       queryParameters: {
-        if (periodId != null && periodId.trim().isNotEmpty) 'periodId': periodId.trim(),
+        if (periodId != null && periodId.trim().isNotEmpty)
+          'periodId': periodId.trim(),
       },
     );
     return UserBalanceDto.fromJson((r.data as Map).cast<String, dynamic>());
@@ -198,7 +205,9 @@ class ApiClient {
     final r = await dio.get('/periods');
     final list = (r.data as List).cast<dynamic>();
     return list
-        .map((e) => ConventPeriodDto.fromJson((e as Map).cast<String, dynamic>()))
+        .map(
+          (e) => ConventPeriodDto.fromJson((e as Map).cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 
@@ -217,7 +226,10 @@ class ApiClient {
     return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<ConventPeriodDto> updatePeriod(String id, UpdateConventPeriodRequest req) async {
+  Future<ConventPeriodDto> updatePeriod(
+    String id,
+    UpdateConventPeriodRequest req,
+  ) async {
     final r = await dio.patch('/periods/$id', data: req.toJson());
     return ConventPeriodDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -254,21 +266,26 @@ class ApiClient {
     required String filename,
     String? contentType,
   }) async {
-    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+    if ((filePath == null && bytes == null) ||
+        (filePath != null && bytes != null)) {
       throw ArgumentError('Provide exactly one of filePath or bytes.');
     }
 
     final MultipartFile mf = (bytes != null)
         ? MultipartFile.fromBytes(
-      bytes,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    )
+            bytes,
+            filename: filename,
+            contentType: contentType == null
+                ? null
+                : MediaType.parse(contentType),
+          )
         : await MultipartFile.fromFile(
-      filePath!,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    );
+            filePath!,
+            filename: filename,
+            contentType: contentType == null
+                ? null
+                : MediaType.parse(contentType),
+          );
 
     final form = FormData.fromMap({'file': mf});
 
@@ -362,7 +379,10 @@ class ApiClient {
         .toList(growable: false);
   }
 
-  Future<AttendanceDto> upsertAttendance(String eventId, UpsertAttendanceRequest req) async {
+  Future<AttendanceDto> upsertAttendance(
+    String eventId,
+    UpsertAttendanceRequest req,
+  ) async {
     final r = await dio.put('/events/$eventId/attendance', data: req.toJson());
     return AttendanceDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -372,11 +392,16 @@ class ApiClient {
   }
 
   Future<GenerateAttendanceFinesResultDto> generateAttendanceFines(
-      String eventId,
-      GenerateAttendanceFinesRequest req,
-      ) async {
-    final r = await dio.post('/events/$eventId/attendance/generate-fines', data: req.toJson());
-    return GenerateAttendanceFinesResultDto.fromJson((r.data as Map).cast<String, dynamic>());
+    String eventId,
+    GenerateAttendanceFinesRequest req,
+  ) async {
+    final r = await dio.post(
+      '/events/$eventId/attendance/generate-fines',
+      data: req.toJson(),
+    );
+    return GenerateAttendanceFinesResultDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
   }
 
   // ----------------------------
@@ -385,12 +410,18 @@ class ApiClient {
 
   Future<AttendanceFineConfigDto> getAttendanceFineConfig() async {
     final r = await dio.get('/attendance-fines');
-    return AttendanceFineConfigDto.fromJson((r.data as Map).cast<String, dynamic>());
+    return AttendanceFineConfigDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
   }
 
-  Future<AttendanceFineConfigDto> setAttendanceFineConfig(SetAttendanceFineConfigRequest req) async {
+  Future<AttendanceFineConfigDto> setAttendanceFineConfig(
+    SetAttendanceFineConfigRequest req,
+  ) async {
     final r = await dio.put('/attendance-fines', data: req.toJson());
-    return AttendanceFineConfigDto.fromJson((r.data as Map).cast<String, dynamic>());
+    return AttendanceFineConfigDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
   }
 
   // ----------------------------
@@ -428,11 +459,15 @@ class ApiClient {
   /// GET /fines/export.csv
   /// Your controller path uses query params (periodId/includeDeleted) in your client.
   /// Keep it returning bytes.
-  Future<Response<dynamic>> exportFinesCsv({String? periodId, bool includeDeleted = false}) {
+  Future<Response<dynamic>> exportFinesCsv({
+    String? periodId,
+    bool includeDeleted = false,
+  }) {
     return dio.get(
       '/fines/export.csv',
       queryParameters: {
-        if (periodId != null && periodId.trim().isNotEmpty) 'periodId': periodId.trim(),
+        if (periodId != null && periodId.trim().isNotEmpty)
+          'periodId': periodId.trim(),
         if (includeDeleted) 'includeDeleted': true,
       },
       options: Options(
@@ -461,21 +496,26 @@ class ApiClient {
     required String filename,
     String? contentType,
   }) async {
-    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+    if ((filePath == null && bytes == null) ||
+        (filePath != null && bytes != null)) {
       throw ArgumentError('Provide exactly one of filePath or bytes.');
     }
 
     final MultipartFile mf = (bytes != null)
         ? MultipartFile.fromBytes(
-      bytes,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    )
+            bytes,
+            filename: filename,
+            contentType: contentType == null
+                ? null
+                : MediaType.parse(contentType),
+          )
         : await MultipartFile.fromFile(
-      filePath!,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    );
+            filePath!,
+            filename: filename,
+            contentType: contentType == null
+                ? null
+                : MediaType.parse(contentType),
+          );
 
     final form = FormData.fromMap({'file': mf});
 
@@ -511,22 +551,27 @@ class ApiClient {
   // FINE CATALOG (swagger: /fine-catalog, /fine-catalog/{id})
   // ----------------------------
 
-  Future<List<FineCatalogItemDto>> listFineCatalog({bool? active, bool? forCreation}) async {
+  Future<List<FineCatalogItemDto>> listFineCatalog({
+    bool? active,
+    bool? forCreation,
+  }) async {
     final r = await dio.get(
       '/fine-catalog',
-      queryParameters: {
-        if (active != null) 'active': active,
-        if (forCreation != null) 'forCreation': forCreation,
-      },
+      queryParameters: {'active': ?active, 'forCreation': ?forCreation},
     );
 
     final list = (r.data as List).cast<dynamic>();
     return list
-        .map((e) => FineCatalogItemDto.fromJson((e as Map).cast<String, dynamic>()))
+        .map(
+          (e) =>
+              FineCatalogItemDto.fromJson((e as Map).cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 
-  Future<FineCatalogItemDto> createFineCatalogItem(CreateFineCatalogItemRequest req) async {
+  Future<FineCatalogItemDto> createFineCatalogItem(
+    CreateFineCatalogItemRequest req,
+  ) async {
     final r = await dio.post('/fine-catalog', data: req.toJson());
     return FineCatalogItemDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -536,7 +581,10 @@ class ApiClient {
     return FineCatalogItemDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<FineCatalogItemDto> updateFineCatalogItem(String id, UpdateFineCatalogItemRequest req) async {
+  Future<FineCatalogItemDto> updateFineCatalogItem(
+    String id,
+    UpdateFineCatalogItemRequest req,
+  ) async {
     final r = await dio.patch('/fine-catalog/$id', data: req.toJson());
     return FineCatalogItemDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -546,10 +594,62 @@ class ApiClient {
   }
 
   // ----------------------------
+  // PAUKSTUNDEN
+  // ----------------------------
+
+  Future<PaukstundenEntryDto> createPaukstunde(
+    CreatePaukstundeRequest req,
+  ) async {
+    final r = await dio.post('/paukstunden', data: req.toJson());
+    return PaukstundenEntryDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<PaukstundenListDto> getMyCurrentPaukstunden() async {
+    final r = await dio.get('/paukstunden/me/current-conventsperiode');
+    return PaukstundenListDto.fromJson(r.data);
+  }
+
+  Future<PaukstundenListDto> getCurrentPaukstunden() async {
+    final r = await dio.get('/paukstunden/current-conventsperiode');
+    return PaukstundenListDto.fromJson(r.data);
+  }
+
+  Future<PaukstundenListDto> getUserCurrentPaukstunden(String userId) async {
+    final r = await dio.get(
+      '/paukstunden/users/$userId/current-conventsperiode',
+    );
+    return PaukstundenListDto.fromJson(r.data);
+  }
+
+  Future<PaukstundenSummaryDto> getCurrentPaukstundenSummary() async {
+    final r = await dio.get('/paukstunden/summary/current-conventsperiode');
+    return PaukstundenSummaryDto.fromJson(r.data);
+  }
+
+  Future<PaukstundenEntryDto> updatePaukstunde(
+    String id,
+    UpdatePaukstundeRequest req,
+  ) async {
+    final r = await dio.patch('/paukstunden/$id', data: req.toJson());
+    return PaukstundenEntryDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
+  }
+
+  Future<void> deletePaukstunde(String id) async {
+    await dio.delete('/paukstunden/$id');
+  }
+
+  // ----------------------------
   // FINE SUGGESTIONS (swagger: /fine-suggestions, accept/reject)
   // ----------------------------
 
-  Future<List<FineSuggestionDto>> listSuggestions({String? status, bool mine = false}) async {
+  Future<List<FineSuggestionDto>> listSuggestions({
+    String? status,
+    bool mine = false,
+  }) async {
     final r = await dio.get(
       '/fine-suggestions',
       queryParameters: {
@@ -560,7 +660,9 @@ class ApiClient {
 
     final list = (r.data as List).cast<dynamic>();
     return list
-        .map((e) => FineSuggestionDto.fromJson((e as Map).cast<String, dynamic>()))
+        .map(
+          (e) => FineSuggestionDto.fromJson((e as Map).cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 
@@ -569,12 +671,17 @@ class ApiClient {
     return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<FineSuggestionDto> createSuggestion(CreateFineSuggestionRequest req) async {
+  Future<FineSuggestionDto> createSuggestion(
+    CreateFineSuggestionRequest req,
+  ) async {
     final r = await dio.post('/fine-suggestions', data: req.toJson());
     return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<FineSuggestionDto> updateSuggestion(String id, UpdateFineSuggestionRequest req) async {
+  Future<FineSuggestionDto> updateSuggestion(
+    String id,
+    UpdateFineSuggestionRequest req,
+  ) async {
     final r = await dio.patch('/fine-suggestions/$id', data: req.toJson());
     return FineSuggestionDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -589,18 +696,26 @@ class ApiClient {
 
   Future<FineDtoAcceptResult> acceptSuggestion(String id) async {
     final r = await dio.post('/fine-suggestions/$id/accept');
-    return FineDtoAcceptResult.fromJson((r.data as Map).cast<String, dynamic>());
+    return FineDtoAcceptResult.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
   }
 
   // ----------------------------
   // FINE SUGGESTION PHOTOS
   // ----------------------------
 
-  Future<List<FineSuggestionPhotoDto>> listSuggestionPhotos(String suggestionId) async {
+  Future<List<FineSuggestionPhotoDto>> listSuggestionPhotos(
+    String suggestionId,
+  ) async {
     final r = await dio.get('/fine-suggestions/$suggestionId/photos');
     final list = (r.data as List).cast<dynamic>();
     return list
-        .map((e) => FineSuggestionPhotoDto.fromJson((e as Map).cast<String, dynamic>()))
+        .map(
+          (e) => FineSuggestionPhotoDto.fromJson(
+            (e as Map).cast<String, dynamic>(),
+          ),
+        )
         .toList(growable: false);
   }
 
@@ -611,21 +726,26 @@ class ApiClient {
     required String filename,
     String? contentType,
   }) async {
-    if ((filePath == null && bytes == null) || (filePath != null && bytes != null)) {
+    if ((filePath == null && bytes == null) ||
+        (filePath != null && bytes != null)) {
       throw ArgumentError('Provide exactly one of filePath or bytes.');
     }
 
     final MultipartFile mf = (bytes != null)
         ? MultipartFile.fromBytes(
-      bytes,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    )
+            bytes,
+            filename: filename,
+            contentType: contentType == null
+                ? null
+                : MediaType.parse(contentType),
+          )
         : await MultipartFile.fromFile(
-      filePath!,
-      filename: filename,
-      contentType: contentType == null ? null : MediaType.parse(contentType),
-    );
+            filePath!,
+            filename: filename,
+            contentType: contentType == null
+                ? null
+                : MediaType.parse(contentType),
+          );
 
     final form = FormData.fromMap({'file': mf});
 
@@ -635,7 +755,9 @@ class ApiClient {
       options: Options(contentType: 'multipart/form-data'),
     );
 
-    return FineSuggestionPhotoDto.fromJson((r.data as Map).cast<String, dynamic>());
+    return FineSuggestionPhotoDto.fromJson(
+      (r.data as Map).cast<String, dynamic>(),
+    );
   }
 
   Future<Uint8List> downloadSuggestionPhotoBytes({
@@ -722,7 +844,10 @@ class ApiClient {
     return LiveEventDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
-  Future<LiveEventDto> updateLiveEvent(String id, UpdateLiveEventRequest req) async {
+  Future<LiveEventDto> updateLiveEvent(
+    String id,
+    UpdateLiveEventRequest req,
+  ) async {
     final r = await dio.patch('/live-events/$id', data: req.toJson());
     return LiveEventDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
@@ -736,10 +861,15 @@ class ApiClient {
   // ----------------------------
 
   Future<List<NotificationDto>> listNotifications({int limit = 50}) async {
-    final r = await dio.get('/notifications', queryParameters: {'limit': limit});
+    final r = await dio.get(
+      '/notifications',
+      queryParameters: {'limit': limit},
+    );
     final list = (r.data as List).cast<dynamic>();
     return list
-        .map((e) => NotificationDto.fromJson((e as Map).cast<String, dynamic>()))
+        .map(
+          (e) => NotificationDto.fromJson((e as Map).cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 
@@ -785,8 +915,8 @@ class ApiClient {
   }
 
   // ----------------------------
-// SESSIONS
-// ----------------------------
+  // SESSIONS
+  // ----------------------------
 
   Future<List<UserSessionDto>> listMySessions() async {
     final r = await dio.get('/sessions/me');
@@ -824,7 +954,7 @@ class ApiClient {
     await dio.delete('/sessions/admin/$sessionId');
   }
 
-// ----------------------------
-// ATTENDANCE: swagger includes DELETE returning 200 (no body). Keep void.
-// ----------------------------
+  // ----------------------------
+  // ATTENDANCE: swagger includes DELETE returning 200 (no body). Keep void.
+  // ----------------------------
 }

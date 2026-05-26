@@ -13,7 +13,6 @@ import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
-import '../../common/member_picker_settings.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../common/widgets/schnupfspruch_button.dart';
 import '../../common/settings/app_settings_store.dart';
@@ -126,7 +125,9 @@ class _ProfilePageState extends State<ProfilePage> {
     _sessionLabel = s.sessionLabel;
   }
 
-  Future<_ProfileSnapshot> _buildSnapshot({bool forceCurrentUserRefresh = false}) async {
+  Future<_ProfileSnapshot> _buildSnapshot({
+    bool forceCurrentUserRefresh = false,
+  }) async {
     final token = widget.authStore.accessToken ?? '';
 
     if (forceCurrentUserRefresh) {
@@ -137,8 +138,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final roleLabel = _roleLabelFromRoleSet(widget.authStore.currentRoles);
 
-    final sessionLabel =
-    widget.authStore.isLoggedIn ? 'Angemeldet' : 'Nicht angemeldet';
+    final sessionLabel = widget.authStore.isLoggedIn
+        ? 'Angemeldet'
+        : 'Nicht angemeldet';
 
     final pkg = await PackageInfo.fromPlatform();
     final appVersion = '${pkg.version} (${pkg.buildNumber})';
@@ -173,8 +175,8 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     final locale = WidgetsBinding.instance.platformDispatcher.locale;
-    final localeLabel =
-    '${locale.languageCode}_${locale.countryCode ?? ''}'.trim();
+    final localeLabel = '${locale.languageCode}_${locale.countryCode ?? ''}'
+        .trim();
 
     String displayName = '—';
     String username = '—';
@@ -189,15 +191,18 @@ class _ProfilePageState extends State<ProfilePage> {
       try {
         final payload = Jwt.parseJwt(token);
 
-        final dn = pickString(payload['displayName']) ??
+        final dn =
+            pickString(payload['displayName']) ??
             pickString(payload['display_name']) ??
             pickString(payload['name']);
 
-        final un = pickString(payload['username']) ??
+        final un =
+            pickString(payload['username']) ??
             pickString(payload['preferred_username']) ??
             pickString(payload['login']);
 
-        final ms = pickString(payload['memberStatus']) ??
+        final ms =
+            pickString(payload['memberStatus']) ??
             pickString(payload['member_status']);
 
         if (dn != null) displayName = dn;
@@ -255,65 +260,14 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   static String _roleLabelFromRoleSet(Set<AppRole> roles) {
-    if (roles.contains(AppRole.admin)) return 'Admin';
-    if (roles.contains(AppRole.senior)) return 'Sprecher';
-    if (roles.contains(AppRole.treasurer)) return 'Kassenwart';
-    if (roles.contains(AppRole.housekeeping)) return 'Schmuckwart';
-    return 'Mitglied';
-  }
-
-  Widget _buildLegalDocumentsCard(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => GoRouter.of(context).push('/legal-documents'),
-      child: Card(
-        color: cs.surfaceContainerLow,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.menu_book_rounded, color: cs.primary),
-              const SizedBox(width: 10),
-              Text(
-                'Rechtsgrundlagen',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const Spacer(),
-              const Icon(Icons.chevron_right_rounded),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConventProtocolsCard(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => GoRouter.of(context).push('/convent-protocols'),
-      child: Card(
-        color: cs.surfaceContainerLow,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.picture_as_pdf_rounded, color: cs.primary),
-              const SizedBox(width: 10),
-              Text(
-                'Conventsprotokolle',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const Spacer(),
-              const Icon(Icons.chevron_right_rounded),
-            ],
-          ),
-        ),
-      ),
-    );
+    final labels = <String>[
+      if (roles.contains(AppRole.admin)) 'Admin',
+      if (roles.contains(AppRole.senior)) 'Sprecher',
+      if (roles.contains(AppRole.housekeeping)) 'Schmuckwart',
+      if (roles.contains(AppRole.fechtwart)) 'Fechtwart',
+      if (roles.contains(AppRole.treasurer)) 'Kassenwart',
+    ];
+    return labels.isEmpty ? 'Mitglied' : labels.join(', ');
   }
 
   Future<void> _openAppSettingsSheet() async {
@@ -330,11 +284,6 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (ctx, setStateSheet) {
             Future<void> setHidePhilister(bool value) async {
               await AppSettingsStore.I.setHidePhilister(widget.api, value);
-              setStateSheet(() {});
-            }
-
-            Future<void> setThemeMode(ThemeMode mode) async {
-              await AppSettingsStore.I.setThemeMode(widget.api, mode);
               setStateSheet(() {});
             }
 
@@ -385,12 +334,19 @@ class _ProfilePageState extends State<ProfilePage> {
                           AnimatedBuilder(
                             animation: AppSettingsStore.I,
                             builder: (context, _) {
-                              final selected = AppSettingsStore.I.themeMode == ThemeMode.light
+                              final selected =
+                                  AppSettingsStore.I.themeMode ==
+                                      ThemeMode.light
                                   ? ThemeMode.light
                                   : ThemeMode.dark;
 
                               return Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  16,
+                                  16,
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -417,7 +373,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                           ),
                                           ButtonSegment<ThemeMode>(
                                             value: ThemeMode.light,
-                                            icon: Icon(Icons.light_mode_rounded),
+                                            icon: Icon(
+                                              Icons.light_mode_rounded,
+                                            ),
                                             label: Text('Hell'),
                                           ),
                                         ],
@@ -463,12 +421,12 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                               trailing: _forceReloadingWebApp
                                   ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
                                   : const Icon(Icons.chevron_right_rounded),
                               onTap: _forceReloadingWebApp
                                   ? null
@@ -558,15 +516,17 @@ class _ProfilePageState extends State<ProfilePage> {
         if (!mounted) return;
         Navigator.of(context).pop(true);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Passwort geändert.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Passwort geändert.')));
       } catch (_) {
         if (!mounted) return;
         Navigator.of(context).pop(false);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Passwort konnte nicht geändert werden.')),
+          const SnackBar(
+            content: Text('Passwort konnte nicht geändert werden.'),
+          ),
         );
       } finally {
         if (Navigator.of(context).canPop()) {
@@ -611,7 +571,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       decoration: InputDecoration(
                         labelText: 'Neues Passwort',
                         helperText:
-                        'Mind. 8 Zeichen, Groß + Kleinbuchstaben, mind. eine Zahl.',
+                            'Mind. 8 Zeichen, Groß + Kleinbuchstaben, mind. eine Zahl.',
                         helperMaxLines: 3,
                         suffixIcon: IconButton(
                           tooltip: showNew ? 'Verbergen' : 'Anzeigen',
@@ -674,10 +634,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 onPressed: submitting ? null : () => submit(setStateDialog),
                 child: submitting
                     ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text('Ändern'),
               ),
             ],
@@ -699,7 +659,7 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('App vollständig neu laden?'),
         content: const Text(
           'Dadurch wird der Browser-Cache der PWA geleert und die App neu vom Server geladen. '
-              'Das hilft, wenn nach einem Update noch alte Funktionen angezeigt werden.',
+          'Das hilft, wenn nach einem Update noch alte Funktionen angezeigt werden.',
         ),
         actions: [
           TextButton(
@@ -757,7 +717,9 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Abmelden?'),
-        content: const Text('Du wirst abgemeldet und lokale Daten werden gelöscht.'),
+        content: const Text(
+          'Du wirst abgemeldet und lokale Daten werden gelöscht.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -801,92 +763,90 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.all(16),
               child: _loading
                   ? const Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Lade Profil…'),
-                ],
-              )
-                  : Row(
-                children: [
-                  CircleAvatar(
-                    radius: 26,
-                    child: Text(
-                      (_displayName != '—' &&
-                          _displayName.trim().isNotEmpty)
-                          ? _displayName
-                          .trim()
-                          .characters
-                          .first
-                          .toUpperCase()
-                          : 'V',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _displayName,
-                          style: Theme.of(context).textTheme.titleLarge,
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _username == '—' ? '—' : '@$_username',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                        SizedBox(width: 12),
+                        Text('Lade Profil…'),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          child: Text(
+                            (_displayName != '—' &&
+                                    _displayName.trim().isNotEmpty)
+                                ? _displayName
+                                      .trim()
+                                      .characters
+                                      .first
+                                      .toUpperCase()
+                                : 'V',
+                          ),
                         ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.verified_user_rounded,
-                              size: 18,
-                              color:
-                              Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _roleLabel,
-                              style:
-                              Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.group_rounded,
-                              size: 18,
-                              color:
-                              Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              MemberStatuses.label(_memberStatus),
-                              style:
-                              Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _displayName,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _username == '—' ? '—' : '@$_username',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.verified_user_rounded,
+                                    size: 18,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _roleLabel,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.group_rounded,
+                                    size: 18,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    MemberStatuses.label(_memberStatus),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
-          const SizedBox(height: 12),
-          _buildLegalDocumentsCard(context),
-          if (MemberStatuses.isAktivitas(_memberStatus)) ...[
-            const SizedBox(height: 8),
-            _buildConventProtocolsCard(context),
-          ],
           const SizedBox(height: 12),
           Card(
             child: Column(
@@ -902,7 +862,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 ListTile(
                   leading: const Icon(Icons.settings_rounded),
                   title: const Text('App-Einstellungen'),
-                  subtitle: const Text('App-Verhalten und lokale Einstellungen'),
+                  subtitle: const Text(
+                    'App-Verhalten und lokale Einstellungen',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _openAppSettingsSheet,
                 ),

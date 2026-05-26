@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
-import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 
@@ -377,106 +376,6 @@ class _SessionDistributionBar extends StatelessWidget {
                 ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _OnlineUsersSheet extends StatelessWidget {
-  final String title;
-  final List<UserDto> users;
-
-  const _OnlineUsersSheet({
-    required this.title,
-    required this.users,
-  });
-
-  String _date(String? iso) {
-    if (iso == null || iso.trim().isEmpty) return 'nie online';
-
-    try {
-      return Format.dateTimeShort(iso);
-    } catch (_) {
-      return iso;
-    }
-  }
-
-  String _roleLabel(UserDto u) {
-    if (u.roles.isEmpty) return '—';
-
-    switch (u.roles.first.toUpperCase()) {
-      case 'SENIOR':
-        return 'Sprecher';
-      case 'HOUSEKEEPING':
-        return 'Schmuckwart';
-      case 'MEMBER':
-        return 'Mitglied';
-      case 'ADMIN':
-        return 'Admin';
-      case 'TREASURER':
-        return 'Kassenwart';
-      default:
-        return u.roles.first;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.75,
-        minChildSize: 0.35,
-        maxChildSize: 0.95,
-        builder: (ctx, scrollController) {
-          return ListView(
-            controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    Text(
-                      '${users.length}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ],
-                ),
-              ),
-              if (users.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('Keine Nutzer gefunden.'),
-                  ),
-                )
-              else
-                for (final u in users)
-                  Card(
-                    child: ListTile(
-                      leading: Icon(
-                        u.disabled ? Icons.block_rounded : Icons.person_rounded,
-                      ),
-                      title: Text('${u.displayName} (${u.username})'),
-                      subtitle: Text(
-                        'Rolle: ${_roleLabel(u)}'
-                            '\nZuletzt online: ${_date(u.lastOnlineAt)}'
-                            '${u.disabled ? '\nDeaktiviert' : ''}',
-                      ),
-                      isThreeLine: true,
-                    ),
-                  ),
-            ],
-          );
-        },
       ),
     );
   }

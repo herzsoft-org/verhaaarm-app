@@ -26,6 +26,11 @@ For Safari testing, build and serve:
 - `flutter build web`
 - serve `build/web` via a local server
 
+## Testing
+- `make test` runs the Flutter unit tests.
+- `make test-build` runs analysis, tests, and a web build.
+- `make build-apk` creates a debug Android APK when Android SDK tooling is available.
+
 ## Configuration
 API base URL is configured via build-time config or a simple config file (decide early and keep it consistent).
 

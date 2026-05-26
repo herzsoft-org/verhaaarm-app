@@ -32,8 +32,21 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification.data || {};
 
   let targetUrl = '/';
-  if (data.notificationId) {
-    targetUrl = '/notifications';
+  switch ((data.clickTarget || '').toString()) {
+    case 'HOME_LIVE_EVENTS':
+      targetUrl = '/home';
+      break;
+    case 'ACTIONS_ARBEITSAUFTRAEGE':
+      targetUrl = '/tasks';
+      break;
+    case 'ACTIONS_BEIHAENGUNG':
+      targetUrl = '/my-fines';
+      break;
+    default:
+      if (data.notificationId) {
+        targetUrl = '/notifications';
+      }
+      break;
   }
 
   event.waitUntil(

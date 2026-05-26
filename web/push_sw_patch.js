@@ -25,7 +25,19 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification?.data && event.notification.data.url) ? event.notification.data.url : '/';
+  const data = event.notification?.data || {};
+  let url = data.url || '/';
+  switch ((data.clickTarget || '').toString()) {
+    case 'HOME_LIVE_EVENTS':
+      url = '/home';
+      break;
+    case 'ACTIONS_ARBEITSAUFTRAEGE':
+      url = '/tasks';
+      break;
+    case 'ACTIONS_BEIHAENGUNG':
+      url = '/my-fines';
+      break;
+  }
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {

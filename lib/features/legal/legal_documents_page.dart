@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -71,7 +69,7 @@ class _LegalDocumentsPageState extends State<LegalDocumentsPage> {
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: LegalDocument.all.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final doc = LegalDocument.all[index];
           final saving = _savingIds.contains(doc.id);

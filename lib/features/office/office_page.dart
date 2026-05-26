@@ -87,11 +87,12 @@ class _OfficePageState extends State<OfficePage> {
     final canPeriods = Roles.canManagePeriods(roles);
     final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
     final canTasks = Roles.canManageTasks(roles);
+    final canPaukstunden = Roles.canManagePaukstunden(roles);
     final canSeeActiveMemberStats =
         roles.contains(AppRole.admin) ||
-            roles.contains(AppRole.senior) ||
-            roles.contains(AppRole.housekeeping) ||
-            roles.contains(AppRole.treasurer);
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping) ||
+        roles.contains(AppRole.treasurer);
     final isAdmin = roles.contains(AppRole.admin);
 
     return AppScaffold(
@@ -163,16 +164,31 @@ class _OfficePageState extends State<OfficePage> {
                 ),
                 trailing: _csvBusy
                     ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.chevron_right_rounded),
                 onTap: _csvBusy ? null : _startCsvExportFlow,
               ),
             ],
           ),
           const SizedBox(height: 12),
+          if (canPaukstunden)
+            _Section(
+              title: 'Fechtwart',
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.gavel_rounded),
+                  title: const Text('Fechtwart'),
+                  subtitle: const Text('Paukstunden eintragen und verwalten'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  titleAlignment: ListTileTitleAlignment.center,
+                  onTap: () => context.push('/office/fechtwart'),
+                ),
+              ],
+            ),
+          if (canPaukstunden) const SizedBox(height: 12),
           if (canPeriods)
             _Section(
               title: 'Semester & Conventsperioden',
@@ -195,7 +211,9 @@ class _OfficePageState extends State<OfficePage> {
                   ListTile(
                     leading: const Icon(Icons.bar_chart_rounded),
                     title: const Text('Aktivenstände'),
-                    subtitle: const Text('Füxe, Aktive und Inaktive der Aktivitas'),
+                    subtitle: const Text(
+                      'Füxe, Aktive und Inaktive der Aktivitas',
+                    ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => context.push('/office/active-member-stats'),
                   ),
@@ -292,16 +310,10 @@ class _OfficePageState extends State<OfficePage> {
 
     switch (result.scope) {
       case ExportScope.period:
-        await _exportSinglePeriod(
-          periodId: result.periodId!,
-          periods: periods,
-        );
+        await _exportSinglePeriod(periodId: result.periodId!, periods: periods);
         break;
       case ExportScope.semester:
-        await _exportSemester(
-          semester: result.semester!,
-          periods: periods,
-        );
+        await _exportSemester(semester: result.semester!, periods: periods);
         break;
     }
   }
@@ -322,8 +334,9 @@ class _OfficePageState extends State<OfficePage> {
     } else {
       selectedSemester = semesters.first;
       final periodsInSemester = grouped[selectedSemester]!;
-      selectedPeriodId =
-      periodsInSemester.isNotEmpty ? periodsInSemester.first.id : null;
+      selectedPeriodId = periodsInSemester.isNotEmpty
+          ? periodsInSemester.first.id
+          : null;
     }
 
     ExportScope scope = ExportScope.period;
@@ -338,7 +351,7 @@ class _OfficePageState extends State<OfficePage> {
 
             if (scope == ExportScope.period) {
               final hasSelectedPeriod = periodsInSelectedSemester.any(
-                    (p) => p.id == selectedPeriodId,
+                (p) => p.id == selectedPeriodId,
               );
               if (!hasSelectedPeriod) {
                 selectedPeriodId = periodsInSelectedSemester.isNotEmpty
@@ -394,7 +407,7 @@ class _OfficePageState extends State<OfficePage> {
                               selectedSemester = value;
                               final updatedPeriods =
                                   grouped[selectedSemester] ??
-                                      const <ConventPeriodDto>[];
+                                  const <ConventPeriodDto>[];
                               selectedPeriodId = updatedPeriods.isNotEmpty
                                   ? updatedPeriods.first.id
                                   : null;
@@ -468,18 +481,18 @@ class _OfficePageState extends State<OfficePage> {
                 FilledButton.icon(
                   onPressed: canSubmit
                       ? () {
-                    Navigator.of(dialogContext).pop(
-                      _ExportDialogResult(
-                        scope: scope,
-                        semester: scope == ExportScope.semester
-                            ? selectedSemester
-                            : null,
-                        periodId: scope == ExportScope.period
-                            ? selectedPeriodId
-                            : null,
-                      ),
-                    );
-                  }
+                          Navigator.of(dialogContext).pop(
+                            _ExportDialogResult(
+                              scope: scope,
+                              semester: scope == ExportScope.semester
+                                  ? selectedSemester
+                                  : null,
+                              periodId: scope == ExportScope.period
+                                  ? selectedPeriodId
+                                  : null,
+                            ),
+                          );
+                        }
                       : null,
                   icon: const Icon(Icons.download_rounded),
                   label: const Text('Exportieren'),
@@ -525,14 +538,16 @@ class _OfficePageState extends State<OfficePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('CSV Export für ${_periodLabel(selectedPeriod)} bereit.'),
+          content: Text(
+            'CSV Export für ${_periodLabel(selectedPeriod)} bereit.',
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('CSV Export fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV Export fehlgeschlagen: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -553,8 +568,9 @@ class _OfficePageState extends State<OfficePage> {
     });
 
     try {
-      final periodsInSemester = periods.where((p) => p.semester == semester).toList()
-        ..sort(_comparePeriodsAsc);
+      final periodsInSemester =
+          periods.where((p) => p.semester == semester).toList()
+            ..sort(_comparePeriodsAsc);
 
       if (periodsInSemester.isEmpty) {
         throw Exception('Keine Conventsperioden für das Semester gefunden');
@@ -619,9 +635,9 @@ class _OfficePageState extends State<OfficePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('CSV Export fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV Export fehlgeschlagen: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -632,8 +648,8 @@ class _OfficePageState extends State<OfficePage> {
   }
 
   Map<String, List<ConventPeriodDto>> _groupBySemester(
-      List<ConventPeriodDto> periods,
-      ) {
+    List<ConventPeriodDto> periods,
+  ) {
     final sorted = [...periods]..sort(_comparePeriodsDesc);
     final map = <String, List<ConventPeriodDto>>{};
 
@@ -700,10 +716,7 @@ class _OfficePageState extends State<OfficePage> {
   }
 }
 
-enum ExportScope {
-  period,
-  semester,
-}
+enum ExportScope { period, semester }
 
 class _ExportDialogResult {
   final ExportScope scope;

@@ -1,6 +1,6 @@
 import 'package:jwt_decode/jwt_decode.dart';
 
-enum AppRole { admin, senior, housekeeping, treasurer, member }
+enum AppRole { admin, senior, housekeeping, fechtwart, treasurer, member }
 
 class Roles {
   static Set<AppRole> fromAccessToken(String? token) {
@@ -11,9 +11,14 @@ class Roles {
 
       // expecting something like: roles: ["ADMIN","SENIOR",...]
       final raw = payload['roles'];
-      final List<dynamic> rolesList = (raw is List) ? raw : (raw is String ? [raw] : const []);
+      final List<dynamic> rolesList = (raw is List)
+          ? raw
+          : (raw is String ? [raw] : const []);
 
-      return rolesList.map((e) => _mapRole(e.toString())).whereType<AppRole>().toSet();
+      return rolesList
+          .map((e) => _mapRole(e.toString()))
+          .whereType<AppRole>()
+          .toSet();
     } catch (_) {
       return {};
     }
@@ -27,6 +32,8 @@ class Roles {
         return AppRole.senior;
       case 'HOUSEKEEPING':
         return AppRole.housekeeping;
+      case 'FECHTWART':
+        return AppRole.fechtwart;
       case 'TREASURER':
         return AppRole.treasurer;
       case 'MEMBER':
@@ -40,6 +47,7 @@ class Roles {
     return roles.contains(AppRole.admin) ||
         roles.contains(AppRole.senior) ||
         roles.contains(AppRole.housekeeping) ||
+        roles.contains(AppRole.fechtwart) ||
         roles.contains(AppRole.treasurer);
   }
 
@@ -48,15 +56,22 @@ class Roles {
   }
 
   static bool canAcceptFineSuggestions(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
   }
 
   static bool canCreateOfficialFine(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
   }
 
   static Set<AppRole> fromRoleNames(Iterable<String> rawRoles) {
-    return rawRoles.map((e) => _mapRole(e.toString())).whereType<AppRole>().toSet();
+    return rawRoles
+        .map((e) => _mapRole(e.toString()))
+        .whereType<AppRole>()
+        .toSet();
   }
 
   // --- Events
@@ -66,7 +81,9 @@ class Roles {
   }
 
   static bool canCreateEvent(Set<AppRole> roles) {
-    return roles.contains(AppRole.admin) || roles.contains(AppRole.senior) || roles.contains(AppRole.housekeeping);
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
   }
 
   static bool canManageSessions(Set<AppRole> roles) {
@@ -102,6 +119,12 @@ class Roles {
 
   static bool canManagePeriods(Set<AppRole> roles) {
     return roles.contains(AppRole.admin);
+  }
+
+  static bool canManagePaukstunden(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.fechtwart);
   }
 
   // --- Tasks (who can see/edit/delete all)

@@ -24,7 +24,7 @@ class OtaLatest {
 }
 
 /// Compare versions like "1.0.2+4"
-/// Returns -1 if a<b, 0 if equal, +1 if a>b.
+/// Returns -1 if `a < b`, 0 if equal, +1 if `a > b`.
 int compareAppVersions(String a, String b) {
   VersionParts pa = VersionParts.parse(a);
   VersionParts pb = VersionParts.parse(b);

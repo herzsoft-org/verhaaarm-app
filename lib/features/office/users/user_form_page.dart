@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../api/api_client.dart';
 import '../../../auth/auth_store.dart';
 import '../../../auth/roles.dart';
+import '../../../common/api_error_text.dart';
 import '../../../common/format.dart';
 import '../../../common/widgets/app_scaffold.dart';
 import '../../../models/dtos.dart';
@@ -36,8 +37,7 @@ class _UserFormPageState extends State<UserFormPage> {
 
   bool _disabled = false;
 
-  // Backend: exactly one role
-  String _role = 'MEMBER';
+  Set<String> _roles = {'MEMBER'};
   String _memberStatus = MemberStatuses.defaultBackendValue;
 
   String? _lastOnlineAt;
@@ -69,6 +69,8 @@ class _UserFormPageState extends State<UserFormPage> {
         return 'Sprecher';
       case 'HOUSEKEEPING':
         return 'Schmuckwart';
+      case 'FECHTWART':
+        return 'Fechtwart';
       case 'MEMBER':
         return 'Mitglied';
       case 'ADMIN':
@@ -97,9 +99,9 @@ class _UserFormPageState extends State<UserFormPage> {
       final roles = widget.authStore.currentRoles;
       if (!Roles.canManageUsers(roles)) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keine Berechtigung.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Keine Berechtigung.')));
         context.pop();
         return;
       }
@@ -110,12 +112,12 @@ class _UserFormPageState extends State<UserFormPage> {
         _usernameCtrl.text = u.username;
         _displayNameCtrl.text = u.displayName;
         _disabled = u.disabled;
-        _role = u.roles.isNotEmpty ? u.roles.first : 'MEMBER';
+        _roles = u.roles.isNotEmpty ? u.roles.toSet() : {'MEMBER'};
         _memberStatus = u.memberStatus;
         _lastOnlineAt = u.lastOnlineAt;
       } else {
         _disabled = false;
-        _role = 'MEMBER';
+        _roles = {'MEMBER'};
         _memberStatus = MemberStatuses.defaultBackendValue;
         _lastOnlineAt = null;
       }
@@ -124,9 +126,9 @@ class _UserFormPageState extends State<UserFormPage> {
       setState(() {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Laden fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
       context.pop();
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -143,7 +145,7 @@ class _UserFormPageState extends State<UserFormPage> {
         final req = UpdateUserRequest(
           displayName: _displayNameCtrl.text.trim(),
           disabled: _disabled,
-          roles: [_role],
+          roles: _normalizedRoles(),
           memberStatus: _canChangeMemberStatus ? _memberStatus : null,
         );
 
@@ -153,7 +155,7 @@ class _UserFormPageState extends State<UserFormPage> {
           username: _usernameCtrl.text.trim(),
           displayName: _displayNameCtrl.text.trim(),
           password: _passwordCtrl.text,
-          roles: [_role],
+          roles: _normalizedRoles(),
           memberStatus: _memberStatus,
         );
 
@@ -161,18 +163,57 @@ class _UserFormPageState extends State<UserFormPage> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gespeichert.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gespeichert.')));
       context.pop(true);
     } catch (e) {
       if (!mounted) return;
+      final structured = structuredApiError(e);
+      if (structured?.code == 'REQUIRED_ROLE_MISSING') {
+        await _showRequiredRoleDialog(structured!);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
+        SnackBar(
+          content: Text(
+            userFriendlyApiError(e, fallback: 'Speichern fehlgeschlagen.'),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  List<String> _normalizedRoles() {
+    final roles = _roles.where((r) => r.trim().isNotEmpty).toSet();
+    if (roles.length > 1) roles.remove('MEMBER');
+    if (roles.isEmpty) roles.add('MEMBER');
+    return roles.toList(growable: false)..sort();
+  }
+
+  Future<void> _showRequiredRoleDialog(StructuredApiError error) {
+    final message = error.error.trim().isNotEmpty
+        ? error.error
+        : 'Diese Rolle kann nicht entfernt werden, solange es keinen anderen Rolleninhaber gibt.';
+    final action = error.suggestedAction?.trim();
+
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rolle erforderlich'),
+        content: Text(
+          action == null || action.isEmpty ? message : '$message\n\n$action',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _deleteHard() async {
@@ -184,8 +225,8 @@ class _UserFormPageState extends State<UserFormPage> {
         title: const Text('Nutzer endgültig löschen?'),
         content: Text(
           'Dieser Nutzer wird hart gelöscht.\n\n'
-              'Username: ${_usernameCtrl.text.trim()}\n'
-              'Display Name: ${_displayNameCtrl.text.trim()}',
+          'Username: ${_usernameCtrl.text.trim()}\n'
+          'Display Name: ${_displayNameCtrl.text.trim()}',
         ),
         actions: [
           TextButton(
@@ -208,15 +249,15 @@ class _UserFormPageState extends State<UserFormPage> {
       await widget.api.deleteUserHard(widget.userId!);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nutzer gelöscht.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nutzer gelöscht.')));
       context.pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Löschen fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -239,211 +280,216 @@ class _UserFormPageState extends State<UserFormPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            Card(
-              child: Padding(
+              key: _formKey,
+              child: ListView(
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _usernameCtrl,
-                      enabled: !_isEdit,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        hintText: 'mueller / peter-mueller',
-                      ),
-                      validator: (v) {
-                        final s = (v ?? '').trim();
-                        if (s.isEmpty) return 'Pflichtfeld';
-                        if (!_isEdit && s.length < 2) return 'Zu kurz';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _displayNameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Display Name',
-                      ),
-                      validator: (v) => ((v ?? '').trim().isEmpty)
-                          ? 'Pflichtfeld'
-                          : null,
-                    ),
-                    if (!_isEdit) ...[
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _passwordCtrl,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Initiales Passwort',
-                        ),
-                        validator: (v) =>
-                        ((v ?? '').isEmpty) ? 'Pflichtfeld' : null,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            if (_isEdit) ...[
-              const SizedBox(height: 12),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.schedule_rounded),
-                  title: const Text('Zuletzt online'),
-                  subtitle: Text(_date(_lastOnlineAt)),
-                  titleAlignment: ListTileTitleAlignment.center,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: DropdownButtonFormField<String>(
-                  initialValue: MemberStatuses.backendValues.contains(_memberStatus)
-                      ? _memberStatus
-                      : MemberStatuses.defaultBackendValue,
-                  decoration: const InputDecoration(
-                    labelText: 'Mitgliedsstatus',
-                  ),
-                  items: MemberStatuses.backendValues
-                      .map(
-                        (value) => DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(MemberStatuses.label(value)),
-                    ),
-                  )
-                      .toList(),
-                  onChanged: canChangeMemberStatus
-                      ? (value) {
-                    if (value == null) return;
-                    setState(() => _memberStatus = value);
-                  }
-                      : null,
-                )
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Rolle',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Hinweis: Es muss immer mindestens einen Admin, Sprecher und Schmuckwart geben.',
-                    ),
-                    const SizedBox(height: 12),
-                    RadioGroup<String>(
-                      groupValue: _role,
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() => _role = v);
-                      },
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
-                          _RoleRadio(
-                            label: _roleLabelUi('ADMIN'),
-                            value: 'ADMIN',
+                          TextFormField(
+                            controller: _usernameCtrl,
+                            enabled: !_isEdit,
+                            decoration: const InputDecoration(
+                              labelText: 'Username',
+                              hintText: 'mueller / peter-mueller',
+                            ),
+                            validator: (v) {
+                              final s = (v ?? '').trim();
+                              if (s.isEmpty) return 'Pflichtfeld';
+                              if (!_isEdit && s.length < 2) return 'Zu kurz';
+                              return null;
+                            },
                           ),
-                          _RoleRadio(
-                            label: _roleLabelUi('SENIOR'),
-                            value: 'SENIOR',
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _displayNameCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Display Name',
+                            ),
+                            validator: (v) => ((v ?? '').trim().isEmpty)
+                                ? 'Pflichtfeld'
+                                : null,
                           ),
-                          _RoleRadio(
-                            label: _roleLabelUi('HOUSEKEEPING'),
-                            value: 'HOUSEKEEPING',
+                          if (!_isEdit) ...[
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _passwordCtrl,
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Initiales Passwort',
+                              ),
+                              validator: (v) =>
+                                  ((v ?? '').isEmpty) ? 'Pflichtfeld' : null,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_isEdit) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.schedule_rounded),
+                        title: const Text('Zuletzt online'),
+                        subtitle: Text(_date(_lastOnlineAt)),
+                        titleAlignment: ListTileTitleAlignment.center,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: DropdownButtonFormField<String>(
+                        initialValue:
+                            MemberStatuses.backendValues.contains(_memberStatus)
+                            ? _memberStatus
+                            : MemberStatuses.defaultBackendValue,
+                        decoration: const InputDecoration(
+                          labelText: 'Mitgliedsstatus',
+                        ),
+                        items: MemberStatuses.backendValues
+                            .map(
+                              (value) => DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(MemberStatuses.label(value)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: canChangeMemberStatus
+                            ? (value) {
+                                if (value == null) return;
+                                setState(() => _memberStatus = value);
+                              }
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Rollen',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          _RoleRadio(
-                            label: _roleLabelUi('TREASURER'),
-                            value: 'TREASURER',
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Hinweis: Es muss immer mindestens einen Sprecher, Schmuckwart, Fechtwart und Kassenwart geben, sofern die Rolle erforderlich ist.',
                           ),
-                          _RoleRadio(
-                            label: _roleLabelUi('MEMBER'),
-                            value: 'MEMBER',
+                          const SizedBox(height: 12),
+                          Column(
+                            children: [
+                              for (final role in const [
+                                'ADMIN',
+                                'SENIOR',
+                                'HOUSEKEEPING',
+                                'FECHTWART',
+                                'TREASURER',
+                                'MEMBER',
+                              ])
+                                _RoleCheckbox(
+                                  label: _roleLabelUi(role),
+                                  selected: _roles.contains(role),
+                                  onChanged: (selected) {
+                                    setState(() {
+                                      if (selected == true) {
+                                        _roles.add(role);
+                                        if (role != 'MEMBER') {
+                                          _roles.remove('MEMBER');
+                                        }
+                                      } else {
+                                        _roles.remove(role);
+                                        if (_roles.isEmpty) {
+                                          _roles.add('MEMBER');
+                                        }
+                                      }
+                                    });
+                                  },
+                                ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_isEdit)
-              Card(
-                child: SwitchListTile(
-                  title: const Text('Deaktiviert'),
-                  subtitle: const Text(
-                    'Deaktivierte Nutzer können sich nicht einloggen',
                   ),
-                  value: _disabled,
-                  onChanged: (v) => setState(() => _disabled = v),
-                ),
-              ),
-            const SizedBox(height: 12),
-            if (_isEdit)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  onPressed: () =>
-                      context.push('/office/users/${widget.userId}/password'),
-                  icon: const Icon(Icons.password_rounded),
-                  label: const Text('Passwort setzen'),
-                ),
-              ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _loading ? null : _save,
-                icon: const Icon(Icons.save_rounded),
-                label: const Text('Speichern'),
+                  const SizedBox(height: 12),
+                  if (_isEdit)
+                    Card(
+                      child: SwitchListTile(
+                        title: const Text('Deaktiviert'),
+                        subtitle: const Text(
+                          'Deaktivierte Nutzer können sich nicht einloggen',
+                        ),
+                        value: _disabled,
+                        onChanged: (v) => setState(() => _disabled = v),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  if (_isEdit)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => context.push(
+                          '/office/users/${widget.userId}/password',
+                        ),
+                        icon: const Icon(Icons.password_rounded),
+                        label: const Text('Passwort setzen'),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _loading ? null : _save,
+                      icon: const Icon(Icons.save_rounded),
+                      label: const Text('Speichern'),
+                    ),
+                  ),
+                  if (_isEdit) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: _loading ? null : _deleteHard,
+                        icon: const Icon(Icons.delete_forever_rounded),
+                        label: const Text('Nutzer löschen'),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (_isEdit) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  onPressed: _loading ? null : _deleteHard,
-                  icon: const Icon(Icons.delete_forever_rounded),
-                  label: const Text('Nutzer löschen'),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }
 
-class _RoleRadio extends StatelessWidget {
+class _RoleCheckbox extends StatelessWidget {
   final String label;
-  final String value;
+  final bool selected;
+  final ValueChanged<bool?> onChanged;
 
-  const _RoleRadio({
+  const _RoleCheckbox({
     required this.label,
-    required this.value,
+    required this.selected,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return RadioListTile<String>(
+    return CheckboxListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(label),
-      value: value,
-      toggleable: false,
+      value: selected,
+      onChanged: onChanged,
+      controlAffinity: ListTileControlAffinity.leading,
     );
   }
 }

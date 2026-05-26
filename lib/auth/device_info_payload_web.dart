@@ -7,13 +7,14 @@ Future<Map<String, dynamic>?> collectDeviceInfoPayload() async {
     final ua = web.userAgent?.trim();
     final browserName = _browserName(web.browserName.name, ua);
     final browserVersion = _browserVersion(browserName, ua);
+    final userAgent = ua != null && ua.isNotEmpty ? ua : null;
 
     return {
       'appType': 'WEB',
       'browserName': browserName,
-      if (browserVersion != null) 'browserVersion': browserVersion,
+      'browserVersion': ?browserVersion,
       'osName': _osNameFromUserAgent(ua),
-      if (ua != null && ua.isNotEmpty) 'userAgent': ua,
+      'userAgent': ?userAgent,
     };
   } catch (_) {
     return const {'appType': 'WEB'};

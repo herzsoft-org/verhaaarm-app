@@ -599,7 +599,9 @@ class _FineFormPageState extends State<FineFormPage> {
                           // FIX: ensure the error disappears immediately once text is entered
                           autovalidateMode: AutovalidateMode.onUserInteraction,
                           validator: (v) {
-                            if ((v ?? '').trim().isEmpty) return 'Bitte Grund angeben';
+                            if ((v ?? '').trim().isEmpty) {
+                              return 'Bitte Grund angeben';
+                            }
                             return null;
                           },
                         ),
@@ -622,13 +624,21 @@ class _FineFormPageState extends State<FineFormPage> {
                           validator: (v) {
                             if (_useCatalog) {
                               final def = _selectedCatalogItem?.defaultAmountCents;
-                              if (def == null) return 'Katalogbetrag fehlt (Default Betrag).';
-                              if (def < 0) return 'Bitte gültigen Betrag angeben.';
+                              if (def == null) {
+                                return 'Katalogbetrag fehlt (Default Betrag).';
+                              }
+                              if (def < 0) {
+                                return 'Bitte gültigen Betrag angeben.';
+                              }
                               return null;
                             }
                             final cents = Format.eurTextToCents(v ?? '');
-                            if (cents == null) return 'Bitte gültigen Betrag angeben.';
-                            if (cents < 0) return 'Bitte gültigen Betrag angeben.';
+                            if (cents == null) {
+                              return 'Bitte gültigen Betrag angeben.';
+                            }
+                            if (cents < 0) {
+                              return 'Bitte gültigen Betrag angeben.';
+                            }
                             return null;
                           },
                         ),
@@ -716,10 +726,9 @@ class _CatalogPickerField extends FormField<FineCatalogItemDto?> {
     required bool enabled,
     required FineCatalogItemDto? value,
     required VoidCallback onTap,
-    String? Function(FineCatalogItemDto?)? validator,
+    super.validator,
   }) : super(
     initialValue: value,
-    validator: validator,
     builder: (state) {
       final theme = Theme.of(state.context);
       final text = value?.title ?? 'Beihängungsgrund';
@@ -850,7 +859,7 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
                     : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {
                     final c = filtered[i];
                     final selected = widget.initial?.id == c.id;

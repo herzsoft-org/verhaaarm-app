@@ -37,6 +37,8 @@ class _UsersPageState extends State<UsersPage> {
         return 'Sprecher';
       case 'HOUSEKEEPING':
         return 'Schmuckwart';
+      case 'FECHTWART':
+        return 'Fechtwart';
       case 'MEMBER':
         return 'Mitglied';
       case 'ADMIN':
@@ -86,13 +88,15 @@ class _UsersPageState extends State<UsersPage> {
       final roles = widget.authStore.currentRoles;
       if (!Roles.canManageUsers(roles)) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keine Berechtigung.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Keine Berechtigung.')));
         return;
       }
 
-      final users = await widget.api.listUsersAdmin(online: _backendOnlineFilter);
+      final users = await widget.api.listUsersAdmin(
+        online: _backendOnlineFilter,
+      );
       final filtered = _applyClientOnlineFilter(users);
 
       filtered.sort((a, b) {
@@ -133,30 +137,36 @@ class _UsersPageState extends State<UsersPage> {
         final start = DateTime(now.year, now.month, now.day);
         final end = start.add(const Duration(days: 1));
 
-        return users.where((u) {
-          final dt = _parseDate(u.lastOnlineAt);
-          if (dt == null) return false;
+        return users
+            .where((u) {
+              final dt = _parseDate(u.lastOnlineAt);
+              if (dt == null) return false;
 
-          return !dt.isBefore(start) && dt.isBefore(end);
-        }).toList(growable: false);
+              return !dt.isBefore(start) && dt.isBefore(end);
+            })
+            .toList(growable: false);
 
       case _OnlineFilter.year:
         final now = DateTime.now();
         final start = DateTime(now.year, 1, 1);
         final end = DateTime(now.year + 1, 1, 1);
 
-        return users.where((u) {
-          final dt = _parseDate(u.lastOnlineAt);
-          if (dt == null) return false;
+        return users
+            .where((u) {
+              final dt = _parseDate(u.lastOnlineAt);
+              if (dt == null) return false;
 
-          return !dt.isBefore(start) && dt.isBefore(end);
-        }).toList(growable: false);
+              return !dt.isBefore(start) && dt.isBefore(end);
+            })
+            .toList(growable: false);
 
       case _OnlineFilter.never:
-        return users.where((u) {
-          final raw = u.lastOnlineAt;
-          return raw == null || raw.trim().isEmpty;
-        }).toList(growable: false);
+        return users
+            .where((u) {
+              final raw = u.lastOnlineAt;
+              return raw == null || raw.trim().isEmpty;
+            })
+            .toList(growable: false);
     }
   }
 
@@ -165,9 +175,9 @@ class _UsersPageState extends State<UsersPage> {
     return DateTime.tryParse(iso)?.toLocal();
   }
 
-  String _singleRoleLabel(UserDto u) {
+  String _roleLabel(UserDto u) {
     if (u.roles.isEmpty) return '—';
-    return _roleLabelUi(u.roles.first);
+    return u.roles.map(_roleLabelUi).join(', ');
   }
 
   String _date(String? iso) {
@@ -185,10 +195,7 @@ class _UsersPageState extends State<UsersPage> {
 
     final result = await showSearch<String?>(
       context: context,
-      delegate: _UsersSearchDelegate(
-        users: _users,
-        initialQuery: _searchQuery,
-      ),
+      delegate: _UsersSearchDelegate(users: _users, initialQuery: _searchQuery),
     );
 
     controller.dispose();
@@ -244,59 +251,52 @@ class _UsersPageState extends State<UsersPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          _UsersFilterBar(
-            value: _onlineFilter,
-            count: filteredUsers.length,
-            onChanged: (value) {
-              setState(() => _onlineFilter = value);
-              _load();
-            },
-          ),
-          const SizedBox(height: 8),
-          if (filteredUsers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: Text('Keine Nutzer gefunden.'),
-            ),
-          for (final u in filteredUsers)
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  u.disabled ? Icons.block_rounded : Icons.person_rounded,
+              padding: const EdgeInsets.all(12),
+              children: [
+                _UsersFilterBar(
+                  value: _onlineFilter,
+                  count: filteredUsers.length,
+                  onChanged: (value) {
+                    setState(() => _onlineFilter = value);
+                    _load();
+                  },
                 ),
-                titleAlignment: ListTileTitleAlignment.center,
-                title: Text('${u.displayName} (${u.username})'),
-                subtitle: Text(
-                  _showLastOnline
-                      ? 'Rolle: ${_singleRoleLabel(u)}'
-                      '\nStatus: ${MemberStatuses.label(u.memberStatus)}'
-                      '\nZuletzt online: ${_date(u.lastOnlineAt)}'
-                      '${u.disabled ? '\nDeaktiviert' : ''}'
-                      : 'Rolle: ${_singleRoleLabel(u)}'
-                      '\nStatus: ${MemberStatuses.label(u.memberStatus)}'
-                      '${u.disabled ? '\nDeaktiviert' : ''}',
-                ),
-                isThreeLine: true,
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _openEditUser(u),
-              ),
+                const SizedBox(height: 8),
+                if (filteredUsers.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('Keine Nutzer gefunden.'),
+                  ),
+                for (final u in filteredUsers)
+                  Card(
+                    child: ListTile(
+                      leading: Icon(
+                        u.disabled ? Icons.block_rounded : Icons.person_rounded,
+                      ),
+                      titleAlignment: ListTileTitleAlignment.center,
+                      title: Text('${u.displayName} (${u.username})'),
+                      subtitle: Text(
+                        _showLastOnline
+                            ? 'Rollen: ${_roleLabel(u)}'
+                                  '\nStatus: ${MemberStatuses.label(u.memberStatus)}'
+                                  '\nZuletzt online: ${_date(u.lastOnlineAt)}'
+                                  '${u.disabled ? '\nDeaktiviert' : ''}'
+                            : 'Rollen: ${_roleLabel(u)}'
+                                  '\nStatus: ${MemberStatuses.label(u.memberStatus)}'
+                                  '${u.disabled ? '\nDeaktiviert' : ''}',
+                      ),
+                      isThreeLine: true,
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => _openEditUser(u),
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
 
-enum _OnlineFilter {
-  all,
-  today,
-  week,
-  month,
-  year,
-  never,
-}
+enum _OnlineFilter { all, today, week, month, year, never }
 
 extension _OnlineFilterUi on _OnlineFilter {
   String get label {
@@ -363,10 +363,7 @@ class _UsersFilterBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              '$count',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('$count', style: theme.textTheme.titleMedium),
           ],
         ),
       ),
@@ -377,10 +374,7 @@ class _UsersFilterBar extends StatelessWidget {
 class _UsersSearchDelegate extends SearchDelegate<String?> {
   final List<UserDto> users;
 
-  _UsersSearchDelegate({
-    required this.users,
-    String initialQuery = '',
-  }) {
+  _UsersSearchDelegate({required this.users, String initialQuery = ''}) {
     query = initialQuery;
   }
 
@@ -400,7 +394,8 @@ class _UsersSearchDelegate extends SearchDelegate<String?> {
   }
 
   @override
-  String get searchFieldLabel => 'Nach Username, Anzeigename oder Status suchen';
+  String get searchFieldLabel =>
+      'Nach Username, Anzeigename oder Status suchen';
 
   @override
   List<Widget>? buildActions(BuildContext context) {
@@ -451,7 +446,7 @@ class _UsersSearchDelegate extends SearchDelegate<String?> {
               title: Text('${u.displayName} (${u.username})'),
               subtitle: Text(
                 'Status: ${MemberStatuses.label(u.memberStatus)}'
-                    '${u.disabled ? '\nDeaktiviert' : ''}',
+                '${u.disabled ? '\nDeaktiviert' : ''}',
               ),
               isThreeLine: u.disabled,
               trailing: const Icon(Icons.chevron_right_rounded),

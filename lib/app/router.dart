@@ -8,7 +8,11 @@ import '../api/api_client.dart';
 import '../auth/auth_store.dart';
 import '../auth/login_page.dart';
 import '../features/home/home_page.dart';
+import '../features/actions/actions_page.dart';
 import '../features/profile/profile_page.dart';
+import '../features/paukstunden/my_paukstunden_page.dart';
+import '../features/paukstunden/paukstunde_form_page.dart';
+import '../features/paukstunden/fechtwart_page.dart';
 
 import '../features/fines/fines_list_page.dart';
 import '../features/fines/fine_detail_page.dart';
@@ -43,6 +47,7 @@ import '../features/office/tasks/office_tasks_page.dart';
 
 import '../features/notifications/notifications_page.dart';
 import '../notifications/notification_center.dart';
+import '../notifications/notification_router.dart';
 import '../push/push_manager.dart';
 import '../push/push_fcm.dart' show setPushTapHandler;
 
@@ -64,11 +69,7 @@ GoRouter? _appRouter;
 GoRouter get appRouter => _appRouter!;
 
 Widget _noAccessPage() {
-  return const Scaffold(
-    body: Center(
-      child: Text('Kein Zugriff.'),
-    ),
-  );
+  return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
 }
 
 Set<AppRole> _roles(AuthStore authStore) {
@@ -78,17 +79,37 @@ Set<AppRole> _roles(AuthStore authStore) {
 bool _canAccessLocation(String location, Set<AppRole> roles) {
   if (location == '/login') return true;
   if (location == '/home') return true;
+  if (location == '/actions' || location.startsWith('/actions/')) return true;
   if (location == '/profile' || location.startsWith('/profile/')) return true;
-  if (location == '/notifications' || location.startsWith('/notifications/')) return true;
-  if (location == '/legal-documents' || location.startsWith('/legal-documents/')) return true;
-  if (location == '/convent-protocols' || location.startsWith('/convent-protocols/')) return true;
+  if (location == '/notifications' || location.startsWith('/notifications/')) {
+    return true;
+  }
+  if (location == '/legal-documents' ||
+      location.startsWith('/legal-documents/')) {
+    return true;
+  }
+  if (location == '/convent-protocols' ||
+      location.startsWith('/convent-protocols/')) {
+    return true;
+  }
   if (location == '/events' || location.startsWith('/events/')) return true;
   if (location == '/tasks' || location.startsWith('/tasks/')) return true;
   if (location == '/my-fines' || location.startsWith('/my-fines/')) return true;
-  if (location == '/my-fine-suggestions' || location.startsWith('/my-fine-suggestions/')) return true;
+  if (location == '/my-fine-suggestions' ||
+      location.startsWith('/my-fine-suggestions/')) {
+    return true;
+  }
   if (location == '/suggestions/new') return true;
   if (location.startsWith('/suggestions/')) return true;
-  if (location == '/live-events' || location.startsWith('/live-events/')) return true;
+  if (location == '/live-events' || location.startsWith('/live-events/')) {
+    return true;
+  }
+  if (location == '/paukstunden/me' || location == '/paukstunden/new') {
+    return true;
+  }
+  if (location.startsWith('/office/active-member-stats')) {
+    return true;
+  }
 
   if (location == '/fines' || location.startsWith('/fines/')) {
     if (location == '/fines/new') return Roles.canCreateOfficialFine(roles);
@@ -96,6 +117,10 @@ bool _canAccessLocation(String location, Set<AppRole> roles) {
   }
 
   if (location == '/office') return Roles.canAccessOffice(roles);
+
+  if (location.startsWith('/office/fechtwart')) {
+    return Roles.canManagePaukstunden(roles);
+  }
 
   if (location.startsWith('/office/fine-suggestions')) {
     return Roles.canAcceptFineSuggestions(roles);
@@ -119,13 +144,6 @@ bool _canAccessLocation(String location, Set<AppRole> roles) {
 
   if (location.startsWith('/office/users')) {
     return Roles.canManageUsers(roles);
-  }
-
-  if (location.startsWith('/office/active-member-stats')) {
-    return roles.contains(AppRole.admin) ||
-        roles.contains(AppRole.senior) ||
-        roles.contains(AppRole.housekeeping) ||
-        roles.contains(AppRole.treasurer);
   }
 
   if (location.startsWith('/office/catalog')) {
@@ -212,8 +230,23 @@ Future<GoRouter> buildRouter() async {
         builder: (context, state) => HomePage(api: api, authStore: authStore),
       ),
       GoRoute(
+        path: '/actions',
+        builder: (context, state) =>
+            ActionsPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
         path: '/profile',
-        builder: (context, state) => ProfilePage(api: api, authStore: authStore),
+        builder: (context, state) =>
+            ProfilePage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/paukstunden/me',
+        builder: (context, state) => MyPaukstundenPage(api: api),
+      ),
+      GoRoute(
+        path: '/paukstunden/new',
+        builder: (context, state) =>
+            PaukstundeFormPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/profile/sessions',
@@ -221,7 +254,8 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/notifications',
-        builder: (context, state) => NotificationsPage(api: api, authStore: authStore),
+        builder: (context, state) =>
+            NotificationsPage(api: api, authStore: authStore),
       ),
 
       GoRoute(
@@ -240,7 +274,9 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/tasks/:id/edit',
         builder: (context, state) {
-          final TaskDto? t = state.extra is TaskDto ? state.extra as TaskDto : null;
+          final TaskDto? t = state.extra is TaskDto
+              ? state.extra as TaskDto
+              : null;
 
           return TaskFormPage(
             api: api,
@@ -293,7 +329,8 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/events/new',
-        builder: (context, state) => EventFormPage(api: api, authStore: authStore),
+        builder: (context, state) =>
+            EventFormPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/events/:id/edit',
@@ -379,20 +416,19 @@ Future<GoRouter> buildRouter() async {
           final roles = _roles(authStore);
           if (!Roles.canAcceptFineSuggestions(roles)) return _noAccessPage();
 
-          return OfficeFineSuggestionsPage(
-            api: api,
-            authStore: authStore,
-          );
+          return OfficeFineSuggestionsPage(api: api, authStore: authStore);
         },
       ),
 
       GoRoute(
         path: '/live-events',
-        builder: (context, state) => LiveEventsPage(api: api, authStore: authStore),
+        builder: (context, state) =>
+            LiveEventsPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/live-events/new',
-        builder: (context, state) => LiveEventFormPage(api: api, authStore: authStore),
+        builder: (context, state) =>
+            LiveEventFormPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/live-events/:id/edit',
@@ -410,6 +446,28 @@ Future<GoRouter> buildRouter() async {
           if (!Roles.canAccessOffice(roles)) return _noAccessPage();
 
           return OfficePage(api: api, authStore: authStore);
+        },
+      ),
+      GoRoute(
+        path: '/office/fechtwart',
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManagePaukstunden(roles)) return _noAccessPage();
+
+          return FechtwartPage(api: api, authStore: authStore);
+        },
+      ),
+      GoRoute(
+        path: '/office/fechtwart/paukstunden/new',
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManagePaukstunden(roles)) return _noAccessPage();
+
+          return PaukstundeFormPage(
+            api: api,
+            authStore: authStore,
+            fechtwartMode: true,
+          );
         },
       ),
 
@@ -474,7 +532,9 @@ Future<GoRouter> buildRouter() async {
           final roles = _roles(authStore);
           if (!Roles.canManageTasks(roles)) return _noAccessPage();
 
-          final TaskDto? t = state.extra is TaskDto ? state.extra as TaskDto : null;
+          final TaskDto? t = state.extra is TaskDto
+              ? state.extra as TaskDto
+              : null;
 
           return TaskFormPage(
             api: api,
@@ -578,15 +638,6 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/office/active-member-stats',
         builder: (context, state) {
-          final roles = _roles(authStore);
-          final allowed =
-              roles.contains(AppRole.admin) ||
-                  roles.contains(AppRole.senior) ||
-                  roles.contains(AppRole.housekeeping) ||
-                  roles.contains(AppRole.treasurer);
-
-          if (!allowed) return _noAccessPage();
-
           return ActiveMemberStatsPage(api: api, authStore: authStore);
         },
       ),
@@ -635,28 +686,7 @@ Future<GoRouter> buildRouter() async {
   _appRouter = router;
 
   // IMPORTANT: must be after _appRouter is set
-  setPushTapHandler((data) async {
-    final fineId = (data['fineId'] ?? '').trim();
-    final taskId = (data['taskId'] ?? '').trim();
-
-    // Prefer server "type" (matches NotificationDto.type like FINE_CREATED)
-    final type = (data['type'] ?? data['notificationType'] ?? '').toUpperCase();
-
-    // Tasks: always go to tasks list
-    if (taskId.isNotEmpty || type.contains('TASK')) {
-      appRouter.go('/tasks');
-      return;
-    }
-
-    // Fines: always go to my fines (as requested)
-    if (fineId.isNotEmpty || type.contains('FINE')) {
-      appRouter.go('/my-fines');
-      return;
-    }
-
-    // Fallback
-    appRouter.go('/notifications');
-  });
+  setPushTapHandler((data) => routeNotificationClick(appRouter, data));
 
   return router;
 }
