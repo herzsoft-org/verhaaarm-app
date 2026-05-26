@@ -125,8 +125,13 @@ class _EventFormPageState extends State<EventFormPage> {
 
     if (!mounted) return;
     setState(() {
-      _startsAtLocal =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _startsAtLocal = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -186,9 +191,9 @@ class _EventFormPageState extends State<EventFormPage> {
       context.pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -225,9 +230,9 @@ class _EventFormPageState extends State<EventFormPage> {
       context.pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Löschen fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -359,11 +364,12 @@ class _EventFormPageState extends State<EventFormPage> {
     final derivedText = (derived == null)
         ? 'Unbekannt'
         : '${derived.semester} · ${Format.dateShort(derived.startAt)} – ${Format.dateShort(derived.endAt)}'
-        '${derived.locked ? ' · locked' : ''}'
-        '${derived.active ? ' · aktiv' : ''}';
+              '${derived.locked ? ' · locked' : ''}'
+              '${derived.active ? ' · aktiv' : ''}';
 
     return AppScaffold(
       title: widget.eventId == null ? 'Neuer Termin' : 'Termin bearbeiten',
+      onRefresh: _load,
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -375,203 +381,215 @@ class _EventFormPageState extends State<EventFormPage> {
           ? const Center(child: CircularProgressIndicator())
           : (!allowed)
           ? const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-              'Keine Berechtigung (nur Senior/Housekeeping/Admin).'),
-        ),
-      )
-          : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Details',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading:
-                    const Icon(Icons.calendar_month_rounded),
-                    title: const Text('Conventsperiode (automatisch)'),
-                    subtitle: Text(derivedText),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _title,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(
-                      labelText: 'Titel',
-                      prefixIcon: Icon(Icons.title_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.schedule_rounded),
-                    title: const Text('Datum / Uhrzeit'),
-                    subtitle: Text(startsAtText),
-                    trailing: FilledButton.tonal(
-                      onPressed: _saving ? null : _pickDateTime,
-                      child: const Text('Wählen'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Veranstaltungstyp',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      SegmentedButton<EventKind>(
-                        segments: const [
-                          ButtonSegment<EventKind>(
-                            value: EventKind.main,
-                            label: Text('Sempro'),
-                            icon: Icon(Icons.event_rounded),
-                          ),
-                          ButtonSegment<EventKind>(
-                            value: EventKind.secondary,
-                            label: Text('Wochenplan (Aufbau, Aufräumen...)'),
-                            icon: Icon(Icons.event_note_rounded),
-                          ),
-                        ],
-                        selected: {_eventKind},
-                        onSelectionChanged: _saving
-                            ? null
-                            : (selection) {
-                          setState(() => _eventKind = selection.first);
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _eventKind.labelDe,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _mandatory,
-                    onChanged: _saving
-                        ? null
-                        : (v) => setState(() => _mandatory = v),
-                    title: const Text('Pflichttermin'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_existing != null) ...[
-            const SizedBox(height: 12),
-            Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Keine Berechtigung (nur Senior/Housekeeping/Admin).',
+                ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Anwesenheit',
+                          'Details',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        const SizedBox(height: 12),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.calendar_month_rounded),
+                          title: const Text('Conventsperiode (automatisch)'),
+                          subtitle: Text(derivedText),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _title,
+                          enabled: !_saving,
+                          decoration: const InputDecoration(
+                            labelText: 'Titel',
+                            prefixIcon: Icon(Icons.title_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.schedule_rounded),
+                          title: const Text('Datum / Uhrzeit'),
+                          subtitle: Text(startsAtText),
+                          trailing: FilledButton.tonal(
+                            onPressed: _saving ? null : _pickDateTime,
+                            child: const Text('Wählen'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FilledButton.tonalIcon(
-                              onPressed: _saving
-                                  ? null
-                                  : () => _addAttendance(AttendanceStatus.absent),
-                              icon: const Icon(Icons.person_off_rounded),
-                              label: const Text('Bbr. abwesend?'),
+                            Text(
+                              'Veranstaltungstyp',
+                              style: Theme.of(context).textTheme.labelLarge,
                             ),
-                            FilledButton.tonalIcon(
-                              onPressed: _saving
+                            const SizedBox(height: 8),
+                            SegmentedButton<EventKind>(
+                              segments: const [
+                                ButtonSegment<EventKind>(
+                                  value: EventKind.main,
+                                  label: Text('Sempro'),
+                                  icon: Icon(Icons.event_rounded),
+                                ),
+                                ButtonSegment<EventKind>(
+                                  value: EventKind.secondary,
+                                  label: Text(
+                                    'Wochenplan (Aufbau, Aufräumen...)',
+                                  ),
+                                  icon: Icon(Icons.event_note_rounded),
+                                ),
+                              ],
+                              selected: {_eventKind},
+                              onSelectionChanged: _saving
                                   ? null
-                                  : () => _addAttendance(AttendanceStatus.late),
-                              icon: const Icon(Icons.timer_rounded),
-                              label: const Text('Bbr. zu spät?'),
+                                  : (selection) {
+                                      setState(
+                                        () => _eventKind = selection.first,
+                                      );
+                                    },
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _eventKind.labelDe,
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
                         ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _mandatory,
+                          onChanged: _saving
+                              ? null
+                              : (v) => setState(() => _mandatory = v),
+                          title: const Text('Pflichttermin'),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    if (_attendance.isEmpty)
-                      Text(
-                        'Keine Bbr. abwesend oder zu spät :)',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    for (final a in _attendance)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Card(
-                          elevation: 0,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                          child: ListTile(
-                            leading: Icon(
-                              a.status == AttendanceStatus.absent
-                                  ? Icons.person_off_rounded
-                                  : Icons.timer_rounded,
-                            ),
-                            title: Text(_userLabel(a.userId)),
-                            subtitle: Text(
-                              a.status == AttendanceStatus.absent
-                                  ? 'ABSENT'
-                                  : 'LATE · ${a.lateMinutes ?? 0} min',
-                            ),
-                            trailing: IconButton(
-                              tooltip: 'Entfernen',
-                              onPressed: _saving
-                                  ? null
-                                  : () => _removeAttendance(a.userId),
-                              icon: const Icon(Icons.delete_outline_rounded),
-                            ),
+                  ),
+                ),
+                if (_existing != null) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Anwesenheit',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  FilledButton.tonalIcon(
+                                    onPressed: _saving
+                                        ? null
+                                        : () => _addAttendance(
+                                            AttendanceStatus.absent,
+                                          ),
+                                    icon: const Icon(Icons.person_off_rounded),
+                                    label: const Text('Bbr. abwesend?'),
+                                  ),
+                                  FilledButton.tonalIcon(
+                                    onPressed: _saving
+                                        ? null
+                                        : () => _addAttendance(
+                                            AttendanceStatus.late,
+                                          ),
+                                    icon: const Icon(Icons.timer_rounded),
+                                    label: const Text('Bbr. zu spät?'),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 12),
+                          if (_attendance.isEmpty)
+                            Text(
+                              'Keine Bbr. abwesend oder zu spät :)',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          for (final a in _attendance)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Card(
+                                elevation: 0,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                                child: ListTile(
+                                  leading: Icon(
+                                    a.status == AttendanceStatus.absent
+                                        ? Icons.person_off_rounded
+                                        : Icons.timer_rounded,
+                                  ),
+                                  title: Text(_userLabel(a.userId)),
+                                  subtitle: Text(
+                                    a.status == AttendanceStatus.absent
+                                        ? 'ABSENT'
+                                        : 'LATE · ${a.lateMinutes ?? 0} min',
+                                  ),
+                                  trailing: IconButton(
+                                    tooltip: 'Entfernen',
+                                    onPressed: _saving
+                                        ? null
+                                        : () => _removeAttendance(a.userId),
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _save,
+                        icon: const Icon(Icons.save_rounded),
+                        label: Text(
+                          _existing == null ? 'Erstellen' : 'Speichern',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    if (_existing != null)
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: _saving ? null : _delete,
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: const Text('Löschen'),
                         ),
                       ),
                   ],
                 ),
-              ),
+              ],
             ),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: const Icon(Icons.save_rounded),
-                  label: Text(_existing == null
-                      ? 'Erstellen'
-                      : 'Speichern'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (_existing != null)
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: _saving ? null : _delete,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: const Text('Löschen'),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

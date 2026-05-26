@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'main_tab_shell.dart';
 import 'route_observer.dart';
 import 'dart:async';
 
@@ -7,9 +8,6 @@ import '../common/settings/app_settings_store.dart';
 import '../api/api_client.dart';
 import '../auth/auth_store.dart';
 import '../auth/login_page.dart';
-import '../features/home/home_page.dart';
-import '../features/actions/actions_page.dart';
-import '../features/profile/profile_page.dart';
 import '../features/paukstunden/my_paukstunden_page.dart';
 import '../features/paukstunden/paukstunde_form_page.dart';
 import '../features/paukstunden/fechtwart_page.dart';
@@ -227,17 +225,18 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/home',
-        builder: (context, state) => HomePage(api: api, authStore: authStore),
+        builder: (context, state) =>
+            MainTabShell(api: api, authStore: authStore, initialIndex: 0),
       ),
       GoRoute(
         path: '/actions',
         builder: (context, state) =>
-            ActionsPage(api: api, authStore: authStore),
+            MainTabShell(api: api, authStore: authStore, initialIndex: 1),
       ),
       GoRoute(
         path: '/profile',
         builder: (context, state) =>
-            ProfilePage(api: api, authStore: authStore),
+            MainTabShell(api: api, authStore: authStore, initialIndex: 2),
       ),
       GoRoute(
         path: '/paukstunden/me',

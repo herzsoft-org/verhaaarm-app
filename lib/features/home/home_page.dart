@@ -24,8 +24,16 @@ import '../../update/ota_update_banner.dart';
 class HomePage extends StatefulWidget {
   final ApiClient api;
   final AuthStore authStore;
+  final bool showBottomNavigationBar;
+  final String? locationOverride;
 
-  const HomePage({super.key, required this.api, required this.authStore});
+  const HomePage({
+    super.key,
+    required this.api,
+    required this.authStore,
+    this.showBottomNavigationBar = true,
+    this.locationOverride,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -616,6 +624,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Verhåårm',
+      showBottomNavigationBar: widget.showBottomNavigationBar,
+      locationOverride: widget.locationOverride,
       titleWidget: Builder(
         builder: (context) {
           final titleStyle =

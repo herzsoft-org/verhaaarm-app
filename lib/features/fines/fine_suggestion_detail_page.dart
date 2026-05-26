@@ -21,7 +21,8 @@ class FineSuggestionDetailPage extends StatefulWidget {
   });
 
   @override
-  State<FineSuggestionDetailPage> createState() => _FineSuggestionDetailPageState();
+  State<FineSuggestionDetailPage> createState() =>
+      _FineSuggestionDetailPageState();
 }
 
 class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
@@ -175,9 +176,9 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
       await widget.api.deleteSuggestion(s.id);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vorschlag zurückgezogen.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Vorschlag zurückgezogen.')));
 
       if (context.canPop()) {
         context.pop(true);
@@ -237,6 +238,7 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
       title: 'Beihängungsvorschlag',
       showNotificationButton: false,
       showProfileButton: false,
+      onRefresh: () => _load(force: true),
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -262,144 +264,162 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
           : (s == null)
           ? const Center(child: Text('Nicht gefunden.'))
           : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _titleForSuggestion(s),
-                    style: Theme.of(context).textTheme.titleLarge,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _titleForSuggestion(s),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            Chip(label: Text(_statusLabel(s.status))),
+                            if (_isPending)
+                              const Chip(label: Text('Bearbeitbar')),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Betrag: ${Format.centsToEur(s.amountCents ?? 0)}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Grund: ${(s.reason ?? '').trim().isEmpty ? '—' : s.reason!.trim()}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Beihängungsdatum: ${Format.dateOnlyShort(s.fineDate)}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Erstellt: ${Format.dateTimeShort(s.createdAt)}'),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      Chip(label: Text(_statusLabel(s.status))),
-                      if (_isPending)
-                        const Chip(label: Text('Bearbeitbar')),
-                    ],
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Fotos',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            if (_photosMetaLoading)
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            else
+                              Chip(label: Text('$count/$_maxPhotos')),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _isPending
+                              ? 'Fotos können solange der Vorschlag offen ist hinzugefügt oder gelöscht werden.'
+                              : 'Fotos können hier weiterhin angesehen werden.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.tonalIcon(
+                                onPressed: canView ? _openGallery : null,
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: Text(
+                                  count > 0
+                                      ? 'Fotos ansehen ($count)'
+                                      : 'Fotos ansehen',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: canAdd ? _openAdd : null,
+                                icon: const Icon(Icons.add_a_photo_outlined),
+                                label: Text(
+                                  canAdd ? 'Fotos hinzufügen' : 'Nicht möglich',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Text('Betrag: ${Format.centsToEur(s.amountCents ?? 0)}'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Grund: ${(s.reason ?? '').trim().isEmpty ? '—' : s.reason!.trim()}',
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Beihängungsdatum: ${Format.dateOnlyShort(s.fineDate)}'),
-                  const SizedBox(height: 8),
-                  Text('Erstellt: ${Format.dateTimeShort(s.createdAt)}'),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Fotos',
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Meta',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                      ),
-                      if (_photosMetaLoading)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Chip(label: Text('$count/$_maxPhotos')),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _isPending
-                        ? 'Fotos können solange der Vorschlag offen ist hinzugefügt oder gelöscht werden.'
-                        : 'Fotos können hier weiterhin angesehen werden.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: canView ? _openGallery : null,
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: Text(
-                            count > 0 ? 'Fotos ansehen ($count)' : 'Fotos ansehen',
-                          ),
+                        const SizedBox(height: 8),
+                        Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Conventsperiode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: canAdd ? _openAdd : null,
-                          icon: const Icon(Icons.add_a_photo_outlined),
-                          label: Text(canAdd ? 'Fotos hinzufügen' : 'Nicht möglich'),
+                        const SizedBox(height: 8),
+                        Text('Vorschlag von: ${_userLabel(s.creatorUserId)}'),
+                        const SizedBox(height: 8),
+                        if (s.type == FineType.catalog &&
+                            s.catalogItemId != null)
+                          Text('Katalog-ID: ${s.catalogItemId}'),
+                        if (s.acceptedFineId != null &&
+                            s.acceptedFineId!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text('Angenommene Fine-ID: ${s.acceptedFineId}'),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bbr.',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        for (final id in s.targetUserIds)
+                          Text('• ${_userLabel(id)}'),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Meta', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Conventsperiode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Vorschlag von: ${_userLabel(s.creatorUserId)}'),
-                  const SizedBox(height: 8),
-                  if (s.type == FineType.catalog && s.catalogItemId != null)
-                    Text('Katalog-ID: ${s.catalogItemId}'),
-                  if (s.acceptedFineId != null &&
-                      s.acceptedFineId!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text('Angenommene Fine-ID: ${s.acceptedFineId}'),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Bbr.', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  for (final id in s.targetUserIds) Text('• ${_userLabel(id)}'),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

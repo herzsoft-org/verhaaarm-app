@@ -13,9 +13,12 @@ class AppScaffold extends StatelessWidget {
   final Widget body;
   final List<Widget>? actions;
   final Widget? floatingActionButton;
+  final RefreshCallback? onRefresh;
+  final String? locationOverride;
 
   final bool showNotificationButton;
   final bool showProfileButton;
+  final bool showBottomNavigationBar;
 
   const AppScaffold({
     super.key,
@@ -24,17 +27,26 @@ class AppScaffold extends StatelessWidget {
     required this.body,
     this.actions,
     this.floatingActionButton,
+    this.onRefresh,
+    this.locationOverride,
     this.showNotificationButton = true,
     this.showProfileButton = true,
+    this.showBottomNavigationBar = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
-    final isOnProfile =
-        location == '/profile' || location.startsWith('/profile/');
+    final location =
+        locationOverride ?? GoRouterState.of(context).uri.toString();
     final isOnNotifications =
         location == '/notifications' || location.startsWith('/notifications/');
+
+    final scaffoldBody = _AppBodyWithNotificationReminder(
+      body: onRefresh == null
+          ? body
+          : RefreshIndicator(onRefresh: onRefresh!, child: body),
+      enabled: showNotificationButton || isOnNotifications,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -44,50 +56,54 @@ class AppScaffold extends StatelessWidget {
 
           if (showNotificationButton && !isOnNotifications)
             _NotificationBell(onTap: () => context.push('/notifications')),
-
-          if (showProfileButton && !isOnProfile)
-            IconButton(
-              tooltip: 'Profil',
-              icon: const Icon(Icons.person_rounded),
-              onPressed: () => context.push('/profile'),
-            ),
         ],
       ),
-      body: _AppBodyWithNotificationReminder(
-        body: body,
-        enabled: showNotificationButton || isOnNotifications,
-      ),
-      bottomNavigationBar: _MainNavigationBar(location: location),
+      body: scaffoldBody,
+      bottomNavigationBar: showBottomNavigationBar
+          ? MainNavigationBar(
+              selectedIndex: mainTabIndexForLocation(location),
+              onDestinationSelected: (index) {
+                final target = mainTabLocationForIndex(index);
+                if (location == target) return;
+                context.go(target);
+              },
+            )
+          : null,
       floatingActionButton: floatingActionButton,
     );
   }
 }
 
-class _MainNavigationBar extends StatelessWidget {
-  final String location;
+int mainTabIndexForLocation(String location) {
+  if (location == '/actions' || location.startsWith('/actions/')) return 1;
+  if (location == '/profile' || location.startsWith('/profile/')) return 2;
+  return 0;
+}
 
-  const _MainNavigationBar({required this.location});
+String mainTabLocationForIndex(int index) {
+  return switch (index) {
+    0 => '/home',
+    1 => '/actions',
+    2 => '/profile',
+    _ => '/home',
+  };
+}
 
-  int get _index {
-    if (location == '/actions' || location.startsWith('/actions/')) return 1;
-    if (location == '/profile' || location.startsWith('/profile/')) return 2;
-    return 0;
-  }
+class MainNavigationBar extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  const MainNavigationBar({
+    super.key,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
     return NavigationBar(
-      selectedIndex: _index,
-      onDestinationSelected: (index) {
-        final target = switch (index) {
-          0 => '/home',
-          1 => '/actions',
-          2 => '/profile',
-          _ => '/home',
-        };
-        if (location == target) return;
-        context.go(target);
-      },
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onDestinationSelected,
       destinations: const [
         NavigationDestination(
           icon: Icon(Icons.home_outlined),

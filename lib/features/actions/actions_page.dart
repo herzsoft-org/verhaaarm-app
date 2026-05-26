@@ -9,8 +9,16 @@ import '../../common/widgets/app_scaffold.dart';
 class ActionsPage extends StatelessWidget {
   final ApiClient api;
   final AuthStore authStore;
+  final bool showBottomNavigationBar;
+  final String? locationOverride;
 
-  const ActionsPage({super.key, required this.api, required this.authStore});
+  const ActionsPage({
+    super.key,
+    required this.api,
+    required this.authStore,
+    this.showBottomNavigationBar = true,
+    this.locationOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +28,8 @@ class ActionsPage extends StatelessWidget {
 
     return AppScaffold(
       title: 'Aktionen',
+      showBottomNavigationBar: showBottomNavigationBar,
+      locationOverride: locationOverride,
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

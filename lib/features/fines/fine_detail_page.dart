@@ -95,9 +95,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
       await _loadPhotoCount();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Laden fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -136,9 +136,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
   ConventPeriodDto? _periodForFine(FineDto f) {
     final periodsSorted = [..._periods]
       ..sort(
-            (a, b) => Format.parseIsoToLocal(b.startAt).compareTo(
-          Format.parseIsoToLocal(a.startAt),
-        ),
+        (a, b) => Format.parseIsoToLocal(
+          b.startAt,
+        ).compareTo(Format.parseIsoToLocal(a.startAt)),
       );
     return Format.findPeriodForFineDate(
       fineDate: f.fineDate,
@@ -156,7 +156,11 @@ class _FineDetailPageState extends State<FineDetailPage> {
     // Attendance fines are system-generated and not deletable.
     if (_isAttendanceFine(fine)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Automatische Anwesenheits-Beihängungen können nicht gelöscht werden.')),
+        const SnackBar(
+          content: Text(
+            'Automatische Anwesenheits-Beihängungen können nicht gelöscht werden.',
+          ),
+        ),
       );
       return;
     }
@@ -184,9 +188,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
       await widget.api.deleteFine(fine.id);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gelöscht.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gelöscht.')));
 
       if (context.canPop()) {
         context.pop();
@@ -195,9 +199,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Löschen fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
     }
   }
 
@@ -238,7 +242,8 @@ class _FineDetailPageState extends State<FineDetailPage> {
     final fine = _fine;
     final p = (fine == null) ? null : _periodForFine(fine);
 
-    final canDelete = Roles.canManageFines(roles) && fine != null && !_isAttendanceFine(fine);
+    final canDelete =
+        Roles.canManageFines(roles) && fine != null && !_isAttendanceFine(fine);
 
     final count = _photoCount ?? 0;
     final canView = !_photosMetaLoading && count > 0;
@@ -246,6 +251,7 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
     return AppScaffold(
       title: 'Beihängung',
+      onRefresh: _load,
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -264,139 +270,166 @@ class _FineDetailPageState extends State<FineDetailPage> {
           : (fine == null)
           ? const Center(child: Text('Nicht gefunden.'))
           : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _titleForFine(fine),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  if (_isAttendanceFine(fine)) ...[
-                    const SizedBox(height: 8),
-                    const Chip(
-                      label: Text('Automatisch (Anwesenheit)'),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text('Betrag: ${Format.centsToEur(fine.amountCents ?? 0)}'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Grund: ${(fine.reason ?? '').trim().isEmpty ? '—' : fine.reason!.trim()}',
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Beihängungsdatum: ${Format.dateOnlyShort(fine.fineDate)}'),
-                  const SizedBox(height: 8),
-                  Text('Erstellt: ${Format.dateTimeShort(fine.createdAt)}'),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text('Fotos', style: Theme.of(context).textTheme.titleMedium),
-                      ),
-                      if (_photosMetaLoading)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Chip(label: Text('$count/$_maxPhotos')),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Fotos sind optional. Du kannst mehrere aus der Galerie hochladen oder eins per Kamera.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: canView ? _openGallery : null,
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: Text(count > 0 ? 'Fotos ansehen ($count)' : 'Fotos ansehen'),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _titleForFine(fine),
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: canAdd ? _openAdd : null,
-                          icon: const Icon(Icons.add_a_photo_outlined),
-                          label: Text(canAdd ? 'Fotos hinzufügen' : 'Limit erreicht'),
+                        if (_isAttendanceFine(fine)) ...[
+                          const SizedBox(height: 8),
+                          const Chip(
+                            label: Text('Automatisch (Anwesenheit)'),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          'Betrag: ${Format.centsToEur(fine.amountCents ?? 0)}',
                         ),
-                      ),
-                    ],
-                  ),
-                  if (!canAdd)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Text(
-                        'Upload-Limit erreicht (max. $_maxPhotos Fotos).',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Grund: ${(fine.reason ?? '').trim().isEmpty ? '—' : fine.reason!.trim()}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Beihängungsdatum: ${Format.dateOnlyShort(fine.fineDate)}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Erstellt: ${Format.dateTimeShort(fine.createdAt)}',
+                        ),
+                      ],
                     ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Meta', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Conventsperiode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
                   ),
-                  const SizedBox(height: 8),
-                  Text('Ersteller: ${_userLabel(fine.creatorUserId)}'),
-                  const SizedBox(height: 8),
-                  if (fine.type == FineType.catalog && fine.catalogItemId != null)
-                    Text('Katalog-ID: ${fine.catalogItemId}'),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Fotos',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            if (_photosMetaLoading)
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            else
+                              Chip(label: Text('$count/$_maxPhotos')),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Fotos sind optional. Du kannst mehrere aus der Galerie hochladen oder eins per Kamera.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.tonalIcon(
+                                onPressed: canView ? _openGallery : null,
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: Text(
+                                  count > 0
+                                      ? 'Fotos ansehen ($count)'
+                                      : 'Fotos ansehen',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: canAdd ? _openAdd : null,
+                                icon: const Icon(Icons.add_a_photo_outlined),
+                                label: Text(
+                                  canAdd
+                                      ? 'Fotos hinzufügen'
+                                      : 'Limit erreicht',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (!canAdd)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(
+                              'Upload-Limit erreicht (max. $_maxPhotos Fotos).',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Meta',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Semester: ${p?.semester ?? 'Unbekannt'}'),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Conventsperiode: ${p == null ? 'Unbekannt' : '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Ersteller: ${_userLabel(fine.creatorUserId)}'),
+                        const SizedBox(height: 8),
+                        if (fine.type == FineType.catalog &&
+                            fine.catalogItemId != null)
+                          Text('Katalog-ID: ${fine.catalogItemId}'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bbr.',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final id in fine.targetUserIds)
+                          Text('• ${_userLabel(id)}'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Bbr.', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  for (final id in fine.targetUserIds) Text('• ${_userLabel(id)}'),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

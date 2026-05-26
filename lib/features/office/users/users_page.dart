@@ -230,6 +230,7 @@ class _UsersPageState extends State<UsersPage> {
       title: 'Nutzer',
       showNotificationButton: false,
       showProfileButton: false,
+      onRefresh: () => _load(force: true),
       actions: [
         IconButton(
           tooltip: 'Suchen',

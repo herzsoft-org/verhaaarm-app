@@ -39,9 +39,9 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
       final roles = widget.authStore.currentRoles;
       if (!roles.contains(AppRole.admin)) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keine Berechtigung.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Keine Berechtigung.')));
         return;
       }
 
@@ -135,6 +135,7 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
       title: 'Session-Statistik',
       showNotificationButton: false,
       showProfileButton: false,
+      onRefresh: _load,
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -145,24 +146,24 @@ class _SessionStatsPageState extends State<SessionStatsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (stats == null)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Keine Statistik verfügbar.'),
-              ),
-            )
-          else
-            _ActiveSessionsCard(
-              total: _sum(_activeRows(stats)),
-              groups: _groupByAppType(_activeRows(stats)),
-              rows: _activeRows(stats),
-              onTap: () => context.push('/office/sessions'),
+              padding: const EdgeInsets.all(12),
+              children: [
+                if (stats == null)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('Keine Statistik verfügbar.'),
+                    ),
+                  )
+                else
+                  _ActiveSessionsCard(
+                    total: _sum(_activeRows(stats)),
+                    groups: _groupByAppType(_activeRows(stats)),
+                    rows: _activeRows(stats),
+                    onTap: () => context.push('/office/sessions'),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
@@ -247,10 +248,7 @@ class _ActiveSessionsCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.devices_rounded,
-                    color: colorScheme.primary,
-                  ),
+                  Icon(Icons.devices_rounded, color: colorScheme.primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -284,10 +282,7 @@ class _ActiveSessionsCard extends StatelessWidget {
                     dense: true,
                     visualDensity: VisualDensity.compact,
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      g.icon,
-                      color: colors[g.appType],
-                    ),
+                    leading: Icon(g.icon, color: colors[g.appType]),
                     title: Text(g.label),
                     subtitle: Text(_percent(g.count)),
                     trailing: Text(
@@ -302,10 +297,7 @@ class _ActiveSessionsCard extends StatelessWidget {
                 )
               else ...[
                 const Divider(height: 20),
-                Text(
-                  'Details',
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text('Details', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
                 for (final r in sortedRows)
                   ListTile(
@@ -370,7 +362,8 @@ class _SessionDistributionBar extends StatelessWidget {
                 Expanded(
                   flex: g.count,
                   child: ColoredBox(
-                    color: colors[g.appType] ??
+                    color:
+                        colors[g.appType] ??
                         theme.colorScheme.surfaceContainerHighest,
                   ),
                 ),

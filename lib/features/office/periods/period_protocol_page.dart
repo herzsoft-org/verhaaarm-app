@@ -126,7 +126,9 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
     if (!mounted || result == null || result.files.isEmpty) return;
 
     final file = result.files.single;
-    final filename = file.name.trim().isEmpty ? 'protokoll.pdf' : file.name.trim();
+    final filename = file.name.trim().isEmpty
+        ? 'protokoll.pdf'
+        : file.name.trim();
 
     if (!filename.toLowerCase().endsWith('.pdf')) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,9 +177,9 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Upload fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -189,7 +191,9 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
     setState(() => _busy = true);
 
     try {
-      final bytes = await widget.api.getPeriodProtocolFileBytes(widget.periodId);
+      final bytes = await widget.api.getPeriodProtocolFileBytes(
+        widget.periodId,
+      );
 
       if (!mounted) return;
 
@@ -237,24 +241,27 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
     setState(() => _busy = true);
 
     try {
-      final bytes = await widget.api.downloadPeriodProtocolBytes(widget.periodId);
+      final bytes = await widget.api.downloadPeriodProtocolBytes(
+        widget.periodId,
+      );
       final result = await _saveBytes(bytes);
 
       if (!mounted) return;
 
       final message = switch (result) {
         LegalDocumentSaveResult.saved => 'Protokoll wird heruntergeladen.',
-        LegalDocumentSaveResult.opened => 'Protokoll wurde im Browser geöffnet.',
+        LegalDocumentSaveResult.opened =>
+          'Protokoll wurde im Browser geöffnet.',
       };
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Download fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Download fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -272,7 +279,7 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
           title: const Text('Protokoll löschen?'),
           content: Text(
             'Willst du das Conventsprotokoll wirklich löschen?\n\n'
-                '$_periodTitle',
+            '$_periodTitle',
           ),
           actions: [
             TextButton(
@@ -308,9 +315,9 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Löschen fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -367,7 +374,10 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
                   ),
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: protocol == null
                           ? cs.surfaceContainerHighest
@@ -375,7 +385,9 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      protocol == null ? 'Kein PDF hinterlegt' : 'PDF vorhanden',
+                      protocol == null
+                          ? 'Kein PDF hinterlegt'
+                          : 'PDF vorhanden',
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: protocol == null
                             ? cs.onSurfaceVariant
@@ -423,16 +435,16 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
             const SizedBox(height: 6),
             Text(
               _formatBytes(protocol.sizeBytes),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 14),
             Text(
               'Aktualisiert: ${Format.dateTimeShort(protocol.updatedAt.toIso8601String())}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -543,6 +555,7 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
         title: 'Conventsprotokoll',
         showNotificationButton: false,
         showProfileButton: false,
+        onRefresh: _load,
         actions: [
           IconButton(
             tooltip: 'Neu laden',
@@ -557,13 +570,10 @@ class _PeriodProtocolPageState extends State<PeriodProtocolPage> {
               Positioned.fill(
                 child: IgnorePointer(
                   child: Container(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surface
-                        .withValues(alpha: 0.45),
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.45),
+                    child: const Center(child: CircularProgressIndicator()),
                   ),
                 ),
               ),
@@ -633,12 +643,13 @@ class _PeriodProtocolPdfViewerPageState
 
       final message = switch (result) {
         LegalDocumentSaveResult.saved => 'Protokoll wird heruntergeladen.',
-        LegalDocumentSaveResult.opened => 'Protokoll wurde im Browser geöffnet.',
+        LegalDocumentSaveResult.opened =>
+          'Protokoll wurde im Browser geöffnet.',
       };
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (_) {
       if (!mounted) return;
 
@@ -699,10 +710,10 @@ class _PeriodProtocolPdfViewerPageState
             onPressed: _saving ? null : _saveDocument,
             icon: _saving
                 ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.download_rounded),
           ),
         ],
@@ -718,10 +729,7 @@ class _PeriodProtocolPdfViewerPageState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      size: 56,
-                    ),
+                    const Icon(Icons.picture_as_pdf_rounded, size: 56),
                     const SizedBox(height: 16),
                     Text(
                       widget.title,
@@ -737,7 +745,7 @@ class _PeriodProtocolPdfViewerPageState
                     const SizedBox(height: 12),
                     const Text(
                       'Die PDF-Vorschau ist im mobilen Browser nicht zuverlässig. '
-                          'Öffne die Datei direkt im Browser oder lade sie herunter.',
+                      'Öffne die Datei direkt im Browser oder lade sie herunter.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -756,12 +764,12 @@ class _PeriodProtocolPdfViewerPageState
                         onPressed: _saving ? null : _saveDocument,
                         icon: _saving
                             ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.download_rounded),
                         label: const Text('Herunterladen'),
                       ),
@@ -821,9 +829,9 @@ class _PeriodProtocolPdfViewerPageState
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -853,9 +861,7 @@ class _PeriodProtocolPdfViewerPageState
 
   Widget _buildPdfBody(BuildContext context) {
     if (_failed) {
-      return const Center(
-        child: Text('PDF konnte nicht angezeigt werden.'),
-      );
+      return const Center(child: Text('PDF konnte nicht angezeigt werden.'));
     }
 
     return PdfViewPinch(
@@ -909,10 +915,10 @@ class _PeriodProtocolPdfViewerPageState
             onPressed: _saving ? null : _saveDocument,
             icon: _saving
                 ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.download_rounded),
           ),
         ],
@@ -920,9 +926,7 @@ class _PeriodProtocolPdfViewerPageState
       body: Column(
         children: [
           _buildPageControls(context),
-          Expanded(
-            child: _buildPdfBody(context),
-          ),
+          Expanded(child: _buildPdfBody(context)),
         ],
       ),
     );

@@ -23,8 +23,16 @@ import 'dart:async';
 class ProfilePage extends StatefulWidget {
   final ApiClient api;
   final AuthStore authStore;
+  final bool showBottomNavigationBar;
+  final String? locationOverride;
 
-  const ProfilePage({super.key, required this.api, required this.authStore});
+  const ProfilePage({
+    super.key,
+    required this.api,
+    required this.authStore,
+    this.showBottomNavigationBar = true,
+    this.locationOverride,
+  });
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -742,6 +750,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Profil',
+      showBottomNavigationBar: widget.showBottomNavigationBar,
+      locationOverride: widget.locationOverride,
+      onRefresh: () => _load(force: true),
       actions: [
         const SchnupfspruchButton(),
         IconButton(

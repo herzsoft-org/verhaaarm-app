@@ -73,7 +73,7 @@ class _SessionsPageState extends State<SessionsPage> {
         title: const Text('Session entfernen?'),
         content: Text(
           'Diese Session wird abgemeldet.\n\n'
-              '${_sessionTitle(s)}',
+          '${_sessionTitle(s)}',
         ),
         actions: [
           TextButton(
@@ -97,9 +97,9 @@ class _SessionsPageState extends State<SessionsPage> {
       await _load();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session wurde entfernt.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Session wurde entfernt.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -165,6 +165,7 @@ class _SessionsPageState extends State<SessionsPage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Sessions',
+      onRefresh: () => _load(touch: true),
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -175,81 +176,89 @@ class _SessionsPageState extends State<SessionsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (_busy)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: LinearProgressIndicator(),
-            ),
-          if (_sessions.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Keine Sessions gefunden.'),
-              ),
-            ),
-          for (final s in _sessions)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(_sessionIcon(s)),
-                      title: Text(_sessionTitle(s)),
-                      subtitle: Text(_osLine(s)),
-                      trailing: s.current
-                          ? const Chip(
-                        label: Text('Aktuell'),
-                        avatar: Icon(Icons.check_circle_rounded),
-                      )
-                          : s.revokedAt != null
-                          ? const Chip(
-                        label: Text('Widerrufen'),
-                        avatar: Icon(Icons.block_rounded),
-                      )
-                          : null,
+              padding: const EdgeInsets.all(12),
+              children: [
+                if (_busy)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: LinearProgressIndicator(),
+                  ),
+                if (_sessions.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('Keine Sessions gefunden.'),
                     ),
-                    const SizedBox(height: 4),
-                    _InfoLine(label: 'Erstellt', value: _date(s.createdAt)),
-                    _InfoLine(
-                      label: 'Zuletzt aktiv',
-                      value: _date(s.lastActiveAt),
-                    ),
-                    _InfoLine(label: 'Läuft ab', value: _date(s.expiresAt)),
-                    _InfoLine(
-                      label: 'Widerrufen',
-                      value: s.revokedAt == null ? 'Nein' : _date(s.revokedAt),
-                    ),
-                    if ((s.userAgent ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        s.userAgent!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
+                  ),
+                for (final s in _sessions)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(_sessionIcon(s)),
+                            title: Text(_sessionTitle(s)),
+                            subtitle: Text(_osLine(s)),
+                            trailing: s.current
+                                ? const Chip(
+                                    label: Text('Aktuell'),
+                                    avatar: Icon(Icons.check_circle_rounded),
+                                  )
+                                : s.revokedAt != null
+                                ? const Chip(
+                                    label: Text('Widerrufen'),
+                                    avatar: Icon(Icons.block_rounded),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(height: 4),
+                          _InfoLine(
+                            label: 'Erstellt',
+                            value: _date(s.createdAt),
+                          ),
+                          _InfoLine(
+                            label: 'Zuletzt aktiv',
+                            value: _date(s.lastActiveAt),
+                          ),
+                          _InfoLine(
+                            label: 'Läuft ab',
+                            value: _date(s.expiresAt),
+                          ),
+                          _InfoLine(
+                            label: 'Widerrufen',
+                            value: s.revokedAt == null
+                                ? 'Nein'
+                                : _date(s.revokedAt),
+                          ),
+                          if ((s.userAgent ?? '').trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              s.userAgent!,
+                              style: Theme.of(context).textTheme.bodySmall,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          if (!s.current && s.revokedAt == null) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _busy ? null : () => _revoke(s),
+                                icon: const Icon(Icons.logout_rounded),
+                                label: const Text('Session entfernen'),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                    if (!s.current && s.revokedAt == null) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _revoke(s),
-                          icon: const Icon(Icons.logout_rounded),
-                          label: const Text('Session entfernen'),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
@@ -258,10 +267,7 @@ class _InfoLine extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoLine({
-    required this.label,
-    required this.value,
-  });
+  const _InfoLine({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -271,10 +277,7 @@ class _InfoLine extends StatelessWidget {
         children: [
           SizedBox(
             width: 110,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(child: Text(value)),
         ],

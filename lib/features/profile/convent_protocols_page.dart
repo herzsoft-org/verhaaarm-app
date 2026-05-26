@@ -9,10 +9,7 @@ import '../../models/dtos.dart';
 class ConventProtocolsPage extends StatefulWidget {
   final ApiClient api;
 
-  const ConventProtocolsPage({
-    super.key,
-    required this.api,
-  });
+  const ConventProtocolsPage({super.key, required this.api});
 
   @override
   State<ConventProtocolsPage> createState() => _ConventProtocolsPageState();
@@ -38,7 +35,8 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
     final s = semester.trim().toUpperCase();
 
     if (s.startsWith('SS')) {
-      final yy = int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final yy =
+          int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
       return (year: 2000 + yy, term: 1);
     }
 
@@ -52,8 +50,8 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
   }
 
   static List<ConventPeriodDto> _filterUntilCurrentPeriod(
-      List<ConventPeriodDto> periods,
-      ) {
+    List<ConventPeriodDto> periods,
+  ) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -85,20 +83,21 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
       }
     }
 
-    final visible = periods.where((p) => !p.startDateLocal.isAfter(today)).toList()
-      ..sort((a, b) {
-        final byStart = b.startAt.compareTo(a.startAt);
-        if (byStart != 0) return byStart;
-        return b.endAt.compareTo(a.endAt);
-      });
+    final visible =
+        periods.where((p) => !p.startDateLocal.isAfter(today)).toList()
+          ..sort((a, b) {
+            final byStart = b.startAt.compareTo(a.startAt);
+            if (byStart != 0) return byStart;
+            return b.endAt.compareTo(a.endAt);
+          });
 
     return visible.isEmpty ? null : visible.first.id;
   }
 
   static bool _isPastMissingProtocol(
-      ConventPeriodDto period,
-      String? currentPeriodId,
-      ) {
+    ConventPeriodDto period,
+    String? currentPeriodId,
+  ) {
     if (period.hasProtocolPdf) return false;
     if (period.id == currentPeriodId) return false;
 
@@ -130,12 +129,13 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
       }
     }
 
-    final visible = periods.where((p) => !p.startDateLocal.isAfter(today)).toList()
-      ..sort((a, b) {
-        final byStart = b.startAt.compareTo(a.startAt);
-        if (byStart != 0) return byStart;
-        return b.endAt.compareTo(a.endAt);
-      });
+    final visible =
+        periods.where((p) => !p.startDateLocal.isAfter(today)).toList()
+          ..sort((a, b) {
+            final byStart = b.startAt.compareTo(a.startAt);
+            if (byStart != 0) return byStart;
+            return b.endAt.compareTo(a.endAt);
+          });
 
     if (visible.isNotEmpty) return visible.first.semester;
 
@@ -234,24 +234,24 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
   }
 
   List<String> _sortedSemesters(Map<String, List<ConventPeriodDto>> grouped) {
-    return grouped.keys.toList()
-      ..sort((a, b) {
-        final ka = _semesterKey(a);
-        final kb = _semesterKey(b);
+    return grouped.keys.toList()..sort((a, b) {
+      final ka = _semesterKey(a);
+      final kb = _semesterKey(b);
 
-        final byYear = kb.year.compareTo(ka.year);
-        if (byYear != 0) return byYear;
+      final byYear = kb.year.compareTo(ka.year);
+      if (byYear != 0) return byYear;
 
-        return kb.term.compareTo(ka.term);
-      });
+      return kb.term.compareTo(ka.term);
+    });
   }
 
   String _protocolTitleForPeriod({
     required ConventPeriodDto period,
     required List<ConventPeriodDto> allPeriodsInSemester,
   }) {
-    final chronologicalIndex =
-    allPeriodsInSemester.indexWhere((p) => p.id == period.id);
+    final chronologicalIndex = allPeriodsInSemester.indexWhere(
+      (p) => p.id == period.id,
+    );
 
     if (chronologicalIndex < 0) {
       return 'Conventsprotokoll';
@@ -288,10 +288,10 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
             Expanded(
               child: Text(
                 'Zukünftige Conventsperioden erscheinen automatisch, sobald sie erreicht werden. '
-                    'Die aktuellste sichtbare Periode ist immer die laufende Conventsperiode.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
+                'Die aktuellste sichtbare Periode ist immer die laufende Conventsperiode.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               ),
             ),
           ],
@@ -301,11 +301,11 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
   }
 
   Widget _buildStatusChip(
-      BuildContext context,
-      ConventPeriodDto p, {
-        required bool isCurrentPeriod,
-        required bool isPastMissingProtocol,
-      }) {
+    BuildContext context,
+    ConventPeriodDto p, {
+    required bool isCurrentPeriod,
+    required bool isPastMissingProtocol,
+  }) {
     final cs = Theme.of(context).colorScheme;
 
     final Color bg;
@@ -387,20 +387,14 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
                   color: iconBg,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                ),
+                child: Icon(icon, color: iconColor),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
                     Text(
                       '${Format.dateShort(period.startAt)} – ${Format.dateShort(period.endAt)}',
@@ -419,10 +413,7 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -447,13 +438,12 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         leading: Icon(
-          isCurrentSemester ? Icons.event_available_rounded : Icons.event_note_rounded,
+          isCurrentSemester
+              ? Icons.event_available_rounded
+              : Icons.event_note_rounded,
           color: isCurrentSemester ? cs.primary : cs.onSurfaceVariant,
         ),
-        title: Text(
-          semester,
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        title: Text(semester, style: Theme.of(context).textTheme.titleMedium),
         subtitle: Text(
           isCurrentSemester
               ? 'Aktuelles Semester'
@@ -517,6 +507,7 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
       title: 'Conventsprotokolle',
       showNotificationButton: false,
       showProfileButton: false,
+      onRefresh: () => _load(force: true),
       actions: [
         IconButton(
           tooltip: 'Neu laden',

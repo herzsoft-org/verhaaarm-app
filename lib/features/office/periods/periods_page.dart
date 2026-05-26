@@ -33,7 +33,8 @@ class _PeriodsPageState extends State<PeriodsPage> {
     // WS25/26 => year=2025 term=2
     final s = semester.trim().toUpperCase();
     if (s.startsWith('SS')) {
-      final yy = int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final yy =
+          int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
       return (year: 2000 + yy, term: 1);
     }
     if (s.startsWith('WS')) {
@@ -85,7 +86,9 @@ class _PeriodsPageState extends State<PeriodsPage> {
       setState(() => _periods = periods);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -97,10 +100,14 @@ class _PeriodsPageState extends State<PeriodsPage> {
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode gelockt.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Conventsperiode gelockt.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lock fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lock fehlgeschlagen: $e')));
     }
   }
 
@@ -110,10 +117,14 @@ class _PeriodsPageState extends State<PeriodsPage> {
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode entsperrt.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conventsperiode entsperrt.')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unlock fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unlock fehlgeschlagen: $e')));
     }
   }
 
@@ -127,8 +138,8 @@ class _PeriodsPageState extends State<PeriodsPage> {
           title: const Text('Conventsperiode löschen?'),
           content: Text(
             'Willst du diese Conventsperiode wirklich löschen?\n\n'
-                '${p.semester}\n'
-                '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}',
+            '${p.semester}\n'
+            '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}',
           ),
           actions: [
             TextButton(
@@ -151,10 +162,14 @@ class _PeriodsPageState extends State<PeriodsPage> {
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conventsperiode gelöscht.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conventsperiode gelöscht.')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
     }
   }
 
@@ -206,6 +221,7 @@ class _PeriodsPageState extends State<PeriodsPage> {
       title: 'Conventsperioden',
       showNotificationButton: false,
       showProfileButton: false,
+      onRefresh: () => _load(force: true),
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -221,64 +237,90 @@ class _PeriodsPageState extends State<PeriodsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (semesters.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: Text('Keine Conventsperioden gefunden.'),
-            ),
-          for (final sem in semesters) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
-              child: Text(sem, style: Theme.of(context).textTheme.titleLarge),
-            ),
-            for (final p in (bySemester[sem]!..sort((a, b) => b.startAt.compareTo(a.startAt))))
-              Card(
-                child: ListTile(
-                  titleAlignment: ListTileTitleAlignment.center,
-                  title: Text('${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}'),
-                  subtitle: Text(
-                    [
-                      if (p.active) 'Aktiv',
-                      if (p.locked) 'Locked',
-                      p.hasProtocolPdf ? 'Protokoll vorhanden' : 'Kein Protokoll',
-                    ].join(' · '),
+              padding: const EdgeInsets.all(12),
+              children: [
+                if (semesters.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('Keine Conventsperioden gefunden.'),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: p.hasProtocolPdf
-                            ? 'Protokoll verwalten'
-                            : 'Protokoll hochladen',
-                        onPressed: () => _openProtocol(p),
-                        icon: Icon(
-                          p.hasProtocolPdf
-                              ? Icons.picture_as_pdf_rounded
-                              : Icons.upload_file_rounded,
+                for (final sem in semesters) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+                    child: Text(
+                      sem,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  for (final p
+                      in (bySemester[sem]!
+                        ..sort((a, b) => b.startAt.compareTo(a.startAt))))
+                    Card(
+                      child: ListTile(
+                        titleAlignment: ListTileTitleAlignment.center,
+                        title: Text(
+                          '${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}',
+                        ),
+                        subtitle: Text(
+                          [
+                            if (p.active) 'Aktiv',
+                            if (p.locked) 'Locked',
+                            p.hasProtocolPdf
+                                ? 'Protokoll vorhanden'
+                                : 'Kein Protokoll',
+                          ].join(' · '),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: p.hasProtocolPdf
+                                  ? 'Protokoll verwalten'
+                                  : 'Protokoll hochladen',
+                              onPressed: () => _openProtocol(p),
+                              icon: Icon(
+                                p.hasProtocolPdf
+                                    ? Icons.picture_as_pdf_rounded
+                                    : Icons.upload_file_rounded,
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              onSelected: (v) => _onMenuSelected(v, p),
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'protocol',
+                                  child: Text('Protokoll'),
+                                ),
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('Bearbeiten'),
+                                ),
+                                if (!p.locked)
+                                  const PopupMenuItem(
+                                    value: 'lock',
+                                    child: Text('Lock'),
+                                  ),
+                                if (p.locked)
+                                  const PopupMenuItem(
+                                    value: 'unlock',
+                                    child: Text('Unlock'),
+                                  ),
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('Löschen'),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      PopupMenuButton<String>(
-                        onSelected: (v) => _onMenuSelected(v, p),
-                        itemBuilder: (ctx) => [
-                          const PopupMenuItem(value: 'protocol', child: Text('Protokoll')),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
-                          if (!p.locked) const PopupMenuItem(value: 'lock', child: Text('Lock')),
-                          if (p.locked) const PopupMenuItem(value: 'unlock', child: Text('Unlock')),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(value: 'delete', child: Text('Löschen')),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 10),
-          ],
-        ],
-      ),
+                    ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            ),
     );
   }
 }

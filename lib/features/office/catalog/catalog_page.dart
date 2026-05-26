@@ -65,7 +65,9 @@ class _CatalogPageState extends State<CatalogPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Katalog laden fehlgeschlagen: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Katalog laden fehlgeschlagen: $e')),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -94,6 +96,7 @@ class _CatalogPageState extends State<CatalogPage> {
       title: 'Beihängungskatalog',
       showNotificationButton: false,
       showProfileButton: false,
+      onRefresh: () => _load(force: true),
       actions: [
         IconButton(
           tooltip: 'Neu laden',
@@ -112,45 +115,49 @@ class _CatalogPageState extends State<CatalogPage> {
           : _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (_items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: Text('Keine Katalogeinträge gefunden.'),
-            ),
-          for (final it in _items)
-            Card(
-              child: ListTile(
-                leading: _isSystemItem(it)
-                    ? const Icon(Icons.lock_rounded)
-                    : Icon(it.active ? Icons.check_circle_rounded : Icons.remove_circle_rounded),
-                title: Row(
-                  children: [
-                    Expanded(child: Text(it.title)),
-                    if (_isSystemItem(it))
-                      const Padding(
-                        padding: EdgeInsets.only(left: 8),
-                        child: Chip(
-                          label: Text('System'),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
+              padding: const EdgeInsets.all(12),
+              children: [
+                if (_items.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('Keine Katalogeinträge gefunden.'),
+                  ),
+                for (final it in _items)
+                  Card(
+                    child: ListTile(
+                      leading: _isSystemItem(it)
+                          ? const Icon(Icons.lock_rounded)
+                          : Icon(
+                              it.active
+                                  ? Icons.check_circle_rounded
+                                  : Icons.remove_circle_rounded,
+                            ),
+                      title: Row(
+                        children: [
+                          Expanded(child: Text(it.title)),
+                          if (_isSystemItem(it))
+                            const Padding(
+                              padding: EdgeInsets.only(left: 8),
+                              child: Chip(
+                                label: Text('System'),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-                subtitle: Text(
-                  'Default: ${Format.centsToEur(it.defaultAmountCents ?? 0)}'
-                      '${_isSystemItem(it) ? '\nAutomatisch (Anwesenheit) – nur Betrag änderbar' : ''}'
-                      '${it.active ? '' : '\nInaktiv'}',
-                ),
-                isThreeLine: _isSystemItem(it) || !it.active,
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _openEditItem(it),
-              ),
+                      subtitle: Text(
+                        'Default: ${Format.centsToEur(it.defaultAmountCents ?? 0)}'
+                        '${_isSystemItem(it) ? '\nAutomatisch (Anwesenheit) – nur Betrag änderbar' : ''}'
+                        '${it.active ? '' : '\nInaktiv'}',
+                      ),
+                      isThreeLine: _isSystemItem(it) || !it.active,
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => _openEditItem(it),
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
