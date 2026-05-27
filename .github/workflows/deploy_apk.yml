@@ -112,11 +112,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          flutter build apk --release
-          echo "== build/app/outputs/flutter-apk =="
-          ls -la build/app/outputs/flutter-apk/ | head -200
 
-      # Uses YOUR renamed files from build.gradle.kts:
+          flutter build apk --release
+
+          DIR="build/app/outputs/flutter-apk"
+          SRC="$DIR/app-release.apk"
+          if [ ! -f "$SRC" ]; then
+            echo "Could not find Flutter release APK: $SRC"
+            echo "Directory listing:"
+            ls -la "$DIR" || true
+            exit 1
+          fi
+
+          VERSION="$(grep -E '^version:[[:space:]]*' pubspec.yaml | head -n1 | sed -E 's/^version:[[:space:]]*//')"
+          if [ -z "${VERSION:-}" ]; then
+            echo "Could not extract version from pubspec.yaml"
+            exit 1
+          fi
+
+          APK="$DIR/verhaarm-release-$VERSION.apk"
+          cp "$SRC" "$APK"
+          sha1sum "$APK" | awk '{print $1}' > "$APK.sha1"
+
+          echo "== build/app/outputs/flutter-apk =="
+          ls -la "$DIR" | head -200
+
+      # Uses the renamed files created immediately after flutter build apk:
       #   build/app/outputs/flutter-apk/verhaarm-release-<versionName>+<versionCode>.apk
       #   build/app/outputs/flutter-apk/verhaarm-release-<versionName>+<versionCode>.apk.sha1
       - name: Generate latest.json from renamed APK
