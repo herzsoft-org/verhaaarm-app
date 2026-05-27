@@ -77,7 +77,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
     BaseOptions(
       connectTimeout: const Duration(seconds: 6),
       receiveTimeout: const Duration(seconds: 6),
-      sendTimeout: const Duration(seconds: 6),
       responseType: ResponseType.plain,
       headers: const {'Accept': 'application/json'},
     ),

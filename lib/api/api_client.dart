@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 
 import '../auth/auth_api.dart';
@@ -16,6 +15,7 @@ class ApiClient {
   late final AuthApi auth;
 
   static const String baseUrlProd = 'https://verhaarmapi.herz.moe';
+  static const Duration _defaultSendTimeout = Duration(seconds: 20);
 
   ApiClient({required this.authStore}) {
     dio = Dio(
@@ -23,7 +23,6 @@ class ApiClient {
         baseUrl: baseUrlProd,
         connectTimeout: const Duration(seconds: 12),
         receiveTimeout: const Duration(seconds: 20),
-        sendTimeout: const Duration(seconds: 20),
         // don't set global Content-Type; Dio sets it per request
         headers: const {},
       ),
@@ -37,10 +36,32 @@ class ApiClient {
         onRequest: (options, handler) {
           // allow AuthInterceptor / others to access the client
           options.extra['_dio_instance'] = dio;
+          _applySendTimeoutIfRequestHasBody(options);
           handler.next(options);
         },
       ),
     );
+  }
+
+  void _applySendTimeoutIfRequestHasBody(RequestOptions options) {
+    if (options.sendTimeout != null || !_hasRequestBody(options)) return;
+    options.sendTimeout = _defaultSendTimeout;
+  }
+
+  bool _hasRequestBody(RequestOptions options) {
+    final data = options.data;
+    if (data == null) return false;
+
+    if (kIsWeb) {
+      if (data is String && data.isEmpty) return false;
+      if (data is List && data.isEmpty) return false;
+      if (data is Map && data.isEmpty) return false;
+      if (data is FormData && data.fields.isEmpty && data.files.isEmpty) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   Future<ConventPeriodDto> unlockPeriod(String id) async {
