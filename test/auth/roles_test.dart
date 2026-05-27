@@ -39,6 +39,7 @@ void main() {
   group('role permissions', () {
     test('allows office access only for elevated roles', () {
       expect(Roles.canAccessOffice({AppRole.member}), isFalse);
+      expect(Roles.canAccessOffice({AppRole.fechtwart}), isTrue);
       expect(Roles.canAccessOffice({AppRole.treasurer}), isTrue);
       expect(Roles.canAccessOffice({AppRole.housekeeping}), isTrue);
     });

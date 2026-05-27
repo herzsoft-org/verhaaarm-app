@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
@@ -67,7 +68,7 @@ class ActionsPage extends StatelessWidget {
             title: 'Paukstunden',
             children: [
               ListTile(
-                leading: const Icon(Icons.gavel_rounded),
+                leading: const Icon(Symbols.swords),
                 title: const Text('Paukstunde eintragen'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 titleAlignment: ListTileTitleAlignment.center,

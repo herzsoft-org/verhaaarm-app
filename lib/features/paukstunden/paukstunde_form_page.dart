@@ -15,12 +15,14 @@ class PaukstundeFormPage extends StatefulWidget {
   final ApiClient api;
   final AuthStore authStore;
   final bool fechtwartMode;
+  final PaukstundenEntryDto? editEntry;
 
   const PaukstundeFormPage({
     super.key,
     required this.api,
     required this.authStore,
     this.fechtwartMode = false,
+    this.editEntry,
   });
 
   @override
@@ -29,24 +31,26 @@ class PaukstundeFormPage extends StatefulWidget {
 
 class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
   final _formKey = GlobalKey<FormState>();
-  final _hoursCtrl = TextEditingController(text: '1');
 
   DateTime _date = DateTime.now();
+  int _hours = 1;
   bool _loading = true;
   bool _saving = false;
   List<UserPickerDto> _allUsers = const [];
   Set<String> _selectedIds = {};
 
+  bool get _isEdit => widget.editEntry != null;
+
   @override
   void initState() {
     super.initState();
+    final entry = widget.editEntry;
+    if (entry != null) {
+      _date = DateTime.tryParse(entry.date) ?? DateTime.now();
+      _hours = entry.hours < 1 ? 1 : entry.hours;
+      _selectedIds = entry.participants.map((p) => p.id).toSet();
+    }
     _loadUsers();
-  }
-
-  @override
-  void dispose() {
-    _hoursCtrl.dispose();
-    super.dispose();
   }
 
   String get _dateIso {
@@ -64,8 +68,8 @@ class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
         me = null;
       }
 
-      final selected = <String>{};
-      if (me != null && users.any((u) => u.id == me!.id)) {
+      final selected = {..._selectedIds};
+      if (!_isEdit && me != null && users.any((u) => u.id == me!.id)) {
         selected.add(me.id);
       }
 
@@ -130,18 +134,36 @@ class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
 
     setState(() => _saving = true);
     try {
-      await widget.api.createPaukstunde(
-        CreatePaukstundeRequest(
-          date: _dateIso,
-          hours: int.parse(_hoursCtrl.text.trim()),
-          participantUserIds: _selectedIds.toList(growable: false),
-        ),
-      );
+      final participantUserIds = _selectedIds.toList(growable: false);
+      final entry = widget.editEntry;
+
+      if (entry == null) {
+        await widget.api.createPaukstunde(
+          CreatePaukstundeRequest(
+            date: _dateIso,
+            hours: _hours,
+            participantUserIds: participantUserIds,
+          ),
+        );
+      } else {
+        await widget.api.updatePaukstunde(
+          entry.id,
+          UpdatePaukstundeRequest(
+            date: _dateIso,
+            hours: _hours,
+            participantUserIds: participantUserIds,
+          ),
+        );
+      }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Paukstunde eingetragen.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isEdit ? 'Paukstunde gespeichert.' : 'Paukstunde eingetragen.',
+          ),
+        ),
+      );
 
       if (Navigator.of(context).canPop()) {
         context.pop(true);
@@ -183,10 +205,21 @@ class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
         .join(', ');
   }
 
+  void _changeHours(int delta) {
+    setState(() {
+      final next = _hours + delta;
+      _hours = next < 1 ? 1 : next;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: widget.fechtwartMode ? 'Paukstunde eintragen' : 'Meine Paukstunde',
+      title: _isEdit
+          ? 'Paukstunde bearbeiten'
+          : (widget.fechtwartMode
+                ? 'Paukstunde eintragen'
+                : 'Meine Paukstunde'),
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
@@ -217,21 +250,48 @@ class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
                         const Divider(height: 1),
                         Padding(
                           padding: const EdgeInsets.all(16),
-                          child: TextFormField(
-                            controller: _hoursCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Paukstunden',
-                              prefixIcon: Icon(Icons.timer_rounded),
-                            ),
-                            validator: (v) {
-                              final n = int.tryParse((v ?? '').trim());
-                              if (n == null) {
-                                return 'Bitte ganze Zahl eingeben.';
-                              }
-                              if (n <= 0) return 'Muss größer als 0 sein.';
+                          child: FormField<int>(
+                            initialValue: _hours,
+                            validator: (_) {
+                              if (_hours < 1) return 'Muss größer als 0 sein.';
                               return null;
                             },
+                            builder: (state) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Align(
+                                  alignment: AlignmentDirectional.centerStart,
+                                  child: Text(
+                                    'Paukstunden',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelMedium,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                _HoursRow(
+                                  value: _hours,
+                                  onMinus: (_saving || _hours <= 1)
+                                      ? null
+                                      : () => _changeHours(-1),
+                                  onPlus: _saving
+                                      ? null
+                                      : () => _changeHours(1),
+                                ),
+                                if (state.hasError) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    state.errorText!,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -260,12 +320,79 @@ class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_rounded),
-                      label: const Text('Eintragen'),
+                      label: Text(
+                        _isEdit ? 'Änderungen speichern' : 'Eintragen',
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _HoursRow extends StatelessWidget {
+  final int value;
+  final VoidCallback? onMinus;
+  final VoidCallback? onPlus;
+
+  const _HoursRow({
+    required this.value,
+    required this.onMinus,
+    required this.onPlus,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text('Anzahl', style: theme.textTheme.labelLarge),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: onMinus,
+                  icon: const Icon(Icons.remove_rounded),
+                  tooltip: 'Weniger',
+                ),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 52),
+                  alignment: Alignment.center,
+                  child: Text('$value', style: theme.textTheme.titleMedium),
+                ),
+                IconButton(
+                  onPressed: onPlus,
+                  icon: const Icon(Icons.add_rounded),
+                  tooltip: 'Mehr',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

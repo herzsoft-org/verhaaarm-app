@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
@@ -86,13 +87,9 @@ class _OfficePageState extends State<OfficePage> {
     final canCatalog = Roles.canManageCatalog(roles);
     final canPeriods = Roles.canManagePeriods(roles);
     final canAcceptSuggestions = Roles.canAcceptFineSuggestions(roles);
+    final canSeeAllFines = Roles.canSeeAllFines(roles);
     final canTasks = Roles.canManageTasks(roles);
     final canPaukstunden = Roles.canManagePaukstunden(roles);
-    final canSeeActiveMemberStats =
-        roles.contains(AppRole.admin) ||
-        roles.contains(AppRole.senior) ||
-        roles.contains(AppRole.housekeeping) ||
-        roles.contains(AppRole.treasurer);
     final isAdmin = roles.contains(AppRole.admin);
 
     return AppScaffold(
@@ -115,71 +112,73 @@ class _OfficePageState extends State<OfficePage> {
             ),
             const SizedBox(height: 12),
           ],
-          _Section(
-            title: 'Beihängungen',
-            children: [
-              ListTile(
-                leading: const Icon(Icons.list_alt_rounded),
-                title: const Text('Alle Beihängungen'),
-                subtitle: const Text(
-                  'Alle Nutzer, alle Conventsperioden (nach Backend-Rechten)',
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => context.push('/fines'),
-              ),
-              if (canAcceptSuggestions)
+          if (canSeeAllFines) ...[
+            _Section(
+              title: 'Beihängungen',
+              children: [
                 ListTile(
-                  leading: const Icon(Icons.inbox_rounded),
-                  title: const Text('Vorgeschlagene Beihängungen'),
-                  subtitle: const Text('Ansehen, akzeptieren oder ablehnen'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _countBadge(context, _openSuggestions),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
+                  leading: const Icon(Icons.list_alt_rounded),
+                  title: const Text('Alle Beihängungen'),
+                  subtitle: const Text(
+                    'Alle Nutzer, alle Conventsperioden',
                   ),
-                  onTap: () async {
-                    await context.push('/office/fine-suggestions');
-                    if (!mounted) return;
-                    await _loadOpenSuggestionsCount();
-                  },
-                ),
-              if (canCatalog)
-                ListTile(
-                  leading: const Icon(Icons.rule_rounded),
-                  title: const Text('Beihängungskatalog verwalten'),
-                  subtitle: const Text('Gründe + Default Beträge'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/office/catalog'),
+                  onTap: () => context.push('/fines'),
                 ),
-              ListTile(
-                leading: const Icon(Icons.download_rounded),
-                title: const Text('CSV Export'),
-                subtitle: Text(
-                  _csvBusy
-                      ? 'Conventsperioden werden geladen / Export läuft ...'
-                      : 'Semester oder einzelne Conventsperiode exportieren',
+                if (canAcceptSuggestions)
+                  ListTile(
+                    leading: const Icon(Icons.inbox_rounded),
+                    title: const Text('Vorgeschlagene Beihängungen'),
+                    subtitle: const Text('Ansehen, akzeptieren oder ablehnen'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _countBadge(context, _openSuggestions),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right_rounded),
+                      ],
+                    ),
+                    onTap: () async {
+                      await context.push('/office/fine-suggestions');
+                      if (!mounted) return;
+                      await _loadOpenSuggestionsCount();
+                    },
+                  ),
+                if (canCatalog)
+                  ListTile(
+                    leading: const Icon(Icons.rule_rounded),
+                    title: const Text('Beihängungskatalog verwalten'),
+                    subtitle: const Text('Gründe + Default Beträge'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/office/catalog'),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.download_rounded),
+                  title: const Text('CSV Export'),
+                  subtitle: Text(
+                    _csvBusy
+                        ? 'Conventsperioden werden geladen / Export läuft ...'
+                        : 'Semester oder einzelne Conventsperiode exportieren',
+                  ),
+                  trailing: _csvBusy
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Icon(Icons.chevron_right_rounded),
+                  onTap: _csvBusy ? null : _startCsvExportFlow,
                 ),
-                trailing: _csvBusy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.chevron_right_rounded),
-                onTap: _csvBusy ? null : _startCsvExportFlow,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           if (canPaukstunden)
             _Section(
               title: 'Fechtwart',
               children: [
                 ListTile(
-                  leading: const Icon(Icons.gavel_rounded),
+                  leading: const Icon(Symbols.swords),
                   title: const Text('Fechtwart'),
                   subtitle: const Text('Paukstunden eintragen und verwalten'),
                   trailing: const Icon(Icons.chevron_right_rounded),
@@ -203,33 +202,21 @@ class _OfficePageState extends State<OfficePage> {
               ],
             ),
           if (canPeriods) const SizedBox(height: 12),
-          if (canUsers || canSeeActiveMemberStats)
+          if (canUsers)
             _Section(
               title: 'Nutzerverwaltung',
               children: [
-                if (canSeeActiveMemberStats)
-                  ListTile(
-                    leading: const Icon(Icons.bar_chart_rounded),
-                    title: const Text('Aktivenstände'),
-                    subtitle: const Text(
-                      'Füxe, Aktive und Inaktive der Aktivitas',
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/office/active-member-stats'),
+                ListTile(
+                  leading: const Icon(Icons.people_rounded),
+                  title: const Text('Nutzer verwalten'),
+                  subtitle: const Text(
+                    'Erstellen, Rollen, deaktivieren, Passwort setzen',
                   ),
-                if (canUsers)
-                  ListTile(
-                    leading: const Icon(Icons.people_rounded),
-                    title: const Text('Nutzer verwalten'),
-                    subtitle: const Text(
-                      'Erstellen, Rollen, deaktivieren, Passwort setzen',
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/office/users'),
-                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/office/users'),
+                ),
               ],
             ),
-          if (canUsers || canSeeActiveMemberStats) const SizedBox(height: 12),
           if (canUsers) const SizedBox(height: 12),
           if (isAdmin)
             _Section(
@@ -351,7 +338,7 @@ class _OfficePageState extends State<OfficePage> {
 
             if (scope == ExportScope.period) {
               final hasSelectedPeriod = periodsInSelectedSemester.any(
-                (p) => p.id == selectedPeriodId,
+                    (p) => p.id == selectedPeriodId,
               );
               if (!hasSelectedPeriod) {
                 selectedPeriodId = periodsInSelectedSemester.isNotEmpty
@@ -407,7 +394,7 @@ class _OfficePageState extends State<OfficePage> {
                               selectedSemester = value;
                               final updatedPeriods =
                                   grouped[selectedSemester] ??
-                                  const <ConventPeriodDto>[];
+                                      const <ConventPeriodDto>[];
                               selectedPeriodId = updatedPeriods.isNotEmpty
                                   ? updatedPeriods.first.id
                                   : null;
@@ -481,18 +468,18 @@ class _OfficePageState extends State<OfficePage> {
                 FilledButton.icon(
                   onPressed: canSubmit
                       ? () {
-                          Navigator.of(dialogContext).pop(
-                            _ExportDialogResult(
-                              scope: scope,
-                              semester: scope == ExportScope.semester
-                                  ? selectedSemester
-                                  : null,
-                              periodId: scope == ExportScope.period
-                                  ? selectedPeriodId
-                                  : null,
-                            ),
-                          );
-                        }
+                    Navigator.of(dialogContext).pop(
+                      _ExportDialogResult(
+                        scope: scope,
+                        semester: scope == ExportScope.semester
+                            ? selectedSemester
+                            : null,
+                        periodId: scope == ExportScope.period
+                            ? selectedPeriodId
+                            : null,
+                      ),
+                    );
+                  }
                       : null,
                   icon: const Icon(Icons.download_rounded),
                   label: const Text('Exportieren'),
@@ -569,8 +556,8 @@ class _OfficePageState extends State<OfficePage> {
 
     try {
       final periodsInSemester =
-          periods.where((p) => p.semester == semester).toList()
-            ..sort(_comparePeriodsAsc);
+      periods.where((p) => p.semester == semester).toList()
+        ..sort(_comparePeriodsAsc);
 
       if (periodsInSemester.isEmpty) {
         throw Exception('Keine Conventsperioden für das Semester gefunden');
@@ -648,8 +635,8 @@ class _OfficePageState extends State<OfficePage> {
   }
 
   Map<String, List<ConventPeriodDto>> _groupBySemester(
-    List<ConventPeriodDto> periods,
-  ) {
+      List<ConventPeriodDto> periods,
+      ) {
     final sorted = [...periods]..sort(_comparePeriodsDesc);
     final map = <String, List<ConventPeriodDto>>{};
 

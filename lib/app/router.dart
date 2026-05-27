@@ -102,7 +102,9 @@ bool _canAccessLocation(String location, Set<AppRole> roles) {
   if (location == '/live-events' || location.startsWith('/live-events/')) {
     return true;
   }
-  if (location == '/paukstunden/me' || location == '/paukstunden/new') {
+  if (location == '/paukstunden/me' ||
+      location == '/paukstunden/new' ||
+      location.startsWith('/paukstunden/')) {
     return true;
   }
   if (location.startsWith('/office/active-member-stats')) {
@@ -240,12 +242,24 @@ Future<GoRouter> buildRouter() async {
       ),
       GoRoute(
         path: '/paukstunden/me',
-        builder: (context, state) => MyPaukstundenPage(api: api),
+        builder: (context, state) =>
+            MyPaukstundenPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/paukstunden/new',
         builder: (context, state) =>
             PaukstundeFormPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/paukstunden/:id/edit',
+        builder: (context, state) {
+          if (state.extra is! PaukstundenEntryDto) return _noAccessPage();
+          return PaukstundeFormPage(
+            api: api,
+            authStore: authStore,
+            editEntry: state.extra! as PaukstundenEntryDto,
+          );
+        },
       ),
       GoRoute(
         path: '/profile/sessions',
@@ -466,6 +480,21 @@ Future<GoRouter> buildRouter() async {
             api: api,
             authStore: authStore,
             fechtwartMode: true,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/office/fechtwart/paukstunden/:id/edit',
+        builder: (context, state) {
+          final roles = _roles(authStore);
+          if (!Roles.canManagePaukstunden(roles)) return _noAccessPage();
+          if (state.extra is! PaukstundenEntryDto) return _noAccessPage();
+
+          return PaukstundeFormPage(
+            api: api,
+            authStore: authStore,
+            fechtwartMode: true,
+            editEntry: state.extra! as PaukstundenEntryDto,
           );
         },
       ),

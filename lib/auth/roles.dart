@@ -47,7 +47,6 @@ class Roles {
     return roles.contains(AppRole.admin) ||
         roles.contains(AppRole.senior) ||
         roles.contains(AppRole.housekeeping) ||
-        roles.contains(AppRole.fechtwart) ||
         roles.contains(AppRole.treasurer);
   }
 
@@ -102,6 +101,7 @@ class Roles {
     return roles.contains(AppRole.admin) ||
         roles.contains(AppRole.senior) ||
         roles.contains(AppRole.housekeeping) ||
+        roles.contains(AppRole.fechtwart) ||
         roles.contains(AppRole.treasurer);
   }
 
