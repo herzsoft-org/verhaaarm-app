@@ -87,8 +87,7 @@ Future<void> routeNotificationClick(
       router.push('/my-fines');
       return;
     case NotificationClickTarget.fineSuggestions:
-      router.go('/actions');
-      router.push('/office/fine-suggestions');
+      router.go('/office/fine-suggestions');
       return;
     case NotificationClickTarget.unknown:
       router.go('/home');

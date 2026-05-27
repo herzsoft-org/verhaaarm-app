@@ -70,6 +70,21 @@ Widget _noAccessPage() {
   return const Scaffold(body: Center(child: Text('Kein Zugriff.')));
 }
 
+Page<void> _noTransitionPage(GoRouterState state, Widget child) {
+  return NoTransitionPage<void>(key: state.pageKey, child: child);
+}
+
+GoRoute _actionSubRoute({
+  required String path,
+  required Widget Function(BuildContext context, GoRouterState state) builder,
+}) {
+  return GoRoute(
+    path: path,
+    pageBuilder: (context, state) =>
+        _noTransitionPage(state, builder(context, state)),
+  );
+}
+
 Set<AppRole> _roles(AuthStore authStore) {
   return authStore.currentRoles;
 }
@@ -240,17 +255,17 @@ Future<GoRouter> buildRouter() async {
         builder: (context, state) =>
             MainTabShell(api: api, authStore: authStore, initialIndex: 2),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/paukstunden/me',
         builder: (context, state) =>
             MyPaukstundenPage(api: api, authStore: authStore),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/paukstunden/new',
         builder: (context, state) =>
             PaukstundeFormPage(api: api, authStore: authStore),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/paukstunden/:id/edit',
         builder: (context, state) {
           if (state.extra is! PaukstundenEntryDto) return _noAccessPage();
@@ -271,11 +286,11 @@ Future<GoRouter> buildRouter() async {
             NotificationsPage(api: api, authStore: authStore),
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/tasks',
         builder: (context, state) => TasksPage(api: api, authStore: authStore),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/tasks/new',
         builder: (context, state) => TaskFormPage(
           api: api,
@@ -284,7 +299,7 @@ Future<GoRouter> buildRouter() async {
           isAdminEdit: false,
         ),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/tasks/:id/edit',
         builder: (context, state) {
           final TaskDto? t = state.extra is TaskDto
@@ -300,12 +315,12 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/legal-documents',
         builder: (context, state) => const LegalDocumentsPage(),
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/legal-documents/:id',
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
@@ -318,11 +333,11 @@ Future<GoRouter> buildRouter() async {
           return LegalDocumentViewerPage(document: doc);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/convent-protocols',
         builder: (context, state) => ConventProtocolsPage(api: api),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/convent-protocols/:id',
         builder: (context, state) {
           final period = state.extra is ConventPeriodDto
@@ -354,11 +369,11 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/my-fines',
         builder: (context, state) => MyFinesPage(api: api),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/fines',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -367,7 +382,7 @@ Future<GoRouter> buildRouter() async {
           return FinesListPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/fines/new',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -380,11 +395,11 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/my-fine-suggestions',
         builder: (context, state) => MyFineSuggestionsPage(api: api),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/suggestions/new',
         builder: (context, state) => FineFormPage(
           api: api,
@@ -392,7 +407,7 @@ Future<GoRouter> buildRouter() async {
           mode: FineFormMode.suggestion,
         ),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/suggestions/:id',
         builder: (context, state) => FineSuggestionDetailPage(
           api: api,
@@ -400,7 +415,7 @@ Future<GoRouter> buildRouter() async {
           suggestionId: state.pathParameters['id']!,
         ),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/suggestions/:id/edit',
         builder: (context, state) => FineFormPage(
           api: api,
@@ -409,7 +424,7 @@ Future<GoRouter> buildRouter() async {
           suggestionId: state.pathParameters['id'],
         ),
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/fines/:id',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -423,7 +438,7 @@ Future<GoRouter> buildRouter() async {
         },
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/office/fine-suggestions',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -452,7 +467,7 @@ Future<GoRouter> buildRouter() async {
         ),
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/office',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -461,7 +476,7 @@ Future<GoRouter> buildRouter() async {
           return OfficePage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/fechtwart',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -470,7 +485,7 @@ Future<GoRouter> buildRouter() async {
           return FechtwartPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/fechtwart/paukstunden/new',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -483,7 +498,7 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/fechtwart/paukstunden/:id/edit',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -499,7 +514,7 @@ Future<GoRouter> buildRouter() async {
         },
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/office/tasks',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -508,7 +523,7 @@ Future<GoRouter> buildRouter() async {
           return OfficeTasksPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/session-stats',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -517,7 +532,7 @@ Future<GoRouter> buildRouter() async {
           return SessionStatsPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/sessions',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -526,7 +541,7 @@ Future<GoRouter> buildRouter() async {
           return AdminSessionsPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/sessions/users/:userId',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -540,7 +555,7 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/tasks/new',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -554,7 +569,7 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/tasks/:id/edit',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -574,7 +589,7 @@ Future<GoRouter> buildRouter() async {
         },
       ),
 
-      GoRoute(
+      _actionSubRoute(
         path: '/office/periods',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -583,7 +598,7 @@ Future<GoRouter> buildRouter() async {
           return PeriodsPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/periods/new',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -592,7 +607,7 @@ Future<GoRouter> buildRouter() async {
           return PeriodFormPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/periods/:id/edit',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -605,7 +620,7 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/periods/:id/protocol',
         builder: (context, state) {
           final period = state.extra is ConventPeriodDto
@@ -619,7 +634,7 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/users',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -628,7 +643,7 @@ Future<GoRouter> buildRouter() async {
           return UsersPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/users/new',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -637,7 +652,7 @@ Future<GoRouter> buildRouter() async {
           return UserFormPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/users/:id/edit',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -650,7 +665,7 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/users/:id/password',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -663,13 +678,13 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/active-member-stats',
         builder: (context, state) {
           return ActiveMemberStatsPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/catalog',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -678,7 +693,7 @@ Future<GoRouter> buildRouter() async {
           return CatalogPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/catalog/new',
         builder: (context, state) {
           final roles = _roles(authStore);
@@ -687,7 +702,7 @@ Future<GoRouter> buildRouter() async {
           return CatalogFormPage(api: api, authStore: authStore);
         },
       ),
-      GoRoute(
+      _actionSubRoute(
         path: '/office/catalog/:id/edit',
         builder: (context, state) {
           final roles = _roles(authStore);

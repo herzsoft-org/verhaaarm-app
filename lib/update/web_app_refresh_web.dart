@@ -9,10 +9,33 @@ external JSPromise<JSAny?> _fetch(JSAny input, [JSAny? init]);
 
 Future<void> forceReloadWebApp() async {
   await _deleteBrowserCaches();
+  await _refreshAppShellAssets();
   await _refreshMutableAppAssets();
   await _unregisterFlutterServiceWorkersOnly();
 
-  web.window.location.reload();
+  _reloadWithCacheBuster();
+}
+
+Future<void> _refreshAppShellAssets() async {
+  final urls = <String>{
+    _assetUrl(''),
+    _assetUrl('index.html'),
+    _assetUrl('flutter.js'),
+    _assetUrl('flutter_bootstrap.js'),
+    _assetUrl('main.dart.js'),
+    _assetUrl('manifest.json'),
+    _assetUrl('version.json'),
+    _assetUrl('assets/AssetManifest.bin'),
+    _assetUrl('assets/AssetManifest.json'),
+  };
+
+  for (final url in urls) {
+    try {
+      await _fetchWithCacheReload(url);
+    } catch (_) {
+      // Best effort: Flutter versions differ in which bootstrap files exist.
+    }
+  }
 }
 
 Future<void> _refreshMutableAppAssets() async {
@@ -128,6 +151,17 @@ String? _scriptUrlForRegistration(JSObject registration) {
   }
 
   return null;
+}
+
+void _reloadWithCacheBuster() {
+  final location = web.window.location;
+  final current = Uri.parse(location.href);
+  final updatedQuery = Map<String, String>.from(current.queryParameters);
+  updatedQuery['_app_reload'] = DateTime.now().millisecondsSinceEpoch
+      .toString();
+
+  final next = current.replace(queryParameters: updatedQuery).toString();
+  location.replace(next);
 }
 
 Future<String?> _fetchTextWithCacheReload(String url) async {
