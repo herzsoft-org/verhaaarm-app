@@ -75,10 +75,37 @@ class AppScaffold extends StatelessWidget {
 }
 
 int mainTabIndexForLocation(String location) {
-  if (location == '/actions' || location.startsWith('/actions/')) return 1;
-  if (location == '/profile' || location.startsWith('/profile/')) return 2;
+  final path = _pathForTabLocation(location);
+  if (_isActionsTabLocation(path)) return 1;
+  if (path == '/profile' || path.startsWith('/profile/')) return 2;
   return 0;
 }
+
+String _pathForTabLocation(String location) {
+  final parsed = Uri.tryParse(location);
+  final path = parsed?.path ?? location;
+  return path.isEmpty ? '/' : path;
+}
+
+bool _isActionsTabLocation(String path) {
+  if (path == '/actions' || path.startsWith('/actions/')) return true;
+
+  return _actionsTabRootPaths.any(
+    (root) => path == root || path.startsWith('$root/'),
+  );
+}
+
+const Set<String> _actionsTabRootPaths = {
+  '/tasks',
+  '/my-fine-suggestions',
+  '/suggestions',
+  '/my-fines',
+  '/fines',
+  '/paukstunden',
+  '/office',
+  '/convent-protocols',
+  '/legal-documents',
+};
 
 String mainTabLocationForIndex(int index) {
   return switch (index) {

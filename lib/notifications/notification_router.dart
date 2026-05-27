@@ -6,6 +6,7 @@ enum NotificationClickTarget {
   homeLiveEvents,
   actionsArbeitsauftraege,
   actionsBeihaengung,
+  fineSuggestions,
   unknown,
 }
 
@@ -46,6 +47,7 @@ class NotificationRouteData {
         'ACTIONS_ARBEITSAUFTRAEGE' =>
           NotificationClickTarget.actionsArbeitsauftraege,
         'ACTIONS_BEIHAENGUNG' => NotificationClickTarget.actionsBeihaengung,
+        'FINE_SUGGESTIONS' => NotificationClickTarget.fineSuggestions,
         _ => _targetFromType(type),
       },
       type: type,
@@ -57,6 +59,9 @@ class NotificationRouteData {
     if (t.contains('LIVE_EVENT')) return NotificationClickTarget.homeLiveEvents;
     if (t.contains('TASK')) {
       return NotificationClickTarget.actionsArbeitsauftraege;
+    }
+    if (t == 'FINE_SUGGESTION_CREATED') {
+      return NotificationClickTarget.fineSuggestions;
     }
     if (t.contains('FINE')) return NotificationClickTarget.actionsBeihaengung;
     return NotificationClickTarget.unknown;
@@ -80,6 +85,10 @@ Future<void> routeNotificationClick(
     case NotificationClickTarget.actionsBeihaengung:
       router.go('/actions');
       router.push('/my-fines');
+      return;
+    case NotificationClickTarget.fineSuggestions:
+      router.go('/actions');
+      router.push('/office/fine-suggestions');
       return;
     case NotificationClickTarget.unknown:
       router.go('/home');

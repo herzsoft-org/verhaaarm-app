@@ -37,6 +37,9 @@ self.addEventListener('notificationclick', (event) => {
     case 'ACTIONS_BEIHAENGUNG':
       url = '/my-fines';
       break;
+    case 'FINE_SUGGESTIONS':
+      url = '/office/fine-suggestions';
+      break;
   }
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

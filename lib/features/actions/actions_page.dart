@@ -6,6 +6,7 @@ import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../models/member_status.dart';
 
 class ActionsPage extends StatelessWidget {
   final ApiClient api;
@@ -26,6 +27,9 @@ class ActionsPage extends StatelessWidget {
     final roles = authStore.currentRoles;
     final canOffice = Roles.canAccessOffice(roles);
     final canOfficialFine = Roles.canCreateOfficialFine(roles);
+    final isPhilister = MemberStatuses.isPhilister(
+      authStore.currentUser?.memberStatus,
+    );
 
     return AppScaffold(
       title: 'Aktionen',
@@ -51,16 +55,14 @@ class ActionsPage extends StatelessWidget {
                 titleAlignment: ListTileTitleAlignment.center,
                 onTap: () => context.push('/my-fine-suggestions'),
               ),
-              ListTile(
-                leading: const Icon(Icons.add_rounded),
-                title: const Text('Beihängen'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                titleAlignment: ListTileTitleAlignment.center,
-                enabled: canOfficialFine,
-                onTap: canOfficialFine
-                    ? () => context.push('/fines/new')
-                    : null,
-              ),
+              if (canOfficialFine)
+                ListTile(
+                  leading: const Icon(Icons.add_rounded),
+                  title: const Text('Beihängen'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  titleAlignment: ListTileTitleAlignment.center,
+                  onTap: () => context.push('/fines/new'),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -94,13 +96,14 @@ class ActionsPage extends StatelessWidget {
                 titleAlignment: ListTileTitleAlignment.center,
                 onTap: () => context.push('/office/active-member-stats'),
               ),
-              ListTile(
-                leading: const Icon(Icons.picture_as_pdf_rounded),
-                title: const Text('Conventsprotokolle'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                titleAlignment: ListTileTitleAlignment.center,
-                onTap: () => context.push('/convent-protocols'),
-              ),
+              if (!isPhilister)
+                ListTile(
+                  leading: const Icon(Icons.picture_as_pdf_rounded),
+                  title: const Text('Conventsprotokolle'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  titleAlignment: ListTileTitleAlignment.center,
+                  onTap: () => context.push('/convent-protocols'),
+                ),
               ListTile(
                 leading: const Icon(Icons.menu_book_rounded),
                 title: const Text('Rechtsgrundlagen'),

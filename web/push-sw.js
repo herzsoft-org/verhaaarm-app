@@ -42,6 +42,9 @@ self.addEventListener('notificationclick', (event) => {
     case 'ACTIONS_BEIHAENGUNG':
       targetUrl = '/my-fines';
       break;
+    case 'FINE_SUGGESTIONS':
+      targetUrl = '/office/fine-suggestions';
+      break;
     default:
       if (data.notificationId) {
         targetUrl = '/notifications';
