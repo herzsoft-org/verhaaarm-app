@@ -202,15 +202,18 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   await _ensureLocalNotificationsInitialized(requestPermission: false);
 
-  final hasReactionActions = _hasReactionActions(message.data);
-
-  // Normal notification+data messages are displayed automatically by Android
-  // when the app is backgrounded/killed. Do not duplicate those.
-  //
-  // Action-capable live-event messages are different: FCM's auto-displayed
-  // notification cannot include flutter_local_notifications action buttons,
-  // so we render those locally even if message.notification is present.
-  if (message.notification != null && !hasReactionActions) return;
+  // Notification+data messages are displayed automatically by Android when the
+  // app is backgrounded/killed. Rendering a local notification here creates a
+  // duplicate. Live-event action pushes must be sent as data-only on Android so
+  // this handler can render the single action-capable notification.
+  if (message.notification != null) {
+    if (_hasReactionActions(message.data)) {
+      debugPrint(
+        'Android live-event action push was notification+data; skipping local duplicate. Send this Android push as data-only to show action buttons.',
+      );
+    }
+    return;
+  }
 
   final title =
       message.notification?.title ??
