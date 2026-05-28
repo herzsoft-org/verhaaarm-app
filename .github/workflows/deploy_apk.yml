@@ -214,8 +214,23 @@ jobs:
           }
 
           DIR="build/app/outputs/flutter-apk"
-          APK="$(ls -1 "$DIR"/verhaarm-release-*.apk | head -n1)"
+          APK="$(find "$DIR" -maxdepth 1 -type f -name 'verhaarm-release-*.apk' | sort -V | tail -n1)"
+          if [ -z "${APK:-}" ] || [ ! -f "$APK" ]; then
+            echo "Could not find renamed release APK in $DIR"
+            ls -la "$DIR" || true
+            exit 1
+          fi
+
           SHA1_FILE="${APK}.sha1"
+          if [ ! -f "$SHA1_FILE" ]; then
+            echo "Missing sha1 file next to APK: $SHA1_FILE"
+            ls -la "$DIR" || true
+            exit 1
+          fi
+
+          APK_BASENAME="$(basename "$APK")"
+          SHA1_BASENAME="$(basename "$SHA1_FILE")"
+
           SSH_DEST="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
           SSH_OPTS=(
             -i ~/.ssh/id_ed25519
@@ -232,10 +247,15 @@ jobs:
             'mkdir -p /home/herz/verhaaarm-apk/'
 
           echo "== rsync upload to staging =="
-          retry timeout 180 rsync -az --delete --timeout=60 --contimeout=10 \
+          retry timeout 180 rsync -az --timeout=60 \
             -e "$RSYNC_SSH" \
             ./latest.json "$APK" "$SHA1_FILE" \
             "$SSH_DEST:/home/herz/verhaaarm-apk/"
+
+          echo "== verify uploaded files exist in staging =="
+          retry timeout 60 ssh "${SSH_OPTS[@]}" \
+            "$SSH_DEST" \
+            "test -s '/home/herz/verhaaarm-apk/$APK_BASENAME' && test -s '/home/herz/verhaaarm-apk/$SHA1_BASENAME' && test -s '/home/herz/verhaaarm-apk/latest.json'"
 
           echo "== remote staging listing (first 50) =="
           retry timeout 60 ssh "${SSH_OPTS[@]}" \
@@ -272,12 +292,23 @@ jobs:
             -o ServerAliveCountMax=3
           )
 
-          REMOTE_CMD="$(cat <<'REMOTE'
+          APK_BASENAME="$(retry timeout 60 ssh "${SSH_OPTS[@]}" "$SSH_DEST" "find /home/herz/verhaaarm-apk -maxdepth 1 -type f -name 'verhaarm-release-*.apk' -printf '%f\n' | sort -V | tail -n1")"
+          if [ -z "${APK_BASENAME:-}" ]; then
+            echo "Could not find uploaded APK in staging before publish"
+            exit 1
+          fi
+
+          APK_BASENAME_QUOTED="$(printf '%q' "$APK_BASENAME")"
+          REMOTE_CMD="$(cat <<REMOTE
           set -euo pipefail
+          APK_BASENAME=$APK_BASENAME_QUOTED
           sudo -n /bin/mkdir -p /var/www/html/verhaarm
           sudo -n /usr/bin/rsync -a --delete /home/herz/verhaaarm-apk/ /var/www/html/verhaarm/
           sudo -n /bin/chown -R www-data.www-data /var/www/html/verhaarm
           echo "Publish done."
+          test -s "/var/www/html/verhaarm/$APK_BASENAME"
+          test -s "/var/www/html/verhaarm/$APK_BASENAME.sha1"
+          test -s /var/www/html/verhaarm/latest.json
           set +o pipefail
           ls -la /var/www/html/verhaarm | head -50
           REMOTE

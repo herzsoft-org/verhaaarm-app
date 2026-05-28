@@ -58,8 +58,9 @@ self.addEventListener('notificationclick', (event) => {
 
   const data = event.notification.data || {};
 
-  if (event.action === 'PROST' || event.action === 'ICH_KOMME') {
-    event.waitUntil(handleLiveEventActionClick(data, event.action));
+  const reactionAction = normalizeReactionAction(event.action);
+  if (reactionAction) {
+    event.waitUntil(handleLiveEventActionClick(data, reactionAction));
     return;
   }
 
@@ -164,9 +165,39 @@ function reactionActionsForData(data) {
   }
 
   return [
-    { action: 'PROST', title: '🍻 Prost!' },
-    { action: 'ICH_KOMME', title: '🏃 Ich komme!' },
+    // Android Chrome has proven picky with web notification actions here:
+    // simple lowercase IDs and text-only labels avoid wrong action dispatches.
+    ...(isAndroidChrome()
+      ? [
+          { action: 'prost', title: 'Prost!' },
+          { action: 'ichkomme', title: 'Ich komme!' },
+        ]
+      : [
+          { action: 'PROST', title: '🍻 Prost!' },
+          { action: 'ICH_KOMME', title: '🏃 Ich komme!' },
+        ]),
   ];
+}
+
+function normalizeReactionAction(action) {
+  switch ((action || '').toString()) {
+    case 'PROST':
+    case 'prost':
+      return 'PROST';
+    case 'ICH_KOMME':
+    case 'ichkomme':
+      return 'ICH_KOMME';
+    default:
+      return '';
+  }
+}
+
+function isAndroidChrome() {
+  const ua =
+    self.navigator && self.navigator.userAgent
+      ? self.navigator.userAgent
+      : '';
+  return /Android/i.test(ua) && /Chrome|CriOS/i.test(ua);
 }
 
 function liveEventTargetUrl(data, action) {

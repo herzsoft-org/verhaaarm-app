@@ -25,6 +25,7 @@ class _FechtwartPageState extends State<FechtwartPage> {
   bool _loading = true;
   bool _showPast = false;
   PaukstundenSummaryDto? _summary;
+  List<PaukstundenEntryDto> _entries = const [];
 
   @override
   void initState() {
@@ -35,10 +36,19 @@ class _FechtwartPageState extends State<FechtwartPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final summary = await widget.api.getCurrentPaukstundenSummary();
+      final results = await Future.wait<Object>([
+        widget.api.getCurrentPaukstundenSummary(),
+        widget.api.getCurrentPaukstundenEntries(),
+      ]);
+
+      final summary = results[0] as PaukstundenSummaryDto;
+      final entries = results[1] as List<PaukstundenEntryDto>;
 
       if (!mounted) return;
-      setState(() => _summary = summary);
+      setState(() {
+        _summary = summary;
+        _entries = entries;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,6 +140,20 @@ class _FechtwartPageState extends State<FechtwartPage> {
         .join(', ');
   }
 
+  Map<String, List<PaukstundenEntryDto>> _entriesByParticipantUserId() {
+    final grouped = <String, List<PaukstundenEntryDto>>{};
+
+    for (final entry in _entries) {
+      for (final participant in entry.participants) {
+        final userId = participant.id;
+        if (userId.isEmpty) continue;
+        (grouped[userId] ??= <PaukstundenEntryDto>[]).add(entry);
+      }
+    }
+
+    return grouped;
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = widget.authStore.currentRoles;
@@ -144,6 +168,7 @@ class _FechtwartPageState extends State<FechtwartPage> {
 
     final summary = _summary;
     final users = summary?.users ?? const <PaukstundenUserSummaryDto>[];
+    final entriesByUserId = _entriesByParticipantUserId();
 
     return AppScaffold(
       title: 'Fechtwart',
@@ -191,9 +216,7 @@ class _FechtwartPageState extends State<FechtwartPage> {
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  '${users.length} Nutzer mit Paukstunden',
-                                ),
+                                Text('${users.length} Nutzer mit Paukstunden'),
                               ],
                             ),
                           ),
@@ -222,12 +245,14 @@ class _FechtwartPageState extends State<FechtwartPage> {
                             '${user.memberStatus.isEmpty ? '' : ' · ${MemberStatuses.label(user.memberStatus)}'}',
                           ),
                           children: [
-                            if (user.entries.isEmpty)
+                            if ((entriesByUserId[user.userId] ?? const [])
+                                .isEmpty)
                               const ListTile(
                                 title: Text('Keine Eintragsdetails verfügbar.'),
+                                titleAlignment: ListTileTitleAlignment.center,
                               )
                             else
-                              for (final entry in user.entries)
+                              for (final entry in entriesByUserId[user.userId]!)
                                 ListTile(
                                   leading: const Icon(Icons.event_note_rounded),
                                   title: Text(

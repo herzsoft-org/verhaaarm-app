@@ -676,7 +676,7 @@ class PaukstundenParticipantDto {
 
   factory PaukstundenParticipantDto.fromJson(Map<String, dynamic> json) {
     return PaukstundenParticipantDto(
-      id: _reqString(json, 'id'),
+      id: _optString(json, 'id') ?? _optString(json, 'userId') ?? '',
       username: _reqString(json, 'username'),
       displayName: _reqString(json, 'displayName'),
       memberStatus: _memberStatusFromJson(json),

@@ -637,6 +637,11 @@ class ApiClient {
     return PaukstundenListDto.fromJson(r.data);
   }
 
+  Future<List<PaukstundenEntryDto>> getCurrentPaukstundenEntries() async {
+    final data = await getCurrentPaukstunden();
+    return data.entries;
+  }
+
   Future<PaukstundenListDto> getUserCurrentPaukstunden(String userId) async {
     final r = await dio.get(
       '/paukstunden/users/$userId/current-conventsperiode',
