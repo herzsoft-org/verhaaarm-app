@@ -198,23 +198,48 @@ jobs:
         run: |
           set -euo pipefail
 
+          retry() {
+            local attempt rc
+            for attempt in 1 2 3; do
+              if "$@"; then
+                return 0
+              fi
+              rc=$?
+              if [ "$attempt" -eq 3 ]; then
+                return "$rc"
+              fi
+              echo "Command failed with exit code $rc. Retrying in 10s... ($attempt/3)"
+              sleep 10
+            done
+          }
+
           DIR="build/app/outputs/flutter-apk"
           APK="$(ls -1 "$DIR"/verhaarm-release-*.apk | head -n1)"
           SHA1_FILE="${APK}.sha1"
+          SSH_DEST="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
+          SSH_OPTS=(
+            -i ~/.ssh/id_ed25519
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=10
+            -o ServerAliveInterval=10
+            -o ServerAliveCountMax=3
+          )
+          RSYNC_SSH="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
 
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+          retry timeout 60 ssh "${SSH_OPTS[@]}" \
+            "$SSH_DEST" \
             'mkdir -p /home/herz/verhaaarm-apk/'
 
           echo "== rsync upload to staging =="
-          rsync -az --delete \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+          retry timeout 180 rsync -az --delete --timeout=60 --contimeout=10 \
+            -e "$RSYNC_SSH" \
             ./latest.json "$APK" "$SHA1_FILE" \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/herz/verhaaarm-apk/"
+            "$SSH_DEST:/home/herz/verhaaarm-apk/"
 
           echo "== remote staging listing (first 50) =="
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+          retry timeout 60 ssh "${SSH_OPTS[@]}" \
+            "$SSH_DEST" \
             'ls -la /home/herz/verhaaarm-apk/ | head -50'
 
       - name: Publish to /var/www/html/verhaarm (sudo exact commands)
@@ -222,12 +247,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            'set -euo pipefail
-             sudo -n /bin/mkdir -p /var/www/html/verhaarm
-             sudo -n /usr/bin/rsync -a --delete /home/herz/verhaaarm-apk/ /var/www/html/verhaarm/
-             sudo -n /bin/chown -R www-data.www-data /var/www/html/verhaarm
-             echo "Publish done."
-             ls -la /var/www/html/verhaarm | head -50
-            '
+          retry() {
+            local attempt rc
+            for attempt in 1 2 3; do
+              if "$@"; then
+                return 0
+              fi
+              rc=$?
+              if [ "$attempt" -eq 3 ]; then
+                return "$rc"
+              fi
+              echo "Command failed with exit code $rc. Retrying in 10s... ($attempt/3)"
+              sleep 10
+            done
+          }
+
+          SSH_DEST="${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
+          SSH_OPTS=(
+            -i ~/.ssh/id_ed25519
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=10
+            -o ServerAliveInterval=10
+            -o ServerAliveCountMax=3
+          )
+
+          REMOTE_CMD="$(cat <<'REMOTE'
+          set -euo pipefail
+          sudo -n /bin/mkdir -p /var/www/html/verhaarm
+          sudo -n /usr/bin/rsync -a --delete /home/herz/verhaaarm-apk/ /var/www/html/verhaarm/
+          sudo -n /bin/chown -R www-data.www-data /var/www/html/verhaarm
+          echo "Publish done."
+          set +o pipefail
+          ls -la /var/www/html/verhaarm | head -50
+          REMOTE
+          )"
+
+          retry timeout 120 ssh "${SSH_OPTS[@]}" "$SSH_DEST" "$REMOTE_CMD"
