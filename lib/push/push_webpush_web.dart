@@ -7,11 +7,13 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
 import '../api/api_client.dart';
 import '../auth/auth_store.dart';
+import '../models/dtos.dart';
 import 'webpush_vapid.dart';
 
 class WebPushRegistrar {
@@ -21,6 +23,7 @@ class WebPushRegistrar {
   Timer? _keepAliveTimer;
   bool _started = false;
   bool _tickRunning = false;
+  bool _serviceWorkerMessageListenerInstalled = false;
   String? _lastSyncedSignature;
 
   WebPushRegistrar({required this.api, required this.authStore});
@@ -31,13 +34,14 @@ class WebPushRegistrar {
     if (_started) return;
 
     _started = true;
+    _installServiceWorkerMessageListener();
 
     await _keepAliveTick();
 
     _keepAliveTimer?.cancel();
     _keepAliveTimer = Timer.periodic(
       const Duration(minutes: 1),
-          (_) => unawaited(_keepAliveTick()),
+      (_) => unawaited(_keepAliveTick()),
     );
   }
 
@@ -47,6 +51,145 @@ class WebPushRegistrar {
     _started = false;
     _tickRunning = false;
     _lastSyncedSignature = null;
+  }
+
+  void _installServiceWorkerMessageListener() {
+    if (_serviceWorkerMessageListenerInstalled) return;
+
+    final sw = _serviceWorkerContainer();
+    if (sw == null) return;
+
+    sw.callMethod(
+      'addEventListener'.toJS,
+      'message'.toJS,
+      ((web.Event event) {
+        final messageEvent = event as web.MessageEvent;
+        final json = _messageDataJson(messageEvent.data);
+        if (json == null || json.isEmpty) return;
+
+        Map<String, dynamic> decoded;
+        try {
+          final parsed = jsonDecode(json);
+          if (parsed is! Map) return;
+          decoded = parsed.cast<String, dynamic>();
+        } catch (e) {
+          debugPrint('SW message JSON parse failed: $e');
+          return;
+        }
+
+        if (decoded['type'] != 'VERHAAARM_LIVE_EVENT_REACTION_ACTION') {
+          return;
+        }
+
+        unawaited(_handleLiveEventReactionActionMessage(decoded));
+      }).toJS,
+    );
+
+    _serviceWorkerMessageListenerInstalled = true;
+  }
+
+  Future<void> _handleLiveEventReactionActionMessage(
+    Map<String, dynamic> message,
+  ) async {
+    final action = message['action']?.toString();
+    final reactionType = _reactionTypeFromAction(action);
+    if (reactionType == null) {
+      debugPrint('SW live event action ignored: unsupported action=$action');
+      return;
+    }
+
+    final dataRaw = message['data'];
+    if (dataRaw is! Map) {
+      debugPrint('SW live event action ignored: data missing');
+      return;
+    }
+
+    final data = _stringMapFromDynamicMap(dataRaw.cast<String, dynamic>());
+    if (data['supportsActions'] != 'true' ||
+        data['actionSet'] != 'LIVE_EVENT_REACTIONS') {
+      debugPrint('SW live event action ignored: unsupported payload');
+      return;
+    }
+
+    final liveEventId = _liveEventIdFromPayload(data);
+    if (liveEventId == null || liveEventId.isEmpty) {
+      debugPrint('SW live event action ignored: liveEventId missing');
+      return;
+    }
+
+    try {
+      debugPrint(
+        'SW live event action PUT /live-events/$liveEventId/reactions/${reactionType.apiValue}',
+      );
+      await api.toggleLiveEventReaction(
+        liveEventId: liveEventId,
+        type: reactionType,
+      );
+      debugPrint('SW live event action completed successfully');
+    } on DioException catch (e) {
+      debugPrint(
+        'SW live event action failed: status=${e.response?.statusCode ?? 'none'} path=${e.requestOptions.path}',
+      );
+    } catch (e) {
+      debugPrint('SW live event action failed: $e');
+    }
+  }
+
+  LiveEventReactionType? _reactionTypeFromAction(String? action) {
+    return switch (action) {
+      'PROST' => LiveEventReactionType.prost,
+      'ICH_KOMME' => LiveEventReactionType.ichKomme,
+      _ => null,
+    };
+  }
+
+  String? _liveEventIdFromPayload(Map<String, String> data) {
+    final endpoint = data['reactionEndpoint'];
+    if (endpoint != null && endpoint.isNotEmpty) {
+      final match = RegExp(
+        r'/live-events/([^/]+)/reactions/\{type\}',
+      ).firstMatch(endpoint);
+      if (match != null) return match.group(1);
+    }
+
+    return data['liveEventId'] ??
+        data['liveEventID'] ??
+        data['eventId'] ??
+        data['id'];
+  }
+
+  Map<String, String> _stringMapFromDynamicMap(Map<String, dynamic> m) {
+    final out = <String, String>{};
+    for (final entry in m.entries) {
+      final value = entry.value;
+      if (value == null) continue;
+      out[entry.key] = value.toString();
+    }
+    return out;
+  }
+
+  String? _messageDataJson(JSAny? raw) {
+    if (raw == null) return null;
+
+    final rawString = raw.toString();
+    if (rawString.trimLeft().startsWith('{')) return rawString;
+
+    try {
+      final jsonAny = (web.window as JSObject).getProperty('JSON'.toJS);
+      if (jsonAny == null) return null;
+
+      final jsonObject = jsonAny as JSObject;
+      final stringifyAny = jsonObject.getProperty('stringify'.toJS);
+      if (stringifyAny == null) return null;
+
+      final stringified = (stringifyAny as JSFunction).callAsFunction(
+        jsonObject,
+        raw,
+      );
+      return stringified?.toString();
+    } catch (_) {
+      return null;
+    }
   }
 
   bool _isStandalone() {
@@ -76,10 +219,14 @@ class WebPushRegistrar {
     final win = web.window as JSObject;
 
     debugPrint('secureContext=${web.window.isSecureContext}');
-    debugPrint('Notification in window=${win.getProperty('Notification'.toJS) != null}');
+    debugPrint(
+      'Notification in window=${win.getProperty('Notification'.toJS) != null}',
+    );
     debugPrint('SW in navigator=${_serviceWorkerContainer() != null}');
     debugPrint('displayModeStandalone=${_isStandalone()}');
-    debugPrint('Notification.permission (before) = ${_getNotificationPermission()}');
+    debugPrint(
+      'Notification.permission (before) = ${_getNotificationPermission()}',
+    );
 
     if (!authStore.isLoggedIn) {
       debugPrint('ABORT: not logged in');
@@ -92,7 +239,9 @@ class WebPushRegistrar {
 
     final perm = await _ensureNotificationPermission();
     debugPrint('Notification.requestPermission() result = $perm');
-    debugPrint('Notification.permission (after) = ${_getNotificationPermission()}');
+    debugPrint(
+      'Notification.permission (after) = ${_getNotificationPermission()}',
+    );
     if (perm != 'granted') {
       debugPrint('ABORT: permission not granted');
       return;
@@ -104,15 +253,21 @@ class WebPushRegistrar {
       return;
     }
 
-    debugPrint('Using SW registration scope=${reg.getProperty('scope'.toJS)?.toString()}');
+    debugPrint(
+      'Using SW registration scope=${reg.getProperty('scope'.toJS)?.toString()}',
+    );
 
     final activeAny = reg.getProperty('active'.toJS);
     debugPrint('SW active=${activeAny != null}');
     if (activeAny != null) {
       final a = _asJsObject(activeAny);
       if (a != null) {
-        debugPrint('SW active.scriptURL=${a.getProperty('scriptURL'.toJS)?.toString()}');
-        debugPrint('SW active.state=${a.getProperty('state'.toJS)?.toString()}');
+        debugPrint(
+          'SW active.scriptURL=${a.getProperty('scriptURL'.toJS)?.toString()}',
+        );
+        debugPrint(
+          'SW active.state=${a.getProperty('state'.toJS)?.toString()}',
+        );
       }
     }
 
@@ -140,8 +295,6 @@ class WebPushRegistrar {
 
     final key = WebPushVapid.publicKey;
     debugPrint('VAPID publicKey len=${key.length}');
-    debugPrint('VAPID publicKey head=${key.length >= 12 ? key.substring(0, 12) : key}');
-    debugPrint('VAPID publicKey tail=${key.length >= 12 ? key.substring(key.length - 12) : key}');
 
     Uint8List appServerKeyDart;
     try {
@@ -153,7 +306,9 @@ class WebPushRegistrar {
     }
 
     if (appServerKeyDart.length != 65) {
-      debugPrint('ABORT: VAPID decoded length is ${appServerKeyDart.length}, expected 65');
+      debugPrint(
+        'ABORT: VAPID decoded length is ${appServerKeyDart.length}, expected 65',
+      );
       return;
     }
 
@@ -175,7 +330,9 @@ class WebPushRegistrar {
       if (existing != null) {
         final unsubscribeAny = existing.getProperty('unsubscribe'.toJS);
         if (unsubscribeAny != null) {
-          debugPrint('Unsubscribing existing subscription before subscribe()...');
+          debugPrint(
+            'Unsubscribing existing subscription before subscribe()...',
+          );
           await _awaitPromiseThen(
             (unsubscribeAny as JSFunction).callAsFunction(existing),
             label: 'subscription.unsubscribe',
@@ -228,7 +385,9 @@ class WebPushRegistrar {
 
       final permission = _getNotificationPermission();
       if (permission != 'granted') {
-        debugPrint('keepAlive: notification permission is $permission, skipping subscription sync');
+        debugPrint(
+          'keepAlive: notification permission is $permission, skipping subscription sync',
+        );
         return;
       }
 
@@ -256,6 +415,7 @@ class WebPushRegistrar {
     final existing = await _findPushServiceWorkerRegistration();
     if (existing != null) {
       debugPrint('Found existing /push-sw.js registration');
+      await _updatePushServiceWorkerRegistration(existing);
       return existing;
     }
 
@@ -338,8 +498,26 @@ class WebPushRegistrar {
 
   Future<JSObject?> _ensurePushServiceWorkerRegistered() async {
     final existing = await _findPushServiceWorkerRegistration();
-    if (existing != null) return existing;
+    if (existing != null) {
+      await _updatePushServiceWorkerRegistration(existing);
+      return existing;
+    }
     return _registerPushServiceWorker();
+  }
+
+  Future<void> _updatePushServiceWorkerRegistration(JSObject reg) async {
+    final updateAny = reg.getProperty('update'.toJS);
+    if (updateAny == null) return;
+
+    try {
+      await _awaitPromiseThen(
+        (updateAny as JSFunction).callAsFunction(reg),
+        label: 'push serviceWorkerRegistration.update',
+        timeout: const Duration(seconds: 5),
+      );
+    } catch (e) {
+      debugPrint('push service worker update failed: $e');
+    }
   }
 
   Future<JSObject?> _registerPushServiceWorker() async {
@@ -377,7 +555,9 @@ class WebPushRegistrar {
       if (pushManagerAny == null) return null;
 
       final pushManager = pushManagerAny as JSObject;
-      final getSubscriptionAny = pushManager.getProperty('getSubscription'.toJS);
+      final getSubscriptionAny = pushManager.getProperty(
+        'getSubscription'.toJS,
+      );
       if (getSubscriptionAny == null) return null;
 
       final subAny = await _awaitPromiseThen(
@@ -392,7 +572,10 @@ class WebPushRegistrar {
     }
   }
 
-  Future<void> _syncSubscriptionToBackend(JSObject sub, {bool force = false}) async {
+  Future<void> _syncSubscriptionToBackend(
+    JSObject sub, {
+    bool force = false,
+  }) async {
     final endpoint = sub.getProperty('endpoint'.toJS)?.toString() ?? '';
     if (endpoint.isEmpty) {
       debugPrint('syncSubscriptionToBackend: empty endpoint');
@@ -431,22 +614,39 @@ class WebPushRegistrar {
     }
 
     debugPrint('About to call api.registerWebPush');
-    debugPrint('endpoint=$endpoint');
+    debugPrint(
+      'endpoint host=${_endpointHost(endpoint) ?? 'unknown'} len=${endpoint.length}',
+    );
     debugPrint('p256dh len=${p256dhB64Url.length}');
     debugPrint('auth len=${authB64Url.length}');
 
-    await api.registerWebPush(
-      endpoint: endpoint,
-      p256dh: p256dhB64Url,
-      auth: authB64Url,
-      raw: {
-        'endpoint': endpoint,
-        'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
-      },
-    );
+    try {
+      await api.registerWebPush(
+        endpoint: endpoint,
+        p256dh: p256dhB64Url,
+        auth: authB64Url,
+        raw: {
+          'endpoint': endpoint,
+          'keys': {'p256dh': p256dhB64Url, 'auth': authB64Url},
+        },
+      );
+    } on DioException catch (e) {
+      debugPrint(
+        'api.registerWebPush failed: status=${e.response?.statusCode ?? 'none'} path=${e.requestOptions.path}',
+      );
+      rethrow;
+    }
 
     _lastSyncedSignature = signature;
     debugPrint('api.registerWebPush finished successfully');
+  }
+
+  String? _endpointHost(String endpoint) {
+    try {
+      return Uri.parse(endpoint).host;
+    } catch (_) {
+      return null;
+    }
   }
 
   String _getNotificationPermission() {
@@ -523,8 +723,10 @@ class WebPushRegistrar {
 
   bool _isProbablyIosSafari() {
     final ua = _userAgent().toLowerCase();
-    final isIos = ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
-    final isSafari = ua.contains('safari') && !ua.contains('crios') && !ua.contains('fxios');
+    final isIos =
+        ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
+    final isSafari =
+        ua.contains('safari') && !ua.contains('crios') && !ua.contains('fxios');
     return isIos && isSafari;
   }
 
@@ -534,10 +736,10 @@ class WebPushRegistrar {
   }
 
   Future<JSAny?> _awaitPromiseThen(
-      JSAny? promiseLike, {
-        String? label,
-        Duration timeout = const Duration(seconds: 15),
-      }) async {
+    JSAny? promiseLike, {
+    String? label,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     if (promiseLike == null) return null;
 
     try {
@@ -579,7 +781,8 @@ class WebPushRegistrar {
     }
   }
 
-  String _b64UrlNoPad(Uint8List bytes) => base64UrlEncode(bytes).replaceAll('=', '');
+  String _b64UrlNoPad(Uint8List bytes) =>
+      base64UrlEncode(bytes).replaceAll('=', '');
 
   Uint8List _urlBase64ToUint8List(String base64Url) {
     var s = base64Url.trim();

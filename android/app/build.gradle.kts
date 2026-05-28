@@ -2,22 +2,21 @@ import java.util.Properties
 import java.io.FileInputStream
 import java.security.MessageDigest
 import java.io.File
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     id("com.google.gms.google-services")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // The Flutter Gradle Plugin must be applied after the Android plugin.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
     implementation("com.google.firebase:firebase-analytics")
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
-
 
 // ---- Release signing (reads android/key.properties) ----
 val keystoreProperties = Properties()
@@ -35,10 +34,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -63,14 +58,14 @@ android {
 
     buildTypes {
         debug {
-            // 2) Install alongside release + different launcher name
+            // Install alongside release + different launcher name
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             resValue("string", "app_name", "Verhåårm-Debug")
         }
 
         release {
-            // 3) Use your release keystore if configured, else fall back to debug signing
+            // Use your release keystore if configured, else fall back to debug signing
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
@@ -80,11 +75,17 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 flutter {
     source = "../.."
 }
 
-// ---- 1) Rename the APK files after Flutter/Gradle builds them ----
+// ---- Rename the APK files after Flutter/Gradle builds them ----
 // Result (in build/app/outputs/flutter-apk/):
 //   verhaarm-release-<version>.apk
 //   verhaarm-debug-release-<version>.apk
@@ -143,5 +144,3 @@ afterEvaluate {
     tasks.named("assembleRelease") { finalizedBy(renameReleaseApk) }
     tasks.named("assembleDebug") { finalizedBy(renameDebugApk) }
 }
-
-
