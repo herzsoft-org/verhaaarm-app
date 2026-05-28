@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../common/format.dart';
+import '../../common/live_event_reaction_dedupe.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 import 'live_event_reactions.dart';
@@ -97,7 +98,13 @@ class _LiveEventDetailPageState extends State<LiveEventDetailPage> {
     if (type == null) return;
     _pendingInitialReaction = null;
 
-    await _toggleReaction(type);
+    if (LiveEventReactionDedupe.reserve(
+      liveEventId: widget.liveEventId,
+      type: type,
+    )) {
+      await _toggleReaction(type);
+    }
+
     if (!mounted) return;
     context.go('/live-events/${widget.liveEventId}');
   }

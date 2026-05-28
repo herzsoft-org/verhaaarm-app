@@ -13,6 +13,7 @@ import 'package:web/web.dart' as web;
 
 import '../api/api_client.dart';
 import '../auth/auth_store.dart';
+import '../common/live_event_reaction_dedupe.dart';
 import '../models/dtos.dart';
 import 'webpush_vapid.dart';
 
@@ -114,6 +115,14 @@ class WebPushRegistrar {
     final liveEventId = _liveEventIdFromPayload(data);
     if (liveEventId == null || liveEventId.isEmpty) {
       debugPrint('SW live event action ignored: liveEventId missing');
+      return;
+    }
+
+    if (!LiveEventReactionDedupe.reserve(
+      liveEventId: liveEventId,
+      type: reactionType,
+    )) {
+      debugPrint('SW live event action ignored: duplicate action');
       return;
     }
 

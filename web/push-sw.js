@@ -202,7 +202,6 @@ function openLiveEventFallback(data, action) {
 
 function handleLiveEventActionClick(data, action) {
   const fallbackUrl = liveEventTargetUrl(data, action);
-  const viewUrl = liveEventViewUrl(data);
   const message = JSON.stringify({
     type: 'VERHAAARM_LIVE_EVENT_REACTION_ACTION',
     action,
@@ -226,7 +225,7 @@ function handleLiveEventActionClick(data, action) {
 
       if ('navigate' in client) {
         try {
-          const navigation = client.navigate(viewUrl);
+          const navigation = client.navigate(fallbackUrl);
           if (navigation && typeof navigation.then === 'function') {
             return navigation.then((navigatedClient) => {
               if (navigatedClient && 'focus' in navigatedClient) {
