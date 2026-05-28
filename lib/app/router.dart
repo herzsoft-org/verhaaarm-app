@@ -34,6 +34,7 @@ import '../features/legal/legal_documents_page.dart';
 import '../features/legal/legal_document_viewer_page.dart';
 
 import '../features/live_events/live_events_page.dart';
+import '../features/live_events/live_event_detail_page.dart';
 import '../features/live_events/live_event_form_page.dart';
 
 import '../features/events/events_page.dart';
@@ -179,13 +180,18 @@ Future<GoRouter> buildRouter() async {
   }
 
   if (authStore.isLoggedIn) {
-    await AppSettingsStore.I.syncWithBackend(api);
-
     try {
       await authStore.refreshMe(api, force: true);
     } catch (_) {
       // Keep token-derived roles until /users/me is reachable.
     }
+
+    await AppSettingsStore.I.syncWithBackend(
+      api,
+      canSyncDevModeNotifyOnlyMe: authStore.currentRoles.contains(
+        AppRole.admin,
+      ),
+    );
   }
 
   NotificationCenter.I.init(api: api, authStore: authStore);
@@ -197,8 +203,15 @@ Future<GoRouter> buildRouter() async {
       push.initAndRegisterBestEffort();
       NotificationCenter.I.refreshUnreadCount();
 
-      unawaited(AppSettingsStore.I.syncWithBackend(api));
-      unawaited(authStore.refreshMeIfStale(api));
+      unawaited(() async {
+        await authStore.refreshMeIfStale(api);
+        await AppSettingsStore.I.syncWithBackend(
+          api,
+          canSyncDevModeNotifyOnlyMe: authStore.currentRoles.contains(
+            AppRole.admin,
+          ),
+        );
+      }());
     } else {
       push.stop();
       NotificationCenter.I.reset();
@@ -457,6 +470,23 @@ Future<GoRouter> buildRouter() async {
         path: '/live-events/new',
         builder: (context, state) =>
             LiveEventFormPage(api: api, authStore: authStore),
+      ),
+      GoRoute(
+        path: '/live-events/:id',
+        builder: (context, state) => LiveEventDetailPage(
+          api: api,
+          authStore: authStore,
+          liveEventId: state.pathParameters['id']!,
+          initialEvent: state.extra is LiveEventDto
+              ? state.extra as LiveEventDto
+              : null,
+          initialReactionType: switch (state.uri.queryParameters['reaction']
+              ?.toUpperCase()) {
+            'PROST' => LiveEventReactionType.prost,
+            'ICH_KOMME' => LiveEventReactionType.ichKomme,
+            _ => null,
+          },
+        ),
       ),
       GoRoute(
         path: '/live-events/:id/edit',

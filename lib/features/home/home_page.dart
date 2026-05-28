@@ -15,6 +15,7 @@ import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../common/widgets/quote_of_the_day_card.dart';
+import '../live_events/live_event_reactions.dart';
 import '../../models/dtos.dart';
 
 // OTA update (android)
@@ -65,6 +66,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
   Timer? _liveTimer;
   bool _liveRefreshInFlight = false;
+  final Set<String> _pendingLiveReactions = <String>{};
 
   // OTA
   late final OtaUpdateController _ota;
@@ -163,18 +165,66 @@ class _HomePageState extends State<HomePage> with RouteAware {
   UserBalanceDto _decodeBalance(Object json) =>
       UserBalanceDto.fromJson((json as Map).cast<String, dynamic>());
 
-  Map<String, dynamic> _encodeLive(LiveEventDto e) => {
-    'id': e.id,
-    'title': e.title,
-    'place': e.place,
-    'description': e.description,
-    'createdAt': e.createdAt,
-    'expiresAt': e.expiresAt,
-    'createdByUserId': e.createdByUserId,
-  };
+  Map<String, dynamic> _encodeLive(LiveEventDto e) => e.toJson();
 
   LiveEventDto _decodeLive(Object json) =>
       LiveEventDto.fromJson((json as Map).cast<String, dynamic>());
+
+  String _liveReactionKey(String liveEventId, LiveEventReactionType type) {
+    return '$liveEventId:${type.apiValue}';
+  }
+
+  Set<LiveEventReactionType> _pendingLiveReactionTypes(String liveEventId) {
+    return LiveEventReactionType.values
+        .where(
+          (type) => _pendingLiveReactions.contains(
+            _liveReactionKey(liveEventId, type),
+          ),
+        )
+        .toSet();
+  }
+
+  Future<void> _toggleLiveReaction(
+    LiveEventDto event,
+    LiveEventReactionType type,
+  ) async {
+    final key = _liveReactionKey(event.id, type);
+    if (_pendingLiveReactions.contains(key)) return;
+
+    setState(() => _pendingLiveReactions.add(key));
+
+    try {
+      final result = await widget.api.toggleLiveEventReaction(
+        liveEventId: event.id,
+        type: type,
+      );
+      final updated =
+          result.event ??
+          event.copyWith(reactions: result.summary ?? event.reactions);
+      final next = _liveEvents
+          .map((item) => item.id == event.id ? updated : item)
+          .toList(growable: false);
+      final frozen = List<LiveEventDto>.unmodifiable(next);
+
+      await AppCache.I.setPersisted<List<LiveEventDto>>(
+        _kHomeLiveEvents,
+        frozen,
+        encode: (v) => v.map(_encodeLive).toList(growable: false),
+      );
+
+      if (!mounted) return;
+      setState(() => _liveEvents = frozen);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Reaktion fehlgeschlagen: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _pendingLiveReactions.remove(key));
+      }
+    }
+  }
 
   Map<String, dynamic> _encodeEvent(EventDto e) => {
     'id': e.id,
@@ -878,7 +928,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: _LiveEventPreviewTile(e: e),
+                            child: _LiveEventPreviewTile(
+                              e: e,
+                              pendingTypes: _pendingLiveReactionTypes(e.id),
+                              onToggleReaction: (type) =>
+                                  _toggleLiveReaction(e, type),
+                            ),
                           ),
                         ),
                       ),
@@ -954,8 +1009,14 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
 class _LiveEventPreviewTile extends StatelessWidget {
   final LiveEventDto e;
+  final Set<LiveEventReactionType> pendingTypes;
+  final Future<void> Function(LiveEventReactionType type) onToggleReaction;
 
-  const _LiveEventPreviewTile({required this.e});
+  const _LiveEventPreviewTile({
+    required this.e,
+    required this.pendingTypes,
+    required this.onToggleReaction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -997,6 +1058,12 @@ class _LiveEventPreviewTile extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+        const SizedBox(height: 8),
+        LiveEventReactionButtons(
+          reactions: e.reactions,
+          pendingTypes: pendingTypes,
+          onToggle: onToggleReaction,
+        ),
       ],
     );
   }

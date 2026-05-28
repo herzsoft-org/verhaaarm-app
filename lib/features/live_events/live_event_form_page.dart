@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
+import '../../auth/roles.dart';
+import '../../common/settings/app_settings_store.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 
@@ -30,6 +32,11 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
 
   bool _loading = false;
 
+  bool get _sendNotificationsOnlyToMe {
+    return widget.authStore.currentRoles.contains(AppRole.admin) &&
+        AppSettingsStore.I.devModeNotifyOnlyMe;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,9 +63,9 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
       _desc.text = dto.description ?? '';
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Laden fehlgeschlagen: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Laden fehlgeschlagen: $e')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -77,6 +84,7 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
             title: _title.text.trim(),
             place: _place.text.trim(),
             description: _desc.text.trim(),
+            notifyOnlyMe: _sendNotificationsOnlyToMe,
           ),
         );
       } else {
@@ -94,9 +102,9 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
       context.pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -105,6 +113,7 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.liveEventId != null;
+    final showDevModeNote = !isEdit && _sendNotificationsOnlyToMe;
 
     return AppScaffold(
       title: isEdit ? 'Live-Event bearbeiten' : 'Live-Event erstellen',
@@ -118,13 +127,24 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                 key: _formKey,
                 child: Column(
                   children: [
+                    if (showDevModeNote) ...[
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Dev-Modus aktiv: Benachrichtigungen werden nur an dich gesendet.',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextFormField(
                       controller: _title,
                       decoration: const InputDecoration(
                         labelText: 'Titel',
                         prefixIcon: Icon(Icons.title_rounded),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Bitte Titel eingeben.' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Bitte Titel eingeben.'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -133,7 +153,9 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                         labelText: 'Ort',
                         prefixIcon: Icon(Icons.place_rounded),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Bitte Ort eingeben.' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Bitte Ort eingeben.'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -144,7 +166,9 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                         labelText: 'Beschreibung',
                         prefixIcon: Icon(Icons.notes_rounded),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Bitte Beschreibung eingeben.' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Bitte Beschreibung eingeben.'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     SizedBox(
@@ -153,10 +177,12 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
                         onPressed: _loading ? null : _save,
                         icon: _loading
                             ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.save_rounded),
                         label: Text(_loading ? 'Speichern…' : 'Speichern'),
                       ),

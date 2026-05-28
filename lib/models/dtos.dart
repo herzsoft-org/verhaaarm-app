@@ -249,6 +249,8 @@ class LiveEventDto {
   final String createdByUserId;
   final String createdAt;
   final String expiresAt;
+  final LiveEventReactionSummary reactions;
+  final LiveEventReactionUsers? reactionUsers;
 
   LiveEventDto({
     required this.id,
@@ -258,6 +260,8 @@ class LiveEventDto {
     required this.createdByUserId,
     required this.createdAt,
     required this.expiresAt,
+    this.reactions = const LiveEventReactionSummary(),
+    this.reactionUsers,
   });
 
   factory LiveEventDto.fromJson(Map<String, dynamic> json) => LiveEventDto(
@@ -268,7 +272,162 @@ class LiveEventDto {
     createdByUserId: _reqString(json, 'createdByUserId'),
     createdAt: _reqString(json, 'createdAt'),
     expiresAt: _reqString(json, 'expiresAt'),
+    reactions: json['reactions'] is Map
+        ? LiveEventReactionSummary.fromJson(
+            (json['reactions'] as Map).cast<String, dynamic>(),
+          )
+        : const LiveEventReactionSummary(),
+    reactionUsers: json['reactionUsers'] is Map
+        ? LiveEventReactionUsers.fromJson(
+            (json['reactionUsers'] as Map).cast<String, dynamic>(),
+          )
+        : null,
   );
+
+  LiveEventDto copyWith({
+    String? id,
+    String? title,
+    String? place,
+    String? description,
+    String? createdByUserId,
+    String? createdAt,
+    String? expiresAt,
+    LiveEventReactionSummary? reactions,
+    LiveEventReactionUsers? reactionUsers,
+  }) {
+    return LiveEventDto(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      place: place ?? this.place,
+      description: description ?? this.description,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      createdAt: createdAt ?? this.createdAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      reactions: reactions ?? this.reactions,
+      reactionUsers: reactionUsers ?? this.reactionUsers,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'place': place,
+    'description': description,
+    'createdByUserId': createdByUserId,
+    'createdAt': createdAt,
+    'expiresAt': expiresAt,
+    'reactions': reactions.toJson(),
+    if (reactionUsers != null) 'reactionUsers': reactionUsers!.toJson(),
+  };
+}
+
+enum LiveEventReactionType {
+  prost('PROST'),
+  ichKomme('ICH_KOMME');
+
+  final String apiValue;
+  const LiveEventReactionType(this.apiValue);
+}
+
+class LiveEventReactionSummary {
+  final int prostCount;
+  final int ichKommeCount;
+  final bool reactedProst;
+  final bool reactedIchKomme;
+
+  const LiveEventReactionSummary({
+    this.prostCount = 0,
+    this.ichKommeCount = 0,
+    this.reactedProst = false,
+    this.reactedIchKomme = false,
+  });
+
+  factory LiveEventReactionSummary.fromJson(Map<String, dynamic> json) {
+    return LiveEventReactionSummary(
+      prostCount: _optInt(json, 'prostCount'),
+      ichKommeCount: _optInt(json, 'ichKommeCount'),
+      reactedProst: _optBool(json, 'reactedProst'),
+      reactedIchKomme: _optBool(json, 'reactedIchKomme'),
+    );
+  }
+
+  int countFor(LiveEventReactionType type) {
+    return switch (type) {
+      LiveEventReactionType.prost => prostCount,
+      LiveEventReactionType.ichKomme => ichKommeCount,
+    };
+  }
+
+  bool reactedFor(LiveEventReactionType type) {
+    return switch (type) {
+      LiveEventReactionType.prost => reactedProst,
+      LiveEventReactionType.ichKomme => reactedIchKomme,
+    };
+  }
+
+  Map<String, dynamic> toJson() => {
+    'prostCount': prostCount,
+    'ichKommeCount': ichKommeCount,
+    'reactedProst': reactedProst,
+    'reactedIchKomme': reactedIchKomme,
+  };
+}
+
+class LiveEventReactionUserDto {
+  final String id;
+  final String displayName;
+
+  const LiveEventReactionUserDto({required this.id, required this.displayName});
+
+  factory LiveEventReactionUserDto.fromJson(Map<String, dynamic> json) {
+    return LiveEventReactionUserDto(
+      id: _reqString(json, 'id'),
+      displayName: _reqString(json, 'displayName'),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'id': id, 'displayName': displayName};
+}
+
+class LiveEventReactionUsers {
+  final List<LiveEventReactionUserDto> prost;
+  final List<LiveEventReactionUserDto> ichKomme;
+
+  const LiveEventReactionUsers({
+    this.prost = const [],
+    this.ichKomme = const [],
+  });
+
+  factory LiveEventReactionUsers.fromJson(Map<String, dynamic> json) {
+    List<LiveEventReactionUserDto> users(String key) => _optList(
+      json,
+      key,
+    ).map(LiveEventReactionUserDto.fromJson).toList(growable: false);
+
+    return LiveEventReactionUsers(
+      prost: users('prost'),
+      ichKomme: users('ichKomme'),
+    );
+  }
+
+  List<LiveEventReactionUserDto> usersFor(LiveEventReactionType type) {
+    return switch (type) {
+      LiveEventReactionType.prost => prost,
+      LiveEventReactionType.ichKomme => ichKomme,
+    };
+  }
+
+  Map<String, dynamic> toJson() => {
+    'prost': prost.map((u) => u.toJson()).toList(growable: false),
+    'ichKomme': ichKomme.map((u) => u.toJson()).toList(growable: false),
+  };
+}
+
+class LiveEventReactionToggleResult {
+  final LiveEventDto? event;
+  final LiveEventReactionSummary? summary;
+
+  const LiveEventReactionToggleResult({this.event, this.summary});
 }
 
 // ---------- Users (Picker) ----------
@@ -823,6 +982,7 @@ class CreateTaskRequest {
   final String title;
   final String description;
   final List<String> assigneeUserIds;
+  final bool notifyOnlyMe;
 
   /// OffsetDateTime on backend
   /// Normal task: required.
@@ -842,6 +1002,7 @@ class CreateTaskRequest {
     this.recurringEnabled,
     this.recurringWeekdays,
     this.recurringDueTime,
+    this.notifyOnlyMe = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -851,6 +1012,7 @@ class CreateTaskRequest {
       'title': title,
       'description': description,
       'assigneeUserIds': assigneeUserIds,
+      if (notifyOnlyMe) 'notifyOnlyMe': true,
     };
 
     if (!recurring) {
@@ -1070,6 +1232,7 @@ class CreateFineRequest {
   final String? catalogItemId;
   final String? reason;
   final int? amountCents;
+  final bool notifyOnlyMe;
 
   CreateFineRequest({
     required this.fineDate,
@@ -1077,6 +1240,7 @@ class CreateFineRequest {
     this.catalogItemId,
     this.reason,
     this.amountCents,
+    this.notifyOnlyMe = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1085,6 +1249,7 @@ class CreateFineRequest {
     if (catalogItemId != null) 'catalogItemId': catalogItemId,
     if (reason != null) 'reason': reason,
     if (amountCents != null) 'amountCents': amountCents,
+    if (notifyOnlyMe) 'notifyOnlyMe': true,
   };
 }
 
@@ -1532,17 +1697,20 @@ class CreateLiveEventRequest {
   final String title;
   final String place;
   final String description;
+  final bool notifyOnlyMe;
 
   CreateLiveEventRequest({
     required this.title,
     required this.place,
     required this.description,
+    this.notifyOnlyMe = false,
   });
 
   Map<String, dynamic> toJson() => {
     'title': title,
     'place': place,
     'description': description,
+    if (notifyOnlyMe) 'notifyOnlyMe': true,
   };
 }
 

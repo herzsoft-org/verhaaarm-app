@@ -877,6 +877,44 @@ class ApiClient {
     await dio.delete('/live-events/$id');
   }
 
+  Future<LiveEventReactionToggleResult> toggleLiveEventReaction({
+    required String liveEventId,
+    required LiveEventReactionType type,
+  }) async {
+    final r = await dio.put(
+      '/live-events/$liveEventId/reactions/${type.apiValue}',
+    );
+    final data = r.data;
+
+    if (data is Map) {
+      final json = data.cast<String, dynamic>();
+      if (json.containsKey('title') || json.containsKey('expiresAt')) {
+        return LiveEventReactionToggleResult(
+          event: LiveEventDto.fromJson(json),
+        );
+      }
+      if (json['reactions'] is Map) {
+        return LiveEventReactionToggleResult(
+          summary: LiveEventReactionSummary.fromJson(
+            (json['reactions'] as Map).cast<String, dynamic>(),
+          ),
+        );
+      }
+      if (json.containsKey('prostCount') ||
+          json.containsKey('ichKommeCount') ||
+          json.containsKey('reactedProst') ||
+          json.containsKey('reactedIchKomme')) {
+        return LiveEventReactionToggleResult(
+          summary: LiveEventReactionSummary.fromJson(json),
+        );
+      }
+    }
+
+    return LiveEventReactionToggleResult(
+      event: await getLiveEvent(liveEventId),
+    );
+  }
+
   // ----------------------------
   // NOTIFICATIONS (swagger: /notifications, /notifications/unread-count, /notifications/{id}/read)
   // ----------------------------

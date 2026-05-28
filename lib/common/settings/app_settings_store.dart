@@ -13,10 +13,18 @@ class AppSettingsStore extends ChangeNotifier {
 
   static const keyUiTheme = 'ui.theme';
   static const keyFilterPhilister = 'users.filterPhilister';
+  static const keyDevModeNotifyOnlyMe = 'devModeNotifyOnlyMe';
 
   static const knownKeys = <String>{
     keyUiTheme,
     keyFilterPhilister,
+    keyDevModeNotifyOnlyMe,
+  };
+
+  static const backendSyncedKeys = <String>{
+    keyUiTheme,
+    keyFilterPhilister,
+    keyDevModeNotifyOnlyMe,
   };
 
   final Map<String, _LocalSetting> _settings = {};
@@ -33,28 +41,37 @@ class AppSettingsStore extends ChangeNotifier {
     return value == 'true';
   }
 
+  bool get devModeNotifyOnlyMe {
+    final value = _valueOf(
+      keyDevModeNotifyOnlyMe,
+      fallback: 'false',
+    ).toLowerCase();
+    return value == 'true';
+  }
+
   Future<void> initLocal() async {
-    final entry = await AppCache.I.entryOrLoadPersisted<Map<String, _LocalSetting>>(
-      storageKey,
-      decode: (json) {
-        final raw = json as Map;
-        final parsed = <String, _LocalSetting>{};
+    final entry = await AppCache.I
+        .entryOrLoadPersisted<Map<String, _LocalSetting>>(
+          storageKey,
+          decode: (json) {
+            final raw = json as Map;
+            final parsed = <String, _LocalSetting>{};
 
-        for (final entry in raw.entries) {
-          final key = entry.key.toString();
-          if (!knownKeys.contains(key)) continue;
+            for (final entry in raw.entries) {
+              final key = entry.key.toString();
+              if (!knownKeys.contains(key)) continue;
 
-          final value = entry.value;
-          if (value is Map) {
-            parsed[key] = _LocalSetting.fromJson(
-              value.cast<String, dynamic>(),
-            );
-          }
-        }
+              final value = entry.value;
+              if (value is Map) {
+                parsed[key] = _LocalSetting.fromJson(
+                  value.cast<String, dynamic>(),
+                );
+              }
+            }
 
-        return parsed;
-      },
-    );
+            return parsed;
+          },
+        );
 
     _settings
       ..clear()
@@ -64,7 +81,10 @@ class AppSettingsStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> syncWithBackend(ApiClient api) async {
+  Future<void> syncWithBackend(
+    ApiClient api, {
+    bool canSyncDevModeNotifyOnlyMe = false,
+  }) async {
     if (_syncing) return;
     _syncing = true;
 
@@ -72,12 +92,14 @@ class AppSettingsStore extends ChangeNotifier {
       final remote = await api.getMySettings();
       final patches = <UserSettingPatchDto>[];
 
-      for (final key in knownKeys) {
+      for (final key in backendSyncedKeys) {
         final local = _settings[key];
         final backend = remote.settings[key];
+        final canPatchBackend =
+            key != keyDevModeNotifyOnlyMe || canSyncDevModeNotifyOnlyMe;
 
         if (backend == null) {
-          if (local != null && local.changedAt != null) {
+          if (local != null && local.changedAt != null && canPatchBackend) {
             patches.add(
               UserSettingPatchDto(
                 key: key,
@@ -92,18 +114,22 @@ class AppSettingsStore extends ChangeNotifier {
         final backendUpdatedAt = backend.updatedAt;
         final localChangedAt = local?.changedAt;
 
-        final backendIsNewer = backendUpdatedAt != null &&
-            (localChangedAt == null || backendUpdatedAt.isAfter(localChangedAt));
+        final backendIsNewer =
+            backendUpdatedAt != null &&
+            (localChangedAt == null ||
+                backendUpdatedAt.isAfter(localChangedAt));
 
-        final localIsNewer = localChangedAt != null &&
-            (backendUpdatedAt == null || localChangedAt.isAfter(backendUpdatedAt));
+        final localIsNewer =
+            localChangedAt != null &&
+            (backendUpdatedAt == null ||
+                localChangedAt.isAfter(backendUpdatedAt));
 
         if (backendIsNewer || local == null) {
           _settings[key] = _LocalSetting(
             value: _sanitizeValue(key, backend.value),
             changedAt: backendUpdatedAt,
           );
-        } else if (localIsNewer) {
+        } else if (localIsNewer && canPatchBackend) {
           patches.add(
             UserSettingPatchDto(
               key: key,
@@ -138,6 +164,14 @@ class AppSettingsStore extends ChangeNotifier {
     await _setKnownSetting(api, keyFilterPhilister, value ? 'true' : 'false');
   }
 
+  Future<void> setDevModeNotifyOnlyMe(ApiClient api, bool value) async {
+    await _setKnownSetting(
+      api,
+      keyDevModeNotifyOnlyMe,
+      value ? 'true' : 'false',
+    );
+  }
+
   Future<void> clearLocalSettings() async {
     _settings.clear();
     await AppCache.I.removePersisted(storageKey);
@@ -149,7 +183,11 @@ class AppSettingsStore extends ChangeNotifier {
     return _settings[key]?.value ?? fallback;
   }
 
-  Future<void> _setKnownSetting(ApiClient api, String key, String rawValue) async {
+  Future<void> _setKnownSetting(
+    ApiClient api,
+    String key,
+    String rawValue,
+  ) async {
     final now = DateTime.now().toUtc();
     final value = _sanitizeValue(key, rawValue);
 
@@ -159,11 +197,7 @@ class AppSettingsStore extends ChangeNotifier {
 
     try {
       await api.patchMySettings([
-        UserSettingPatchDto(
-          key: key,
-          value: value,
-          changedAt: now,
-        ),
+        UserSettingPatchDto(key: key, value: value, changedAt: now),
       ]);
     } catch (_) {
       // Local value stays newer and will be uploaded during the next sync.
@@ -173,11 +207,15 @@ class AppSettingsStore extends ChangeNotifier {
   void _ensureDefaults() {
     _settings.putIfAbsent(
       keyUiTheme,
-          () => const _LocalSetting(value: 'DARK', changedAt: null),
+      () => const _LocalSetting(value: 'DARK', changedAt: null),
     );
     _settings.putIfAbsent(
       keyFilterPhilister,
-          () => const _LocalSetting(value: 'false', changedAt: null),
+      () => const _LocalSetting(value: 'false', changedAt: null),
+    );
+    _settings.putIfAbsent(
+      keyDevModeNotifyOnlyMe,
+      () => const _LocalSetting(value: 'false', changedAt: null),
     );
   }
 
@@ -188,6 +226,7 @@ class AppSettingsStore extends ChangeNotifier {
         return upper == 'LIGHT' ? 'LIGHT' : 'DARK';
 
       case keyFilterPhilister:
+      case keyDevModeNotifyOnlyMe:
         final lower = value.toLowerCase();
         return lower == 'true' ? 'true' : 'false';
 
@@ -200,9 +239,8 @@ class AppSettingsStore extends ChangeNotifier {
     await AppCache.I.setPersisted<Map<String, _LocalSetting>>(
       storageKey,
       Map.unmodifiable(_settings),
-      encode: (settings) => settings.map(
-            (key, value) => MapEntry(key, value.toJson()),
-      ),
+      encode: (settings) =>
+          settings.map((key, value) => MapEntry(key, value.toJson())),
     );
   }
 }
@@ -211,10 +249,7 @@ class _LocalSetting {
   final String value;
   final DateTime? changedAt;
 
-  const _LocalSetting({
-    required this.value,
-    required this.changedAt,
-  });
+  const _LocalSetting({required this.value, required this.changedAt});
 
   Map<String, dynamic> toJson() => {
     'value': value,

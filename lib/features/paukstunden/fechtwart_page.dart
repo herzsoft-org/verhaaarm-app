@@ -192,7 +192,7 @@ class _FechtwartPageState extends State<FechtwartPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${users.length} Nutzer mit Paukstundenübersicht',
+                                  '${users.length} Nutzer mit Paukstunden',
                                 ),
                               ],
                             ),

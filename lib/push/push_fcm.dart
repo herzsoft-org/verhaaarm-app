@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/api_client.dart';
 import '../auth/auth_store.dart';
+import '../models/dtos.dart';
 import '../notifications/notification_center.dart';
 
 final FlutterLocalNotificationsPlugin _ln = FlutterLocalNotificationsPlugin();
@@ -45,6 +46,82 @@ Future<void> _handleTapPayload(String? payload) async {
   }
 }
 
+bool _isReactionAction(String? actionId) {
+  return actionId == LiveEventReactionType.prost.apiValue ||
+      actionId == LiveEventReactionType.ichKomme.apiValue;
+}
+
+LiveEventReactionType? _reactionTypeFromAction(String actionId) {
+  return switch (actionId) {
+    'PROST' => LiveEventReactionType.prost,
+    'ICH_KOMME' => LiveEventReactionType.ichKomme,
+    _ => null,
+  };
+}
+
+String? _liveEventIdFromPayload(Map<String, String> data) {
+  final endpoint = data['reactionEndpoint'];
+  if (endpoint != null && endpoint.isNotEmpty) {
+    final match = RegExp(
+      r'/live-events/([^/]+)/reactions/\{type\}',
+    ).firstMatch(endpoint);
+    if (match != null) return match.group(1);
+  }
+
+  return data['liveEventId'] ??
+      data['liveEventID'] ??
+      data['eventId'] ??
+      data['id'];
+}
+
+Future<bool> _handleReactionPayload({
+  required String actionId,
+  required String? payload,
+  ApiClient? api,
+}) async {
+  final type = _reactionTypeFromAction(actionId);
+  if (type == null || payload == null || payload.isEmpty) return false;
+
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is! Map) return false;
+
+    final data = _stringMapFromDynamicMap(decoded.cast<String, dynamic>());
+    if (data['supportsActions'] != 'true' ||
+        data['actionSet'] != 'LIVE_EVENT_REACTIONS') {
+      return false;
+    }
+
+    final liveEventId = _liveEventIdFromPayload(data);
+    if (liveEventId == null || liveEventId.isEmpty) return false;
+
+    if (api != null) {
+      await api.toggleLiveEventReaction(liveEventId: liveEventId, type: type);
+      return true;
+    }
+
+    final authStore = AuthStore();
+    await authStore.init();
+    if (!authStore.isLoggedIn) return false;
+
+    final backgroundApi = ApiClient(authStore: authStore);
+    await backgroundApi.toggleLiveEventReaction(
+      liveEventId: liveEventId,
+      type: type,
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+@pragma('vm:entry-point')
+Future<void> notificationTapBackground(NotificationResponse resp) async {
+  final actionId = resp.actionId;
+  if (!_isReactionAction(actionId)) return;
+  await _handleReactionPayload(actionId: actionId!, payload: resp.payload);
+}
+
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // NOTE: this runs in a background isolate
@@ -63,12 +140,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     id: _notificationId(message),
     title: title,
     body: body,
-    notificationDetails: const NotificationDetails(
+    notificationDetails: NotificationDetails(
       android: AndroidNotificationDetails(
         'verhaarm_push',
         'Push notifications',
         importance: Importance.max,
         priority: Priority.high,
+        actions: _reactionActionsForData(message.data),
       ),
     ),
     payload: jsonEncode(message.data),
@@ -76,7 +154,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 int _notificationId(RemoteMessage m) {
-  final s = m.messageId ?? '${m.sentTime?.millisecondsSinceEpoch ?? 0}:${m.data.hashCode}';
+  final s =
+      m.messageId ??
+      '${m.sentTime?.millisecondsSinceEpoch ?? 0}:${m.data.hashCode}';
   return s.hashCode & 0x7fffffff;
 }
 
@@ -87,8 +167,17 @@ Future<void> _ensureLocalNotificationsInitialized() async {
   await _ln.initialize(
     settings: init,
     onDidReceiveNotificationResponse: (resp) async {
+      final actionId = resp.actionId;
+      if (_isReactionAction(actionId)) {
+        await _handleReactionPayload(
+          actionId: actionId!,
+          payload: resp.payload,
+        );
+        return;
+      }
       await _handleTapPayload(resp.payload);
     },
+    onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
   );
 
   // If app was launched by tapping a *local* notification we created earlier
@@ -97,8 +186,10 @@ Future<void> _ensureLocalNotificationsInitialized() async {
     await _handleTapPayload(details?.notificationResponse?.payload);
   }
 
-  final androidPlugin =
-  _ln.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  final androidPlugin = _ln
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
 
   if (androidPlugin != null) {
     const channel = AndroidNotificationChannel(
@@ -146,19 +237,23 @@ class FcmRegistrar {
 
     // Foreground: show a local notification
     FirebaseMessaging.onMessage.listen((msg) async {
-      final title = msg.notification?.title ?? msg.data['title']?.toString() ?? 'Notification';
+      final title =
+          msg.notification?.title ??
+          msg.data['title']?.toString() ??
+          'Notification';
       final body = msg.notification?.body ?? msg.data['body']?.toString() ?? '';
 
       await _ln.show(
         id: _notificationId(msg),
         title: title,
         body: body,
-        notificationDetails: const NotificationDetails(
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'verhaarm_push',
             'Push notifications',
             importance: Importance.max,
             priority: Priority.high,
+            actions: _reactionActionsForData(msg.data),
           ),
         ),
         payload: jsonEncode(msg.data),
@@ -180,4 +275,34 @@ class FcmRegistrar {
       NotificationCenter.I.refreshUnreadCount();
     }
   }
+}
+
+List<AndroidNotificationAction>? _reactionActionsForData(
+  Map<String, dynamic> data,
+) {
+  if (data['supportsActions']?.toString() != 'true' ||
+      data['actionSet']?.toString() != 'LIVE_EVENT_REACTIONS') {
+    return null;
+  }
+
+  final reactionTypes = (data['reactionTypes'] ?? '').toString().split(',');
+  final supported = reactionTypes.map((type) => type.trim()).toSet();
+  if (!supported.contains('PROST') || !supported.contains('ICH_KOMME')) {
+    return null;
+  }
+
+  return const [
+    AndroidNotificationAction(
+      'PROST',
+      '🍻 Prost!',
+      showsUserInterface: false,
+      cancelNotification: true,
+    ),
+    AndroidNotificationAction(
+      'ICH_KOMME',
+      '🏃 Ich komme!',
+      showsUserInterface: false,
+      cancelNotification: true,
+    ),
+  ];
 }

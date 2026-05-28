@@ -65,7 +65,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _load({bool force = false}) async {
     try {
-      unawaited(AppSettingsStore.I.syncWithBackend(widget.api));
+      unawaited(
+        AppSettingsStore.I.syncWithBackend(
+          widget.api,
+          canSyncDevModeNotifyOnlyMe: widget.authStore.currentRoles.contains(
+            AppRole.admin,
+          ),
+        ),
+      );
 
       final c = await AppCache.I.entryOrLoadPersisted<_ProfileSnapshot>(
         _kProfile,
@@ -279,6 +286,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openAppSettingsSheet() async {
+    final isAdmin = widget.authStore.currentRoles.contains(AppRole.admin);
+
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -419,6 +428,32 @@ class _ProfilePageState extends State<ProfilePage> {
                               );
                             },
                           ),
+                          if (isAdmin) ...[
+                            const Divider(height: 1),
+                            AnimatedBuilder(
+                              animation: AppSettingsStore.I,
+                              builder: (context, _) {
+                                return SwitchListTile(
+                                  secondary: const Icon(
+                                    Icons.developer_mode_rounded,
+                                  ),
+                                  title: const Text('Dev-Modus'),
+                                  subtitle: const Text(
+                                    'Beim Erstellen von Live-Events, Strafen und Arbeitsaufträgen Benachrichtigungen nur an mich senden.',
+                                  ),
+                                  value: AppSettingsStore.I.devModeNotifyOnlyMe,
+                                  onChanged: (value) async {
+                                    await AppSettingsStore.I
+                                        .setDevModeNotifyOnlyMe(
+                                          widget.api,
+                                          value,
+                                        );
+                                    setStateSheet(() {});
+                                  },
+                                );
+                              },
+                            ),
+                          ],
                           if (kIsWeb) ...[
                             const Divider(height: 1),
                             ListTile(

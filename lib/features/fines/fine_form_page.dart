@@ -9,6 +9,8 @@ import '../../models/dtos.dart';
 import 'member_picker_sheet.dart';
 import 'fine_photos_dialog.dart';
 import '../../auth/auth_store.dart';
+import '../../auth/roles.dart';
+import '../../common/settings/app_settings_store.dart';
 import 'suggestion_photos_dialog.dart';
 
 enum FineFormMode { official, suggestion }
@@ -56,10 +58,14 @@ class _FineFormPageState extends State<FineFormPage> {
   // fineDate (YYYY-MM-DD)
   String _fineDate = _todayIsoDate();
 
-
   bool get _isSuggestionEdit =>
       widget.mode == FineFormMode.suggestion &&
-          (widget.suggestionId ?? '').trim().isNotEmpty;
+      (widget.suggestionId ?? '').trim().isNotEmpty;
+
+  bool get _sendNotificationsOnlyToMe {
+    return widget.authStore.currentRoles.contains(AppRole.admin) &&
+        AppSettingsStore.I.devModeNotifyOnlyMe;
+  }
 
   String _eurInputFromCents(int cents) {
     final s = (cents / 100).toStringAsFixed(2);
@@ -83,7 +89,9 @@ class _FineFormPageState extends State<FineFormPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Fotos hinzufügen?'),
-        content: const Text('Möchtest du jetzt Fotos zu diesem Vorschlag hochladen?'),
+        content: const Text(
+          'Möchtest du jetzt Fotos zu diesem Vorschlag hochladen?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -137,11 +145,16 @@ class _FineFormPageState extends State<FineFormPage> {
     setState(() => _loading = true);
     try {
       final periodsFuture = widget.api.listPeriods();
-      final catalogFuture = widget.api.listFineCatalog(active: true, forCreation: true);
+      final catalogFuture = widget.api.listFineCatalog(
+        active: true,
+        forCreation: true,
+      );
 
       FineSuggestionDto? suggestion;
       if (_isSuggestionEdit) {
-        suggestion = await widget.api.getSuggestion(widget.suggestionId!.trim());
+        suggestion = await widget.api.getSuggestion(
+          widget.suggestionId!.trim(),
+        );
       }
 
       final periods = await periodsFuture;
@@ -149,7 +162,9 @@ class _FineFormPageState extends State<FineFormPage> {
 
       if (!mounted) return;
 
-      final filtered = catalog.where((c) => !_isAttendanceSystemTitle(c.title)).toList();
+      final filtered = catalog
+          .where((c) => !_isAttendanceSystemTitle(c.title))
+          .toList();
 
       FineCatalogItemDto? selectedCatalogItem;
       var useCatalog = true;
@@ -160,7 +175,9 @@ class _FineFormPageState extends State<FineFormPage> {
 
         if (useCatalog) {
           try {
-            selectedCatalogItem = filtered.firstWhere((c) => c.id == suggestion!.catalogItemId);
+            selectedCatalogItem = filtered.firstWhere(
+              (c) => c.id == suggestion!.catalogItemId,
+            );
           } catch (_) {
             selectedCatalogItem = null;
           }
@@ -202,10 +219,18 @@ class _FineFormPageState extends State<FineFormPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Fotos hinzufügen?'),
-        content: const Text('Möchtest du jetzt Fotos zu dieser Beihängung hochladen?'),
+        content: const Text(
+          'Möchtest du jetzt Fotos zu dieser Beihängung hochladen?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Nein')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Ja')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Nein'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ja'),
+          ),
         ],
       ),
     );
@@ -269,7 +294,8 @@ class _FineFormPageState extends State<FineFormPage> {
 
   Future<void> _pickFineDate() async {
     final now = DateTime.now();
-    final initial = DateTime.tryParse(_fineDate) ?? DateTime(now.year, now.month, now.day);
+    final initial =
+        DateTime.tryParse(_fineDate) ?? DateTime(now.year, now.month, now.day);
 
     final date = await showDatePicker(
       context: context,
@@ -279,7 +305,8 @@ class _FineFormPageState extends State<FineFormPage> {
     );
     if (date == null || !mounted) return;
 
-    final picked = '${date.year.toString().padLeft(4, '0')}-'
+    final picked =
+        '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
 
@@ -287,9 +314,13 @@ class _FineFormPageState extends State<FineFormPage> {
   }
 
   String _periodLabelForFineDate() {
-    final periodsSorted = [..._periods]..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
+    final periodsSorted = [..._periods]
+      ..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
 
-    final p = Format.findPeriodForFineDate(fineDate: _fineDate, periods: periodsSorted);
+    final p = Format.findPeriodForFineDate(
+      fineDate: _fineDate,
+      periods: periodsSorted,
+    );
     if (p == null) return 'Unbekannt';
     return '${p.semester} · ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
   }
@@ -342,17 +373,17 @@ class _FineFormPageState extends State<FineFormPage> {
 
     final reason = _reason.text.trim();
     if (reason.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grund fehlt.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Grund fehlt.')));
       return;
     }
 
     final fd = _fineDate.trim();
     if (fd.isEmpty || DateTime.tryParse(fd) == null || fd.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ungültiges Datum.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ungültiges Datum.')));
       return;
     }
 
@@ -361,7 +392,9 @@ class _FineFormPageState extends State<FineFormPage> {
         _isAttendanceSystemTitle(_selectedCatalogItem!.title)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Dieser Katalogeintrag wird automatisch durch Anwesenheit vergeben.'),
+          content: Text(
+            'Dieser Katalogeintrag wird automatisch durch Anwesenheit vergeben.',
+          ),
         ),
       );
       return;
@@ -377,6 +410,7 @@ class _FineFormPageState extends State<FineFormPage> {
           catalogItemId: _useCatalog ? _selectedCatalogItem?.id : null,
           reason: reason,
           amountCents: totalCents,
+          notifyOnlyMe: _sendNotificationsOnlyToMe,
         );
 
         final fine = await widget.api.createFine(req);
@@ -423,9 +457,9 @@ class _FineFormPageState extends State<FineFormPage> {
           await _askAddImagesAfterSuggestionCreate(created.id);
           if (!mounted) return;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vorschlag erstellt.')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Vorschlag erstellt.')));
 
           if (context.canPop()) {
             context.pop(true);
@@ -440,18 +474,22 @@ class _FineFormPageState extends State<FineFormPage> {
 
       if (code == 403 && widget.mode == FineFormMode.official) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Keine Berechtigung zum Hinzufügen. Bitte Vorschlag nutzen.')),
+          const SnackBar(
+            content: Text(
+              'Keine Berechtigung zum Hinzufügen. Bitte Vorschlag nutzen.',
+            ),
+          ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -461,7 +499,11 @@ class _FineFormPageState extends State<FineFormPage> {
   Widget build(BuildContext context) {
     final title = widget.mode == FineFormMode.official
         ? 'Beihängen'
-        : (_isSuggestionEdit ? 'Vorschlag bearbeiten' : 'Beihängung vorschlagen');
+        : (_isSuggestionEdit
+              ? 'Vorschlag bearbeiten'
+              : 'Beihängung vorschlagen');
+    final showDevModeNote =
+        widget.mode == FineFormMode.official && _sendNotificationsOnlyToMe;
 
     return AppScaffold(
       title: title,
@@ -470,253 +512,307 @@ class _FineFormPageState extends State<FineFormPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Date picker: icon left + looks obviously clickable
-                  Material(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: _saving ? null : _pickFineDate,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.calendar_month_rounded),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Date picker: icon left + looks obviously clickable
+                        Material(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: _saving ? null : _pickFineDate,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    'Datum',
-                                    style: Theme.of(context).textTheme.labelMedium,
+                                  const Icon(Icons.calendar_month_rounded),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Datum',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.labelMedium,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          Format.dateOnlyShort(_fineDate),
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleMedium,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    Format.dateOnlyShort(_fineDate),
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Conventsperiode: ${_periodLabelForFineDate()}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Conventsperiode: ${_periodLabelForFineDate()}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SegmentedButton<bool>(
-                          showSelectedIcon: false, // <- fixes the extra width from the ✓
-                          style: const ButtonStyle(
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          segments: const [
-                            ButtonSegment(
-                              value: true,
-                              label: Text('Katalog', overflow: TextOverflow.ellipsis),
-                            ),
-                            ButtonSegment(
-                              value: false,
-                              label: Text('Custom', overflow: TextOverflow.ellipsis),
-                            ),
-                          ],
-                          selected: {_useCatalog},
-                          onSelectionChanged: (s) {
-                            setState(() {
-                              _useCatalog = s.first;
-                              _multiplier = 1;
-                            });
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Form(
-                    key: _formKey,
-                    // FIX: revalidate fields automatically as the user interacts/edits
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        if (_useCatalog) ...[
-                          // NEW: searchable picker field (instead of DropdownButtonFormField)
-                          _CatalogPickerField(
-                            enabled: !_saving,
-                            value: _selectedCatalogItem,
-                            onTap: _pickCatalogItem,
-                            validator: (_) {
-                              if (_useCatalog && _selectedCatalogItem == null) {
-                                return 'Bitte Beihängung auswählen.';
-                              }
-                              final v = _selectedCatalogItem;
-                              if (v != null && _isAttendanceSystemTitle(v.title)) {
-                                return 'Dieser Eintrag ist ein Systemeintrag (Anwesenheit).';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-
-                        // IMPORTANT: reason always required (catalog + custom)
-                        TextFormField(
-                          controller: _reason,
-                          enabled: !_saving,
-                          decoration: const InputDecoration(
-                            labelText: 'Grund',
-                            prefixIcon: Icon(Icons.notes_rounded),
-                          ),
-                          // FIX: ensure the error disappears immediately once text is entered
-                          autovalidateMode: AutovalidateMode.onUserInteraction,
-                          validator: (v) {
-                            if ((v ?? '').trim().isEmpty) {
-                              return 'Bitte Grund angeben';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // amount:
-                        // - catalog: not editable (uses defaultAmountCents)
-                        // - custom: editable EUR
-                        TextFormField(
-                          controller: _amount,
-                          enabled: !_useCatalog && !_saving,
-                          readOnly: _useCatalog,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: InputDecoration(
-                            labelText: _useCatalog ? 'Betrag (aus Katalog)' : 'Betrag (z.B. 1,50)',
-                            prefixIcon: const Icon(Icons.euro_rounded),
-                            hintText: _useCatalog ? '—' : 'z.B. 2,50',
-                          ),
-                          validator: (v) {
-                            if (_useCatalog) {
-                              final def = _selectedCatalogItem?.defaultAmountCents;
-                              if (def == null) {
-                                return 'Katalogbetrag fehlt (Default Betrag).';
-                              }
-                              if (def < 0) {
-                                return 'Bitte gültigen Betrag angeben.';
-                              }
-                              return null;
-                            }
-                            final cents = Format.eurTextToCents(v ?? '');
-                            if (cents == null) {
-                              return 'Bitte gültigen Betrag angeben.';
-                            }
-                            if (cents < 0) {
-                              return 'Bitte gültigen Betrag angeben.';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: Text(
-                            'Mehrfach beihängen?',
-                            style: Theme.of(context).textTheme.labelMedium,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-
-                        _MultiplierRow(
-                          value: _multiplier,
-                          onMinus: _saving
-                              ? null
-                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier - 1)),
-                          onPlus: _saving
-                              ? null
-                              : () => setState(() => _multiplier = _clampMultiplier(_multiplier + 1)),
-                          totalLabel: _totalAmountLabel(),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.tonalIcon(
-                            onPressed: _saving ? null : _pickMembers,
-                            icon: const Icon(Icons.group_add_rounded),
-                            label: Text('Bbr. auswählen (${_targetUserIds.length})'),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _saving ? null : _submit,
-                            icon: _saving
-                                ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                                : const Icon(Icons.check_rounded),
-                            label: Text(
-                              _saving
-                                  ? 'Speichern…'
-                                  : (_isSuggestionEdit ? 'Änderungen speichern' : 'Speichern'),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SegmentedButton<bool>(
+                                showSelectedIcon:
+                                    false, // <- fixes the extra width from the ✓
+                                style: const ButtonStyle(
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                segments: const [
+                                  ButtonSegment(
+                                    value: true,
+                                    label: Text(
+                                      'Katalog',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  ButtonSegment(
+                                    value: false,
+                                    label: Text(
+                                      'Custom',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                                selected: {_useCatalog},
+                                onSelectionChanged: (s) {
+                                  setState(() {
+                                    _useCatalog = s.first;
+                                    _multiplier = 1;
+                                  });
+                                },
+                              ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Form(
+                          key: _formKey,
+                          // FIX: revalidate fields automatically as the user interacts/edits
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          child: Column(
+                            children: [
+                              if (showDevModeNote) ...[
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Dev-Modus aktiv: Benachrichtigungen werden nur an dich gesendet.',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (_useCatalog) ...[
+                                // NEW: searchable picker field (instead of DropdownButtonFormField)
+                                _CatalogPickerField(
+                                  enabled: !_saving,
+                                  value: _selectedCatalogItem,
+                                  onTap: _pickCatalogItem,
+                                  validator: (_) {
+                                    if (_useCatalog &&
+                                        _selectedCatalogItem == null) {
+                                      return 'Bitte Beihängung auswählen.';
+                                    }
+                                    final v = _selectedCatalogItem;
+                                    if (v != null &&
+                                        _isAttendanceSystemTitle(v.title)) {
+                                      return 'Dieser Eintrag ist ein Systemeintrag (Anwesenheit).';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+
+                              // IMPORTANT: reason always required (catalog + custom)
+                              TextFormField(
+                                controller: _reason,
+                                enabled: !_saving,
+                                decoration: const InputDecoration(
+                                  labelText: 'Grund',
+                                  prefixIcon: Icon(Icons.notes_rounded),
+                                ),
+                                // FIX: ensure the error disappears immediately once text is entered
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
+                                validator: (v) {
+                                  if ((v ?? '').trim().isEmpty) {
+                                    return 'Bitte Grund angeben';
+                                  }
+                                  return null;
+                                },
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // amount:
+                              // - catalog: not editable (uses defaultAmountCents)
+                              // - custom: editable EUR
+                              TextFormField(
+                                controller: _amount,
+                                enabled: !_useCatalog && !_saving,
+                                readOnly: _useCatalog,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                decoration: InputDecoration(
+                                  labelText: _useCatalog
+                                      ? 'Betrag (aus Katalog)'
+                                      : 'Betrag (z.B. 1,50)',
+                                  prefixIcon: const Icon(Icons.euro_rounded),
+                                  hintText: _useCatalog ? '—' : 'z.B. 2,50',
+                                ),
+                                validator: (v) {
+                                  if (_useCatalog) {
+                                    final def = _selectedCatalogItem
+                                        ?.defaultAmountCents;
+                                    if (def == null) {
+                                      return 'Katalogbetrag fehlt (Default Betrag).';
+                                    }
+                                    if (def < 0) {
+                                      return 'Bitte gültigen Betrag angeben.';
+                                    }
+                                    return null;
+                                  }
+                                  final cents = Format.eurTextToCents(v ?? '');
+                                  if (cents == null) {
+                                    return 'Bitte gültigen Betrag angeben.';
+                                  }
+                                  if (cents < 0) {
+                                    return 'Bitte gültigen Betrag angeben.';
+                                  }
+                                  return null;
+                                },
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Text(
+                                  'Mehrfach beihängen?',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.labelMedium,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+
+                              _MultiplierRow(
+                                value: _multiplier,
+                                onMinus: _saving
+                                    ? null
+                                    : () => setState(
+                                        () => _multiplier = _clampMultiplier(
+                                          _multiplier - 1,
+                                        ),
+                                      ),
+                                onPlus: _saving
+                                    ? null
+                                    : () => setState(
+                                        () => _multiplier = _clampMultiplier(
+                                          _multiplier + 1,
+                                        ),
+                                      ),
+                                totalLabel: _totalAmountLabel(),
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: _saving ? null : _pickMembers,
+                                  icon: const Icon(Icons.group_add_rounded),
+                                  label: Text(
+                                    'Bbr. auswählen (${_targetUserIds.length})',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: _saving ? null : _submit,
+                                  icon: _saving
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.check_rounded),
+                                  label: Text(
+                                    _saving
+                                        ? 'Speichern…'
+                                        : (_isSuggestionEdit
+                                              ? 'Änderungen speichern'
+                                              : 'Speichern'),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      widget.mode == FineFormMode.official
+                          ? 'Hinweis: Offizielle Beihängungen nur mit Berechtigung.'
+                          : (_isSuggestionEdit
+                                ? 'Hinweis: Offene Vorschläge können bearbeitet und mit Fotos ergänzt werden.'
+                                : 'Hinweis: Vorschläge müssen erst von dem Sprecher oder Schmuckwart angenommen werden.'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
-          ),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                widget.mode == FineFormMode.official
-                    ? 'Hinweis: Offizielle Beihängungen nur mit Berechtigung.'
-                    : (_isSuggestionEdit
-                    ? 'Hinweis: Offene Vorschläge können bearbeitet und mit Fotos ergänzt werden.'
-                    : 'Hinweis: Vorschläge müssen erst von dem Sprecher oder Schmuckwart angenommen werden.'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-      ),
     );
   }
 }
@@ -728,45 +824,45 @@ class _CatalogPickerField extends FormField<FineCatalogItemDto?> {
     required VoidCallback onTap,
     super.validator,
   }) : super(
-    initialValue: value,
-    builder: (state) {
-      final theme = Theme.of(state.context);
-      final text = value?.title ?? 'Beihängungsgrund';
+         initialValue: value,
+         builder: (state) {
+           final theme = Theme.of(state.context);
+           final text = value?.title ?? 'Beihängungsgrund';
 
-      return InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: enabled ? onTap : null,
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: 'Katalogeintrag',
-            prefixIcon: const Icon(Icons.search_rounded),
-            errorText: state.errorText,
-            enabled: enabled,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: value == null
-                      ? theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  )
-                      : theme.textTheme.bodyLarge,
-                ),
-              ),
-              Icon(
-                Icons.expand_more_rounded,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
+           return InkWell(
+             borderRadius: BorderRadius.circular(12),
+             onTap: enabled ? onTap : null,
+             child: InputDecorator(
+               decoration: InputDecoration(
+                 labelText: 'Katalogeintrag',
+                 prefixIcon: const Icon(Icons.search_rounded),
+                 errorText: state.errorText,
+                 enabled: enabled,
+               ),
+               child: Row(
+                 children: [
+                   Expanded(
+                     child: Text(
+                       text,
+                       maxLines: 1,
+                       overflow: TextOverflow.ellipsis,
+                       style: value == null
+                           ? theme.textTheme.bodyLarge?.copyWith(
+                               color: theme.colorScheme.onSurfaceVariant,
+                             )
+                           : theme.textTheme.bodyLarge,
+                     ),
+                   ),
+                   Icon(
+                     Icons.expand_more_rounded,
+                     color: theme.colorScheme.onSurfaceVariant,
+                   ),
+                 ],
+               ),
+             ),
+           );
+         },
+       );
 }
 
 class _CatalogPickerSheet extends StatefulWidget {
@@ -800,7 +896,9 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
     final query = _search.text.trim().toLowerCase();
     final filtered = query.isEmpty
         ? widget.items
-        : widget.items.where((c) => c.title.toLowerCase().contains(query)).toList(growable: false);
+        : widget.items
+              .where((c) => c.title.toLowerCase().contains(query))
+              .toList(growable: false);
 
     return SafeArea(
       child: Padding(
@@ -843,13 +941,13 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
                     suffixIcon: _search.text.isEmpty
                         ? null
                         : IconButton(
-                      tooltip: 'Leeren',
-                      onPressed: () {
-                        _search.clear();
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.clear_rounded),
-                    ),
+                            tooltip: 'Leeren',
+                            onPressed: () {
+                              _search.clear();
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.clear_rounded),
+                          ),
                   ),
                 ),
               ),
@@ -857,43 +955,50 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
                 child: filtered.isEmpty
                     ? const Center(child: Text('Keine Treffer.'))
                     : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (ctx, i) {
-                    final c = filtered[i];
-                    final selected = widget.initial?.id == c.id;
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (ctx, i) {
+                          final c = filtered[i];
+                          final selected = widget.initial?.id == c.id;
 
-                    return Material(
-                      color: selected
-                          ? Theme.of(context).colorScheme.surfaceContainerHighest
-                          : Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => Navigator.of(context).pop(c),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          child: Row(
-                            children: [
-                              Icon(
-                                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  c.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                          return Material(
+                            color: selected
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest
+                                : Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => Navigator.of(context).pop(c),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      selected
+                                          ? Icons.check_circle_rounded
+                                          : Icons.circle_outlined,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        c.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
@@ -935,10 +1040,7 @@ class _MultiplierRow extends StatelessWidget {
               color: scheme.surface,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              'Anzahl',
-              style: theme.textTheme.labelLarge,
-            ),
+            child: Text('Anzahl', style: theme.textTheme.labelLarge),
           ),
           const SizedBox(width: 12),
 
@@ -958,10 +1060,7 @@ class _MultiplierRow extends StatelessWidget {
                 Container(
                   constraints: const BoxConstraints(minWidth: 52),
                   alignment: Alignment.center,
-                  child: Text(
-                    '${value}x',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  child: Text('${value}x', style: theme.textTheme.titleMedium),
                 ),
                 IconButton(
                   onPressed: onPlus,
@@ -984,10 +1083,7 @@ class _MultiplierRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                totalLabel,
-                style: theme.textTheme.titleMedium,
-              ),
+              Text(totalLabel, style: theme.textTheme.titleMedium),
             ],
           ),
         ],

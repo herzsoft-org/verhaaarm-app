@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
+import '../../auth/roles.dart';
+import '../../common/settings/app_settings_store.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../models/dtos.dart';
 import '../../common/member_picker_settings.dart';
@@ -46,6 +48,11 @@ class _TaskFormPageState extends State<TaskFormPage> {
   bool _recurringEnabled = false;
   final Set<String> _recurringWeekdays = {}; // MON..SUN
   TimeOfDay? _recurringDueTime;
+
+  bool get _sendNotificationsOnlyToMe {
+    return widget.authStore.currentRoles.contains(AppRole.admin) &&
+        AppSettingsStore.I.devModeNotifyOnlyMe;
+  }
 
   @override
   void initState() {
@@ -136,8 +143,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
     if (pickedDate == null) return;
     if (!mounted) return;
 
-    final initialTime =
-    _dueLocal != null ? TimeOfDay.fromDateTime(_dueLocal!) : TimeOfDay.fromDateTime(now);
+    final initialTime = _dueLocal != null
+        ? TimeOfDay.fromDateTime(_dueLocal!)
+        : TimeOfDay.fromDateTime(now);
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -158,19 +166,14 @@ class _TaskFormPageState extends State<TaskFormPage> {
     _recomputeCanSubmit();
   }
 
-
   Future<void> _pickRecurringDueTime() async {
     final initial = _recurringDueTime ?? TimeOfDay.fromDateTime(DateTime.now());
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initial,
-    );
+    final picked = await showTimePicker(context: context, initialTime: initial);
     if (picked == null) return;
     if (!mounted) return;
     setState(() => _recurringDueTime = picked);
     _recomputeCanSubmit();
   }
-
 
   // ----------------------------
   // Helpers
@@ -229,7 +232,15 @@ class _TaskFormPageState extends State<TaskFormPage> {
     }
   }
 
-  List<String> _weekdayOrder() => const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  List<String> _weekdayOrder() => const [
+    'MON',
+    'TUE',
+    'WED',
+    'THU',
+    'FRI',
+    'SAT',
+    'SUN',
+  ];
 
   String _formatDueLocal(DateTime? d) {
     if (d == null) return 'Bitte wählen';
@@ -281,15 +292,19 @@ class _TaskFormPageState extends State<TaskFormPage> {
 
       if (!_recurringEnabled && _dueLocal == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bitte Fälligkeit (Datum/Uhrzeit) wählen.')),
+          const SnackBar(
+            content: Text('Bitte Fälligkeit (Datum/Uhrzeit) wählen.'),
+          ),
         );
       } else if (_recurringEnabled && _recurringDueTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bitte Uhrzeit wählen.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Bitte Uhrzeit wählen.')));
       } else if (_assignees.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bitte mindestens einen Empfänger wählen.')),
+          const SnackBar(
+            content: Text('Bitte mindestens einen Empfänger wählen.'),
+          ),
         );
       }
       return;
@@ -304,7 +319,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
     final dueAt = _recurringEnabled ? null : _dueLocal;
 
     final recurringWeekdays = _recurringEnabled
-        ? _weekdayOrder().where(_recurringWeekdays.contains).toList(growable: false)
+        ? _weekdayOrder()
+              .where(_recurringWeekdays.contains)
+              .toList(growable: false)
         : null;
 
     final recurringDueTimeStr = (_recurringEnabled && _recurringDueTime != null)
@@ -343,6 +360,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
             recurringEnabled: _recurringEnabled ? true : false,
             recurringWeekdays: recurringWeekdays,
             recurringDueTime: recurringDueTimeStr,
+            notifyOnlyMe: _sendNotificationsOnlyToMe,
           ),
         );
       }
@@ -351,9 +369,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
       context.pop(saved); // <-- return TaskDto instead of true
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -364,9 +382,12 @@ class _TaskFormPageState extends State<TaskFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pageTitle = widget.isEdit ? 'Arbeitsauftrag bearbeiten' : 'Arbeitsauftrag erstellen';
+    final pageTitle = widget.isEdit
+        ? 'Arbeitsauftrag bearbeiten'
+        : 'Arbeitsauftrag erstellen';
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final showDevModeNote = !widget.isEdit && _sendNotificationsOnlyToMe;
 
     return AppScaffold(
       title: pageTitle,
@@ -390,6 +411,15 @@ class _TaskFormPageState extends State<TaskFormPage> {
                   key: _formKey,
                   child: Column(
                     children: [
+                      if (showDevModeNote) ...[
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Dev-Modus aktiv: Benachrichtigungen werden nur an dich gesendet.',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       TextFormField(
                         controller: _titleCtrl,
                         decoration: const InputDecoration(
@@ -473,7 +503,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                         ),
                                       ],
                                       selected: {_recurringEnabled},
-                                      onSelectionChanged: (s) => _setMode(s.first),
+                                      onSelectionChanged: (s) =>
+                                          _setMode(s.first),
                                     ),
                                   ),
                                 ],
@@ -482,7 +513,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                 const SizedBox(height: 8),
                                 Text(
                                   'Als „Erledigt“ markierte Aufgaben erscheinen nächste Woche wieder als offen.',
-                                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
                                 ),
                               ],
                             ],
@@ -516,7 +549,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                   width: double.infinity,
                                   child: FilledButton.icon(
                                     onPressed: _pickNormalDueAt,
-                                    icon: const Icon(Icons.edit_calendar_rounded),
+                                    icon: const Icon(
+                                      Icons.edit_calendar_rounded,
+                                    ),
                                     label: const Text('Fälligkeit'),
                                   ),
                                 ),
@@ -539,7 +574,10 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                     const Icon(Icons.repeat_rounded),
                                     const SizedBox(width: 10),
                                     Expanded(
-                                      child: Text('Wochentage', style: theme.textTheme.titleSmall),
+                                      child: Text(
+                                        'Wochentage',
+                                        style: theme.textTheme.titleSmall,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -551,7 +589,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                     for (final w in _weekdayOrder())
                                       ChoiceChip(
                                         label: Text(_weekdayLabel(w)),
-                                        selected: _recurringWeekdays.contains(w),
+                                        selected: _recurringWeekdays.contains(
+                                          w,
+                                        ),
                                         onSelected: (sel) {
                                           setState(() {
                                             if (sel) {
@@ -567,7 +607,10 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                 ),
                                 const SizedBox(height: 12),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: cs.surfaceContainerHighest,
                                     borderRadius: BorderRadius.circular(12),
@@ -578,7 +621,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Text(
-                                          _formatRecurringTime(_recurringDueTime),
+                                          _formatRecurringTime(
+                                            _recurringDueTime,
+                                          ),
                                           style: theme.textTheme.bodyMedium,
                                         ),
                                       ),
@@ -607,7 +652,9 @@ class _TaskFormPageState extends State<TaskFormPage> {
                         child: FilledButton.icon(
                           onPressed: _canSubmit ? _save : null,
                           icon: const Icon(Icons.save_rounded),
-                          label: Text(widget.isEdit ? 'Speichern' : 'Erstellen'),
+                          label: Text(
+                            widget.isEdit ? 'Speichern' : 'Erstellen',
+                          ),
                         ),
                       ),
                     ],
@@ -668,16 +715,19 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
     try {
       final hidePhilister = await MemberPickerSettings.hidePhilister();
       final rawUsers = await widget.api.pickerUsers(query: query);
-      final users = rawUsers.where((u) {
-        return MemberStatuses.shouldShowInPicker(
-          memberStatus: u.memberStatus,
-          hidePhilister: hidePhilister,
-          forceShow: _selected.contains(u.id),
-        );
-      }).toList(growable: false);
+      final users = rawUsers
+          .where((u) {
+            return MemberStatuses.shouldShowInPicker(
+              memberStatus: u.memberStatus,
+              hidePhilister: hidePhilister,
+              forceShow: _selected.contains(u.id),
+            );
+          })
+          .toList(growable: false);
 
       users.sort(
-            (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
       );
 
       for (final u in users) {
@@ -720,7 +770,10 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
       if (hit.isNotEmpty) out.add(hit.first);
     }
 
-    out.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    out.sort(
+      (a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+    );
     Navigator.pop(context, List<UserPickerDto>.unmodifiable(out));
   }
 
@@ -746,7 +799,8 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                           labelText: 'Nutzer suchen',
                           prefixIcon: Icon(Icons.search_rounded),
                         ),
-                        onChanged: (v) => _load(query: v.trim().isEmpty ? null : v.trim()),
+                        onChanged: (v) =>
+                            _load(query: v.trim().isEmpty ? null : v.trim()),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -762,24 +816,24 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : ListView.builder(
-                  itemCount: _users.length,
-                  itemBuilder: (context, i) {
-                    final u = _users[i];
-                    final checked = _selected.contains(u.id);
-                    return CheckboxListTile(
-                      value: checked,
-                      onChanged: (_) => _toggle(u),
-                      title: Text(
-                        MemberStatuses.pickerDisplayName(
-                          displayName: u.displayName,
-                          memberStatus: u.memberStatus,
-                        ),
+                        itemCount: _users.length,
+                        itemBuilder: (context, i) {
+                          final u = _users[i];
+                          final checked = _selected.contains(u.id);
+                          return CheckboxListTile(
+                            value: checked,
+                            onChanged: (_) => _toggle(u),
+                            title: Text(
+                              MemberStatuses.pickerDisplayName(
+                                displayName: u.displayName,
+                                memberStatus: u.memberStatus,
+                              ),
+                            ),
+                            subtitle: null,
+                            titleAlignment: ListTileTitleAlignment.center,
+                          );
+                        },
                       ),
-                      subtitle: null,
-                      titleAlignment: ListTileTitleAlignment.center,
-                    );
-                  },
-                ),
               ),
             ],
           ),
