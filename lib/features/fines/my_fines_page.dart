@@ -104,6 +104,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
     'fineDate': f.fineDate,
     'createdAt': f.createdAt,
     'type': f.type.name,
+    'photoCount': f.photoCount,
+    'hasPhotos': f.hasPhotos,
     'suggesterUserId': f.suggesterUserId,
     'acceptedFromSuggestionId': f.acceptedFromSuggestionId,
   };
@@ -132,7 +134,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
   String _fineTitle(FineDto f) {
     if (f.type == FineType.catalog && f.catalogItemId != null) {
       final item = _catalogById[f.catalogItemId!];
-      if (item != null && item.title.trim().isNotEmpty) return item.title.trim();
+      if (item != null && item.title.trim().isNotEmpty) {
+        return item.title.trim();
+      }
     }
     final r = (f.reason ?? '').trim();
     if (r.isNotEmpty) return r;
@@ -222,16 +226,15 @@ class _MyFinesPageState extends State<MyFinesPage> {
           .toList(growable: false);
       if (periods.isEmpty) return DateTime.fromMillisecondsSinceEpoch(1 << 62);
 
-      final starts =
-      periods.map((p) => p.startDateLocal).toList(growable: false);
-      final futureStarts = starts.where((d) => !d.isBefore(now)).toList(
-        growable: false,
-      )..sort();
+      final starts = periods
+          .map((p) => p.startDateLocal)
+          .toList(growable: false);
+      final futureStarts =
+          starts.where((d) => !d.isBefore(now)).toList(growable: false)..sort();
       if (futureStarts.isNotEmpty) return futureStarts.first;
 
       final pastStarts =
-      starts.where((d) => d.isBefore(now)).toList(growable: false)
-        ..sort();
+          starts.where((d) => d.isBefore(now)).toList(growable: false)..sort();
       return pastStarts.isNotEmpty
           ? pastStarts.last
           : DateTime.fromMillisecondsSinceEpoch(1 << 62);
@@ -245,7 +248,9 @@ class _MyFinesPageState extends State<MyFinesPage> {
           .toList(growable: false);
       if (periods.isEmpty) return 2;
 
-      final anyFutureOrCurrent = periods.any((p) => !p.endDateLocal.isBefore(now));
+      final anyFutureOrCurrent = periods.any(
+        (p) => !p.endDateLocal.isBefore(now),
+      );
       return anyFutureOrCurrent ? 0 : 1;
     }
 
@@ -336,27 +341,33 @@ class _MyFinesPageState extends State<MyFinesPage> {
       );
       final cFines = await AppCache.I.entryOrLoadPersisted<List<FineDto>>(
         _kMyFinesFines,
-        decode: (json) =>
-            (json as List).map((e) => _decodeFine(e as Object)).toList(growable: false),
+        decode: (json) => (json as List)
+            .map((e) => _decodeFine(e as Object))
+            .toList(growable: false),
       );
       final cUsers = await AppCache.I.entryOrLoadPersisted<List<UserPickerDto>>(
         _kMyFinesUsers,
-        decode: (json) =>
-            (json as List).map((e) => _decodeUser(e as Object)).toList(growable: false),
-      );
-      final cCatalog = await AppCache.I.entryOrLoadPersisted<List<FineCatalogItemDto>>(
-        _kMyFinesCatalog,
         decode: (json) => (json as List)
-            .map((e) => _decodeCatalogItem(e as Object))
+            .map((e) => _decodeUser(e as Object))
             .toList(growable: false),
       );
-      final cPeriods = await AppCache.I.entryOrLoadPersisted<List<ConventPeriodDto>>(
-        _kMyFinesPeriods,
-        decode: (json) =>
-            (json as List).map((e) => _decodePeriod(e as Object)).toList(growable: false),
-      );
+      final cCatalog = await AppCache.I
+          .entryOrLoadPersisted<List<FineCatalogItemDto>>(
+            _kMyFinesCatalog,
+            decode: (json) => (json as List)
+                .map((e) => _decodeCatalogItem(e as Object))
+                .toList(growable: false),
+          );
+      final cPeriods = await AppCache.I
+          .entryOrLoadPersisted<List<ConventPeriodDto>>(
+            _kMyFinesPeriods,
+            decode: (json) => (json as List)
+                .map((e) => _decodePeriod(e as Object))
+                .toList(growable: false),
+          );
 
-      final hasAnyCache = (cMe != null) ||
+      final hasAnyCache =
+          (cMe != null) ||
           (cPeriod != null) ||
           (cBal != null) ||
           (cFines != null) ||
@@ -365,11 +376,15 @@ class _MyFinesPageState extends State<MyFinesPage> {
           (cPeriods != null);
 
       if (hasAnyCache && mounted) {
-        final users = List<UserPickerDto>.from(cUsers?.value ?? const <UserPickerDto>[]);
-        final catalog =
-        List<FineCatalogItemDto>.from(cCatalog?.value ?? const <FineCatalogItemDto>[]);
-        final periods = List<ConventPeriodDto>.from(cPeriods?.value ?? const <ConventPeriodDto>[])
-          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+        final users = List<UserPickerDto>.from(
+          cUsers?.value ?? const <UserPickerDto>[],
+        );
+        final catalog = List<FineCatalogItemDto>.from(
+          cCatalog?.value ?? const <FineCatalogItemDto>[],
+        );
+        final periods = List<ConventPeriodDto>.from(
+          cPeriods?.value ?? const <ConventPeriodDto>[],
+        )..sort((a, b) => a.startAt.compareTo(b.startAt));
 
         final userById = {for (final u in users) u.id: u};
         final catalogById = {for (final c in catalog) c.id: c};
@@ -398,7 +413,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
         });
       }
 
-      final cacheFresh = (cFines != null && cFines.isFresh(_ttlMyFines)) &&
+      final cacheFresh =
+          (cFines != null && cFines.isFresh(_ttlMyFines)) &&
           (cUsers != null && cUsers.isFresh(_ttlMyFines)) &&
           (cCatalog != null && cCatalog.isFresh(_ttlMyFines)) &&
           (cPeriods != null && cPeriods.isFresh(_ttlMyFines)) &&
@@ -566,9 +582,11 @@ class _MyFinesPageState extends State<MyFinesPage> {
   bool _canOpenFineDetails() {
     final token = widget.api.authStore.accessToken;
     final roles = Roles.fromAccessToken(token);
-    return roles.contains(AppRole.admin) ||
-        roles.contains(AppRole.senior) ||
-        roles.contains(AppRole.housekeeping);
+    return Roles.canViewFineDetails(roles);
+  }
+
+  bool _hasFinePhotos(FineDto f) {
+    return f.hasPhotos == true || (f.photoCount ?? 0) > 0;
   }
 
   @override
@@ -582,8 +600,10 @@ class _MyFinesPageState extends State<MyFinesPage> {
     final balanceText = rawBalanceText.isEmpty
         ? ''
         : (numericBalance == 0
-        ? rawBalanceText.replaceFirst(RegExp(r'^-'), '')
-        : (rawBalanceText.startsWith('-') ? rawBalanceText : '-$rawBalanceText'));
+              ? rawBalanceText.replaceFirst(RegExp(r'^-'), '')
+              : (rawBalanceText.startsWith('-')
+                    ? rawBalanceText
+                    : '-$rawBalanceText'));
 
     final grouped = _showAllPeriods
         ? _buildGroupedBySemesterAndPeriod(_visibleFines)
@@ -602,145 +622,155 @@ class _MyFinesPageState extends State<MyFinesPage> {
           onPressed: _loading ? null : () => _load(force: true),
         ),
         IconButton(
-          tooltip:
-          _showAllPeriods ? 'Nur aktuelle Periode' : 'Alle Perioden anzeigen',
-          icon: Icon(_showAllPeriods
-              ? Icons.history_toggle_off_rounded
-              : Icons.history_rounded),
-          onPressed: _loading ? null : () => _setShowAllPeriods(!_showAllPeriods),
+          tooltip: _showAllPeriods
+              ? 'Nur aktuelle Periode'
+              : 'Alle Perioden anzeigen',
+          icon: Icon(
+            _showAllPeriods
+                ? Icons.history_toggle_off_rounded
+                : Icons.history_rounded,
+          ),
+          onPressed: _loading
+              ? null
+              : () => _setShowAllPeriods(!_showAllPeriods),
         ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: () => _load(force: true),
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            if (_refreshing)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: LinearProgressIndicator(),
-              ),
-
-            // top info row (small icon) like EventsPage pattern
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
+              onRefresh: () => _load(force: true),
+              child: ListView(
+                padding: const EdgeInsets.all(12),
                 children: [
-                  Icon(
-                    _showAllPeriods
-                        ? Icons.history_rounded
-                        : Icons.event_available_rounded,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _showAllPeriods
-                          ? 'Alle Beihängungen (gruppiert nach Semester/Periode)'
-                          : 'Beihängungen in der aktuellen Periode',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                  if (_refreshing)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: LinearProgressIndicator(),
+                    ),
+
+                  // top info row (small icon) like EventsPage pattern
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _showAllPeriods
+                              ? Icons.history_rounded
+                              : Icons.event_available_rounded,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _showAllPeriods
+                                ? 'Alle Beihängungen (gruppiert nach Semester/Periode)'
+                                : 'Beihängungen in der aktuellen Periode',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+
+                  // header card (active period + balance)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Aktuelle Conventsperiode',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            p == null
+                                ? 'Keine aktive Conventsperiode'
+                                : '${p.semester} · ${Format.dateOnlyShort(p.startAt)} – ${Format.dateOnlyShort(p.endAt)}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Saldo',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            balanceText.isNotEmpty
+                                ? balanceText
+                                : (p == null ? '—' : '…'),
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (!_showAllPeriods && p == null)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text(
+                        'Keine Beihängungen: Es gibt aktuell keine aktive Conventsperiode.\n'
+                        'Tippe oben auf das Verlauf-Icon, um alle Beihängungen zu sehen.',
+                      ),
+                    )
+                  else if (_visibleFines.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        _showAllPeriods
+                            ? 'Keine Beihängungen gefunden.'
+                            : 'Keine Beihängungen in der aktuellen Conventsperiode gefunden.',
+                      ),
+                    )
+                  else if (!_showAllPeriods)
+                    for (final f in _visibleFines)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          elevation: 0,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          child: ListTile(
+                            titleAlignment: ListTileTitleAlignment.center,
+                            leading: const Icon(Icons.gavel_rounded),
+                            title: Text(_fineTitle(f)),
+                            subtitle: Text(_subtitleForFine(f)),
+                            isThreeLine: true,
+                            trailing: _FineTileTrailing(
+                              hasPhotos: _hasFinePhotos(f),
+                              canOpen: canOpenDetails,
+                            ),
+                            onTap: canOpenDetails
+                                ? () => context.push('/fines/${f.id}')
+                                : null,
+                          ),
+                        ),
+                      )
+                  else
+                    for (final sem in grouped)
+                      _SemesterSectionFines(
+                        semester: sem.semester,
+                        periods: sem.periods,
+                        periodById: _periodById,
+                        fineTitle: _fineTitle,
+                        subtitleForFine: _subtitleForFine,
+                        hasFinePhotos: _hasFinePhotos,
+                        canOpenFine: canOpenDetails,
+                        onOpenFine: (id) => context.push('/fines/$id'),
+                      ),
                 ],
               ),
             ),
-
-            // header card (active period + balance)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Aktuelle Conventsperiode',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 6),
-                    Text(
-                      p == null
-                          ? 'Keine aktive Conventsperiode'
-                          : '${p.semester} · ${Format.dateOnlyShort(p.startAt)} – ${Format.dateOnlyShort(p.endAt)}',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 10),
-                    Text('Saldo',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 6),
-                    Text(
-                      balanceText.isNotEmpty
-                          ? balanceText
-                          : (p == null ? '—' : '…'),
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            if (!_showAllPeriods && p == null)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text(
-                  'Keine Beihängungen: Es gibt aktuell keine aktive Conventsperiode.\n'
-                      'Tippe oben auf das Verlauf-Icon, um alle Beihängungen zu sehen.',
-                ),
-              )
-            else if (_visibleFines.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(_showAllPeriods
-                    ? 'Keine Beihängungen gefunden.'
-                    : 'Keine Beihängungen in der aktuellen Conventsperiode gefunden.'),
-              )
-            else if (!_showAllPeriods)
-                for (final f in _visibleFines)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Card(
-                      elevation: 0,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
-                      child: ListTile(
-                        titleAlignment: ListTileTitleAlignment.center,
-                        leading: const Icon(Icons.gavel_rounded),
-                        title: Text(_fineTitle(f)),
-                        subtitle: Text(_subtitleForFine(f)),
-                        isThreeLine: true,
-                        trailing: canOpenDetails
-                            ? const Icon(Icons.chevron_right_rounded)
-                            : null,
-                        onTap: canOpenDetails
-                            ? () => context.push('/fines/${f.id}')
-                            : null,
-                      ),
-                    ),
-                  )
-              else
-                for (final sem in grouped)
-                  _SemesterSectionFines(
-                    semester: sem.semester,
-                    periods: sem.periods,
-                    periodById: _periodById,
-                    fineTitle: _fineTitle,
-                    subtitleForFine: _subtitleForFine,
-                    canOpenFine: canOpenDetails,
-                    onOpenFine: (id) => context.push('/fines/$id'),
-                  ),
-          ],
-        ),
-      ),
     );
   }
 
   DateTime _parseLocalDateOnly(String s) {
-    final m =
-    RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s.trim());
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s.trim());
     if (m == null) return DateTime.fromMillisecondsSinceEpoch(0);
     final y = int.parse(m.group(1)!);
     final mo = int.parse(m.group(2)!);
@@ -783,6 +813,7 @@ class _SemesterSectionFines extends StatelessWidget {
 
   final String Function(FineDto f) fineTitle;
   final String Function(FineDto f) subtitleForFine;
+  final bool Function(FineDto f) hasFinePhotos;
 
   // NEW: permissions for opening details
   final bool canOpenFine;
@@ -795,6 +826,7 @@ class _SemesterSectionFines extends StatelessWidget {
     required this.periodById,
     required this.fineTitle,
     required this.subtitleForFine,
+    required this.hasFinePhotos,
     required this.canOpenFine,
     required this.onOpenFine,
   });
@@ -816,6 +848,7 @@ class _SemesterSectionFines extends StatelessWidget {
                 period: periodById[pg.periodId],
                 fineTitle: fineTitle,
                 subtitleForFine: subtitleForFine,
+                hasFinePhotos: hasFinePhotos,
                 canOpenFine: canOpenFine,
                 onOpenFine: onOpenFine,
               ),
@@ -832,6 +865,7 @@ class _PeriodSectionFines extends StatelessWidget {
 
   final String Function(FineDto f) fineTitle;
   final String Function(FineDto f) subtitleForFine;
+  final bool Function(FineDto f) hasFinePhotos;
 
   // NEW: permissions for opening details
   final bool canOpenFine;
@@ -843,6 +877,7 @@ class _PeriodSectionFines extends StatelessWidget {
     required this.period,
     required this.fineTitle,
     required this.subtitleForFine,
+    required this.hasFinePhotos,
     required this.canOpenFine,
     required this.onOpenFine,
   });
@@ -853,8 +888,8 @@ class _PeriodSectionFines extends StatelessWidget {
 
     final header = (p == null)
         ? (pg.periodId == 'unknown'
-        ? 'Conventsperiode: Unbekannt'
-        : 'Conventsperiode: ${pg.periodId}')
+              ? 'Conventsperiode: Unbekannt'
+              : 'Conventsperiode: ${pg.periodId}')
         : 'Conventsperiode: ${Format.dateShort(p.startAt)} – ${Format.dateShort(p.endAt)}';
 
     final flags = <Widget>[];
@@ -873,7 +908,10 @@ class _PeriodSectionFines extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(header, style: Theme.of(context).textTheme.titleSmall),
+                child: Text(
+                  header,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
               ...flags,
             ],
@@ -891,7 +929,10 @@ class _PeriodSectionFines extends StatelessWidget {
                   title: Text(fineTitle(f)),
                   subtitle: Text(subtitleForFine(f)),
                   isThreeLine: true,
-                  trailing: canOpenFine ? const Icon(Icons.chevron_right_rounded) : null,
+                  trailing: _FineTileTrailing(
+                    hasPhotos: hasFinePhotos(f),
+                    canOpen: canOpenFine,
+                  ),
                   onTap: canOpenFine ? () => onOpenFine(f.id) : null,
                 ),
               ),
@@ -927,6 +968,32 @@ class _Chip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FineTileTrailing extends StatelessWidget {
+  final bool hasPhotos;
+  final bool canOpen;
+
+  const _FineTileTrailing({required this.hasPhotos, required this.canOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasPhotos && !canOpen) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasPhotos)
+          Icon(
+            Icons.photo_camera_outlined,
+            size: 20,
+            color: Theme.of(context).colorScheme.secondary,
+          ),
+        if (hasPhotos && canOpen) const SizedBox(width: 8),
+        if (canOpen) const Icon(Icons.chevron_right_rounded),
+      ],
     );
   }
 }

@@ -12,11 +12,7 @@ class FinesListPage extends StatefulWidget {
   final ApiClient api;
   final AuthStore authStore;
 
-  const FinesListPage({
-    super.key,
-    required this.api,
-    required this.authStore,
-  });
+  const FinesListPage({super.key, required this.api, required this.authStore});
 
   @override
   State<FinesListPage> createState() => _FinesListPageState();
@@ -29,6 +25,7 @@ class _FinesListPageState extends State<FinesListPage> {
   List<ConventPeriodDto> _periods = const [];
   Map<String, UserPickerDto> _userById = const {};
   Map<String, FineCatalogItemDto> _catalogById = const {};
+  Map<String, bool> _fineHasPhotos = const {};
 
   String? _currentPeriodId;
   String? _currentSemester;
@@ -43,7 +40,8 @@ class _FinesListPageState extends State<FinesListPage> {
 
   bool get _isTreasurerOnlyCreator {
     final roles = _roles;
-    return roles.contains(AppRole.treasurer) && !Roles.canCreateOfficialFine(roles);
+    return roles.contains(AppRole.treasurer) &&
+        !Roles.canCreateOfficialFine(roles);
   }
 
   bool _canResolveAllTargetUsers(FineDto f) {
@@ -64,10 +62,15 @@ class _FinesListPageState extends State<FinesListPage> {
     return _isAttendanceSystemTitle(item.title);
   }
 
+  bool _hasFinePhotos(FineDto f) {
+    return _fineHasPhotos[f.id] ?? false;
+  }
+
   static ({int year, int term}) _semesterKey(String semester) {
     final s = semester.trim().toUpperCase();
     if (s.startsWith('SS')) {
-      final yy = int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final yy =
+          int.tryParse(s.substring(2).replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
       return (year: 2000 + yy, term: 1);
     }
     if (s.startsWith('WS')) {
@@ -87,7 +90,9 @@ class _FinesListPageState extends State<FinesListPage> {
   String _fineTitle(FineDto f) {
     if (f.type == FineType.catalog && f.catalogItemId != null) {
       final item = _catalogById[f.catalogItemId!];
-      if (item != null && item.title.trim().isNotEmpty) return item.title.trim();
+      if (item != null && item.title.trim().isNotEmpty) {
+        return item.title.trim();
+      }
     }
     final r = (f.reason ?? '').trim();
     if (r.isNotEmpty) return r;
@@ -137,6 +142,10 @@ class _FinesListPageState extends State<FinesListPage> {
       }
 
       final currentPeriod = _detectCurrentPeriod(periods);
+      final fineHasPhotos = {
+        for (final fine in fines)
+          fine.id: fine.hasPhotos == true || (fine.photoCount ?? 0) > 0,
+      };
 
       if (!mounted) return;
       setState(() {
@@ -144,9 +153,12 @@ class _FinesListPageState extends State<FinesListPage> {
         _userById = userById;
         _catalogById = catalogById;
         _fines = fines;
+        _fineHasPhotos = fineHasPhotos;
         _currentPeriodId = currentPeriod?.id;
         _currentSemester = currentPeriod?.semester;
       });
+
+      _loadPhotoIndicators(fines, fineHasPhotos);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -154,6 +166,25 @@ class _FinesListPageState extends State<FinesListPage> {
       );
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadPhotoIndicators(
+    List<FineDto> fines,
+    Map<String, bool> initial,
+  ) async {
+    final next = Map<String, bool>.from(initial);
+
+    for (final fine in fines) {
+      try {
+        final photos = await widget.api.listFinePhotos(fine.id);
+        next[fine.id] = photos.isNotEmpty;
+      } catch (_) {
+        next[fine.id] = next[fine.id] ?? false;
+      }
+
+      if (!mounted) return;
+      setState(() => _fineHasPhotos = Map.unmodifiable(next));
     }
   }
 
@@ -217,29 +248,30 @@ class _FinesListPageState extends State<FinesListPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            if (grouped.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text('Keine Perioden gefunden.'),
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  if (grouped.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('Keine Perioden gefunden.'),
+                    ),
+                  for (final sem in grouped)
+                    _SemesterSection(
+                      semester: sem.semester,
+                      periods: sem.periods,
+                      fineTitle: _fineTitle,
+                      userLabel: _userLabel,
+                      onTapFine: _openFineDetail,
+                      isAttendanceFine: _isAttendanceFine,
+                      hasFinePhotos: _hasFinePhotos,
+                      initiallyExpanded: sem.semester == _currentSemester,
+                      currentPeriodId: _currentPeriodId,
+                    ),
+                ],
               ),
-            for (final sem in grouped)
-              _SemesterSection(
-                semester: sem.semester,
-                periods: sem.periods,
-                fineTitle: _fineTitle,
-                userLabel: _userLabel,
-                onTapFine: _openFineDetail,
-                isAttendanceFine: _isAttendanceFine,
-                initiallyExpanded: sem.semester == _currentSemester,
-                currentPeriodId: _currentPeriodId,
-              ),
-          ],
-        ),
-      ),
+            ),
     );
   }
 
@@ -251,7 +283,10 @@ class _FinesListPageState extends State<FinesListPage> {
     for (final f in _fines) {
       if (!_canResolveAllTargetUsers(f)) continue;
 
-      final p = Format.findPeriodForFineDate(fineDate: f.fineDate, periods: periodsSorted);
+      final p = Format.findPeriodForFineDate(
+        fineDate: f.fineDate,
+        periods: periodsSorted,
+      );
       final pid = p?.id ?? 'unknown';
       finesByPeriodId.putIfAbsent(pid, () => <FineDto>[]);
       finesByPeriodId[pid]!.add(f);
@@ -294,7 +329,9 @@ class _FinesListPageState extends State<FinesListPage> {
         periodGroups.add(_PeriodGroup(period: p, fines: fines));
       }
 
-      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])];
+      final unknownFines = [
+        ...(finesByPeriodId['unknown'] ?? const <FineDto>[]),
+      ];
       if (unknownFines.isNotEmpty) {
         unknownFines.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         periodGroups.add(
@@ -302,8 +339,12 @@ class _FinesListPageState extends State<FinesListPage> {
             period: ConventPeriodDto(
               id: 'unknown',
               semester: sem,
-              startAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
-              endAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+              startAt: DateTime.fromMillisecondsSinceEpoch(
+                0,
+              ).toUtc().toIso8601String(),
+              endAt: DateTime.fromMillisecondsSinceEpoch(
+                0,
+              ).toUtc().toIso8601String(),
               active: false,
               locked: false,
             ),
@@ -318,8 +359,9 @@ class _FinesListPageState extends State<FinesListPage> {
     }
 
     if (result.isEmpty && (finesByPeriodId['unknown']?.isNotEmpty ?? false)) {
-      final unknownFines = [...(finesByPeriodId['unknown'] ?? const <FineDto>[])]
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final unknownFines = [
+        ...(finesByPeriodId['unknown'] ?? const <FineDto>[]),
+      ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       result.add(
         _SemesterGroup(
           semester: 'Unbekannt',
@@ -328,8 +370,12 @@ class _FinesListPageState extends State<FinesListPage> {
               period: ConventPeriodDto(
                 id: 'unknown',
                 semester: 'Unbekannt',
-                startAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
-                endAt: DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+                startAt: DateTime.fromMillisecondsSinceEpoch(
+                  0,
+                ).toUtc().toIso8601String(),
+                endAt: DateTime.fromMillisecondsSinceEpoch(
+                  0,
+                ).toUtc().toIso8601String(),
                 active: false,
                 locked: false,
               ),
@@ -366,6 +412,7 @@ class _SemesterSection extends StatelessWidget {
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
   final bool Function(FineDto) isAttendanceFine;
+  final bool Function(FineDto) hasFinePhotos;
   final bool initiallyExpanded;
   final String? currentPeriodId;
 
@@ -376,6 +423,7 @@ class _SemesterSection extends StatelessWidget {
     required this.userLabel,
     required this.onTapFine,
     required this.isAttendanceFine,
+    required this.hasFinePhotos,
     required this.initiallyExpanded,
     required this.currentPeriodId,
   });
@@ -399,6 +447,7 @@ class _SemesterSection extends StatelessWidget {
               userLabel: userLabel,
               onTapFine: onTapFine,
               isAttendanceFine: isAttendanceFine,
+              hasFinePhotos: hasFinePhotos,
               initiallyExpanded: pg.period.id == currentPeriodId,
             ),
         ],
@@ -415,6 +464,7 @@ class _PeriodSection extends StatelessWidget {
   final String Function(String userId) userLabel;
   final void Function(String fineId) onTapFine;
   final bool Function(FineDto) isAttendanceFine;
+  final bool Function(FineDto) hasFinePhotos;
   final bool initiallyExpanded;
 
   const _PeriodSection({
@@ -424,6 +474,7 @@ class _PeriodSection extends StatelessWidget {
     required this.userLabel,
     required this.onTapFine,
     required this.isAttendanceFine,
+    required this.hasFinePhotos,
     required this.initiallyExpanded,
   });
 
@@ -466,7 +517,9 @@ class _PeriodSection extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('Keine Beihängungen in der aktuellen Conventsperiode'),
+                  title: Text(
+                    'Keine Beihängungen in der aktuellen Conventsperiode',
+                  ),
                 ),
               )
             else
@@ -475,7 +528,9 @@ class _PeriodSection extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Card(
                     elevation: 0,
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     child: ListTile(
                       titleAlignment: ListTileTitleAlignment.center,
                       leading: const Icon(Icons.gavel_rounded),
@@ -485,6 +540,13 @@ class _PeriodSection extends StatelessWidget {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (hasFinePhotos(f))
+                            Icon(
+                              Icons.photo_camera_outlined,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.secondary,
+                            ),
+                          if (hasFinePhotos(f)) const SizedBox(width: 8),
                           if (isAttendanceFine(f))
                             const Chip(
                               label: Text('Auto'),
@@ -516,7 +578,8 @@ class _PeriodSection extends StatelessWidget {
     } else if (targets.length == 2) {
       targetsText = '${userLabel(targets[0])}, ${userLabel(targets[1])}';
     } else {
-      targetsText = '${userLabel(targets[0])}, ${userLabel(targets[1])} (+${targets.length - 2})';
+      targetsText =
+          '${userLabel(targets[0])}, ${userLabel(targets[1])} (+${targets.length - 2})';
     }
 
     return 'Betrag: ${Format.centsToEur(amount)} · Bbr.: $targetsText\n'

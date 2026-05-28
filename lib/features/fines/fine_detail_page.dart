@@ -35,9 +35,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
   List<ConventPeriodDto> _periods = const [];
   Map<String, FineCatalogItemDto> _catalogById = const {};
 
-  // System attendance catalog item IDs (source of truth)
-  Set<String> _attendanceSystemCatalogIds = const {};
-
   // Photos meta for UI (count + enable/disable buttons)
   bool _photosMetaLoading = false;
   int? _photoCount; // null while not loaded yet
@@ -52,35 +49,27 @@ class _FineDetailPageState extends State<FineDetailPage> {
     if (f.type != FineType.catalog) return false;
     final cid = (f.catalogItemId ?? '').trim();
     if (cid.isEmpty) return false;
-    return _attendanceSystemCatalogIds.contains(cid);
+    final title = (_catalogById[cid]?.title ?? '').trim().toLowerCase();
+    return title == 'absent' || title == 'late';
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      // Fetch everything we need; attendance config is required for reliable system detection.
       final results = await Future.wait([
         widget.api.getFine(widget.fineId),
         widget.api.pickerUsers(),
         widget.api.listPeriods(),
         widget.api.listFineCatalog(active: null),
-        widget.api.getAttendanceFineConfig(),
       ]);
 
       final fine = results[0] as FineDto;
       final users = results[1] as List<UserPickerDto>;
       final periods = (results[2] as List<ConventPeriodDto>).toList();
       final catalog = results[3] as List<FineCatalogItemDto>;
-      final cfg = results[4] as AttendanceFineConfigDto;
 
       final userById = {for (final u in users) u.id: u};
       final catalogById = {for (final c in catalog) c.id: c};
-
-      final sys = <String>{};
-      final lateId = (cfg.lateCatalogItemId ?? '').trim();
-      final absentId = (cfg.absentCatalogItemId ?? '').trim();
-      if (lateId.isNotEmpty) sys.add(lateId);
-      if (absentId.isNotEmpty) sys.add(absentId);
 
       if (!mounted) return;
       setState(() {
@@ -88,7 +77,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
         _userById = userById;
         _periods = periods;
         _catalogById = catalogById;
-        _attendanceSystemCatalogIds = sys;
       });
 
       // load photo count in background after the main card content is ready
@@ -247,7 +235,10 @@ class _FineDetailPageState extends State<FineDetailPage> {
 
     final count = _photoCount ?? 0;
     final canView = !_photosMetaLoading && count > 0;
-    final canAdd = !_photosMetaLoading && count < _maxPhotos;
+    final canAdd =
+        Roles.canCreateOfficialFine(roles) &&
+        !_photosMetaLoading &&
+        count < _maxPhotos;
 
     return AppScaffold(
       title: 'Beihängung',
@@ -317,6 +308,25 @@ class _FineDetailPageState extends State<FineDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text(
+                          'Bbr.',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final id in fine.targetUserIds)
+                          Text('• ${_userLabel(id)}'),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Row(
                           children: [
                             Expanded(
@@ -374,7 +384,9 @@ class _FineDetailPageState extends State<FineDetailPage> {
                           Padding(
                             padding: const EdgeInsets.only(top: 10),
                             child: Text(
-                              'Upload-Limit erreicht (max. $_maxPhotos Fotos).',
+                              Roles.canCreateOfficialFine(roles)
+                                  ? 'Upload-Limit erreicht (max. $_maxPhotos Fotos).'
+                                  : 'Keine Berechtigung zum Hinzufügen.',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
@@ -402,28 +414,6 @@ class _FineDetailPageState extends State<FineDetailPage> {
                         ),
                         const SizedBox(height: 8),
                         Text('Ersteller: ${_userLabel(fine.creatorUserId)}'),
-                        const SizedBox(height: 8),
-                        if (fine.type == FineType.catalog &&
-                            fine.catalogItemId != null)
-                          Text('Katalog-ID: ${fine.catalogItemId}'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Bbr.',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        for (final id in fine.targetUserIds)
-                          Text('• ${_userLabel(id)}'),
                       ],
                     ),
                   ),

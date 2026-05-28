@@ -69,7 +69,10 @@ class _PaukstundeFormPageState extends State<PaukstundeFormPage> {
       }
 
       final selected = {..._selectedIds};
-      if (!_isEdit && me != null && users.any((u) => u.id == me!.id)) {
+      if (!widget.fechtwartMode &&
+          !_isEdit &&
+          me != null &&
+          users.any((u) => u.id == me!.id)) {
         selected.add(me.id);
       }
 

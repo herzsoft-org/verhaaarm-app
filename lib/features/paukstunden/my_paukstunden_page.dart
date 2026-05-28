@@ -47,12 +47,12 @@ class _MyPaukstundenPageState extends State<MyPaukstundenPage> {
         }
       }
 
-      final data = await widget.api.getCurrentPaukstunden();
+      final data = await widget.api.getMyCurrentPaukstunden();
 
       if (!mounted) return;
       setState(() {
         _currentUserId = currentUserId;
-        _data = data;
+        _data = _participantFilteredData(data, currentUserId);
       });
     } catch (e) {
       if (!mounted) return;
@@ -82,10 +82,29 @@ class _MyPaukstundenPageState extends State<MyPaukstundenPage> {
     final currentUserId = _currentUserId;
 
     if (currentUserId == null) {
-      return true;
+      return false;
     }
 
     return entry.participants.any((p) => p.id == currentUserId);
+  }
+
+  PaukstundenListDto _participantFilteredData(
+    PaukstundenListDto data,
+    String? currentUserId,
+  ) {
+    if (currentUserId == null || currentUserId.isEmpty) {
+      return PaukstundenListDto.fromEntries(const []);
+    }
+
+    final entries = data.entries
+        .where((entry) => entry.participants.any((p) => p.id == currentUserId))
+        .toList(growable: false);
+
+    if (entries.length == data.entries.length) {
+      return data;
+    }
+
+    return PaukstundenListDto.fromEntries(entries);
   }
 
   Future<void> _openEdit(PaukstundenEntryDto entry) async {
@@ -146,10 +165,10 @@ class _MyPaukstundenPageState extends State<MyPaukstundenPage> {
     return entry.participants
         .map(
           (p) => MemberStatuses.pickerDisplayName(
-        displayName: p.displayName,
-        memberStatus: p.memberStatus,
-      ),
-    )
+            displayName: p.displayName,
+            memberStatus: p.memberStatus,
+          ),
+        )
         .join(', ');
   }
 
@@ -177,79 +196,79 @@ class _MyPaukstundenPageState extends State<MyPaukstundenPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Symbols.swords),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
                         children: [
-                          Text(
-                            '${data?.totalHours ?? 0} Paukstunden',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${data?.entryCount ?? 0} Einträge in der aktuellen Conventsperiode',
+                          const Icon(Symbols.swords),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${data?.totalHours ?? 0} Paukstunden',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${data?.entryCount ?? 0} Einträge in der aktuellen Conventsperiode',
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (entries.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('Keine Paukstunden eingetragen.'),
+                    )
+                  else
+                    for (final entry in entries)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.event_note_rounded),
+                          title: Text(
+                            '${Format.dateOnlyShort(entry.date)} · ${entry.hours} Std.',
+                          ),
+                          subtitle: Text(_participants(entry)),
+                          trailing: _canEdit(entry)
+                              ? PopupMenuButton<String>(
+                                  tooltip: 'Aktionen',
+                                  onSelected: (value) {
+                                    if (value == 'edit') {
+                                      _openEdit(entry);
+                                    } else if (value == 'delete') {
+                                      _delete(entry);
+                                    }
+                                  },
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Bearbeiten'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Löschen'),
+                                    ),
+                                  ],
+                                )
+                              : null,
+                          titleAlignment: ListTileTitleAlignment.center,
+                        ),
+                      ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            if (entries.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text('Keine Paukstunden eingetragen.'),
-              )
-            else
-              for (final entry in entries)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.event_note_rounded),
-                    title: Text(
-                      '${Format.dateOnlyShort(entry.date)} · ${entry.hours} Std.',
-                    ),
-                    subtitle: Text(_participants(entry)),
-                    trailing: _canEdit(entry)
-                        ? PopupMenuButton<String>(
-                      tooltip: 'Aktionen',
-                      onSelected: (value) {
-                        if (value == 'edit') {
-                          _openEdit(entry);
-                        } else if (value == 'delete') {
-                          _delete(entry);
-                        }
-                      },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(
-                          value: 'edit',
-                          child: Text('Bearbeiten'),
-                        ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Löschen'),
-                        ),
-                      ],
-                    )
-                        : null,
-                    titleAlignment: ListTileTitleAlignment.center,
-                  ),
-                ),
-          ],
-        ),
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openCreate,
         child: const Icon(Icons.add_rounded),

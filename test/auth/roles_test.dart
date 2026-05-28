@@ -50,5 +50,19 @@ void main() {
       expect(Roles.canManagePeriods({AppRole.housekeeping}), isFalse);
       expect(Roles.canManagePeriods({AppRole.admin}), isTrue);
     });
+
+    test('keeps paukstunden staff limited to admin senior and fechtwart', () {
+      expect(Roles.canManagePaukstunden({AppRole.admin}), isTrue);
+      expect(Roles.canManagePaukstunden({AppRole.senior}), isTrue);
+      expect(Roles.canManagePaukstunden({AppRole.fechtwart}), isTrue);
+      expect(Roles.canManagePaukstunden({AppRole.housekeeping}), isFalse);
+      expect(Roles.canManagePaukstunden({AppRole.treasurer}), isFalse);
+      expect(Roles.canManagePaukstunden({AppRole.member}), isFalse);
+    });
+
+    test('allows treasurer to open fine details', () {
+      expect(Roles.canSeeAllFines({AppRole.treasurer}), isTrue);
+      expect(Roles.canViewFineDetails({AppRole.treasurer}), isTrue);
+    });
   });
 }

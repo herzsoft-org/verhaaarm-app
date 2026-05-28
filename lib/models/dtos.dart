@@ -17,6 +17,13 @@ int _optInt(Map<String, dynamic> j, String k, {int fallback = 0}) {
   return int.tryParse(v.toString()) ?? fallback;
 }
 
+int? _optionalIntField(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v == null) return null;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString());
+}
+
 bool _optBool(Map<String, dynamic> j, String k, {bool fallback = false}) {
   final v = j[k];
   if (v is bool) return v;
@@ -25,6 +32,16 @@ bool _optBool(Map<String, dynamic> j, String k, {bool fallback = false}) {
   if (s == 'true') return true;
   if (s == 'false') return false;
   return fallback;
+}
+
+bool? _optionalBoolField(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v == null) return null;
+  if (v is bool) return v;
+  final s = v.toString().toLowerCase();
+  if (s == 'true') return true;
+  if (s == 'false') return false;
+  return null;
 }
 
 List<String> _optStringList(Map<String, dynamic> j, String k) {
@@ -42,6 +59,11 @@ List<Map<String, dynamic>> _optList(Map<String, dynamic> j, String k) {
         .toList(growable: false);
   }
   return const <Map<String, dynamic>>[];
+}
+
+int? _optionalListLengthField(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  return v is List ? v.length : null;
 }
 
 DateTime? _optDateTime(Map<String, dynamic> j, String k) {
@@ -964,6 +986,8 @@ class FineDto {
   final int? amountCents;
   final FineType type;
   final List<String> targetUserIds;
+  final int? photoCount;
+  final bool? hasPhotos;
 
   /// date-time
   final String createdAt;
@@ -980,6 +1004,8 @@ class FineDto {
     required this.amountCents,
     required this.type,
     required this.targetUserIds,
+    required this.photoCount,
+    required this.hasPhotos,
     required this.createdAt,
     required this.suggesterUserId,
     required this.acceptedFromSuggestionId,
@@ -996,6 +1022,11 @@ class FineDto {
         : _optInt(json, 'amountCents'),
     type: _fineTypeFromJson(_reqString(json, 'type')),
     targetUserIds: _optStringList(json, 'targetUserIds'),
+    photoCount:
+        _optionalIntField(json, 'photoCount') ??
+        _optionalIntField(json, 'photosCount') ??
+        _optionalListLengthField(json, 'photos'),
+    hasPhotos: _optionalBoolField(json, 'hasPhotos'),
     createdAt: _reqString(json, 'createdAt'),
     suggesterUserId: _optString(json, 'suggesterUserId'),
     acceptedFromSuggestionId: _optString(json, 'acceptedFromSuggestionId'),

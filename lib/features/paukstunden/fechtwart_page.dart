@@ -35,8 +35,7 @@ class _FechtwartPageState extends State<FechtwartPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await widget.api.getCurrentPaukstunden();
-      final summary = _summaryFromEntries(data.entries);
+      final summary = await widget.api.getCurrentPaukstundenSummary();
 
       if (!mounted) return;
       setState(() => _summary = summary);
@@ -55,57 +54,6 @@ class _FechtwartPageState extends State<FechtwartPage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  PaukstundenSummaryDto _summaryFromEntries(List<PaukstundenEntryDto> entries) {
-    final grouped = <String, _PaukstundenUserGroup>{};
-
-    for (final entry in entries) {
-      for (final participant in entry.participants) {
-        final id = participant.id;
-        if (id.isEmpty) continue;
-
-        grouped.putIfAbsent(
-          id,
-              () => _PaukstundenUserGroup(
-            userId: id,
-            username: participant.username,
-            displayName: participant.displayName,
-            memberStatus: participant.memberStatus,
-          ),
-        );
-
-        grouped[id]!.entries.add(entry);
-      }
-    }
-
-    final users = grouped.values.map((group) {
-      final entries = [...group.entries]
-        ..sort((a, b) {
-          final byDate = b.date.compareTo(a.date);
-          if (byDate != 0) return byDate;
-          return b.createdAt.compareTo(a.createdAt);
-        });
-
-      return PaukstundenUserSummaryDto(
-        userId: group.userId,
-        username: group.username,
-        displayName: group.displayName,
-        memberStatus: group.memberStatus,
-        totalHours: entries.fold<int>(0, (sum, e) => sum + e.hours),
-        entryCount: entries.length,
-        entries: entries,
-      );
-    }).toList()
-      ..sort(
-            (a, b) =>
-            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
-      );
-
-    return PaukstundenSummaryDto(
-      users: users,
-      periodLabel: 'Aktuelle Conventsperiode',
-    );
   }
 
   Future<void> _openCreate() async {
@@ -175,10 +123,10 @@ class _FechtwartPageState extends State<FechtwartPage> {
     return entry.participants
         .map(
           (p) => MemberStatuses.pickerDisplayName(
-        displayName: p.displayName,
-        memberStatus: p.memberStatus,
-      ),
-    )
+            displayName: p.displayName,
+            memberStatus: p.memberStatus,
+          ),
+        )
         .join(', ');
   }
 
@@ -220,136 +168,121 @@ class _FechtwartPageState extends State<FechtwartPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Symbols.swords),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
                         children: [
-                          Text(
-                            summary?.periodLabel?.trim().isNotEmpty ==
-                                true
-                                ? summary!.periodLabel!
-                                : 'Aktuelle Conventsperiode',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${users.length} Nutzer mit Paukstundenübersicht',
+                          const Icon(Symbols.swords),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  summary?.periodLabel?.trim().isNotEmpty ==
+                                          true
+                                      ? summary!.periodLabel!
+                                      : 'Aktuelle Conventsperiode',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${users.length} Nutzer mit Paukstundenübersicht',
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (users.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Text('Keine Paukstunden vorhanden.'),
-              )
-            else
-              for (final user in users)
-                Card(
-                  child: ExpansionTile(
-                    leading: const Icon(Icons.person_rounded),
-                    title: Text(
-                      user.displayName.isEmpty
-                          ? user.username
-                          : user.displayName,
-                    ),
-                    subtitle: Text(
-                      '${user.totalHours} Std. · ${user.entryCount} Einträge'
-                          '${user.memberStatus.isEmpty ? '' : ' · ${MemberStatuses.label(user.memberStatus)}'}',
-                    ),
-                    children: [
-                      if (user.entries.isEmpty)
-                        const ListTile(
-                          title: Text('Keine Eintragsdetails verfügbar.'),
-                        )
-                      else
-                        for (final entry in user.entries)
-                          ListTile(
-                            leading: const Icon(Icons.event_note_rounded),
-                            title: Text(
-                              '${Format.dateOnlyShort(entry.date)} · ${entry.hours} Std.',
-                            ),
-                            subtitle: Text(_participants(entry)),
-                            trailing: PopupMenuButton<String>(
-                              tooltip: 'Aktionen',
-                              onSelected: (value) {
-                                if (value == 'edit') {
-                                  _openEdit(entry);
-                                } else if (value == 'delete') {
-                                  _delete(entry);
-                                }
-                              },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('Bearbeiten'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Löschen'),
-                                ),
-                              ],
-                            ),
-                            titleAlignment: ListTileTitleAlignment.center,
-                          ),
-                    ],
                   ),
-                ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => setState(() => _showPast = !_showPast),
-              icon: Icon(
-                _showPast
-                    ? Icons.expand_less_rounded
-                    : Icons.history_rounded,
-              ),
-              label: Text(
-                _showPast
-                    ? 'Vergangene ausblenden'
-                    : 'Vergangene Conventsperioden anzeigen',
+                  const SizedBox(height: 12),
+                  if (users.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('Keine Paukstunden vorhanden.'),
+                    )
+                  else
+                    for (final user in users)
+                      Card(
+                        child: ExpansionTile(
+                          leading: const Icon(Icons.person_rounded),
+                          title: Text(
+                            user.displayName.isEmpty
+                                ? user.username
+                                : user.displayName,
+                          ),
+                          subtitle: Text(
+                            '${user.totalHours} Paukstunden'
+                            '${user.memberStatus.isEmpty ? '' : ' · ${MemberStatuses.label(user.memberStatus)}'}',
+                          ),
+                          children: [
+                            if (user.entries.isEmpty)
+                              const ListTile(
+                                title: Text('Keine Eintragsdetails verfügbar.'),
+                              )
+                            else
+                              for (final entry in user.entries)
+                                ListTile(
+                                  leading: const Icon(Icons.event_note_rounded),
+                                  title: Text(
+                                    '${Format.dateOnlyShort(entry.date)} · ${entry.hours} Std.',
+                                  ),
+                                  subtitle: Text(_participants(entry)),
+                                  trailing: PopupMenuButton<String>(
+                                    tooltip: 'Aktionen',
+                                    onSelected: (value) {
+                                      if (value == 'edit') {
+                                        _openEdit(entry);
+                                      } else if (value == 'delete') {
+                                        _delete(entry);
+                                      }
+                                    },
+                                    itemBuilder: (context) => const [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('Bearbeiten'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Löschen'),
+                                      ),
+                                    ],
+                                  ),
+                                  titleAlignment: ListTileTitleAlignment.center,
+                                ),
+                          ],
+                        ),
+                      ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _showPast = !_showPast),
+                    icon: Icon(
+                      _showPast
+                          ? Icons.expand_less_rounded
+                          : Icons.history_rounded,
+                    ),
+                    label: Text(
+                      _showPast
+                          ? 'Vergangene ausblenden'
+                          : 'Vergangene Conventsperioden anzeigen',
+                    ),
+                  ),
+                  if (_showPast)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(8, 12, 8, 24),
+                      child: Text(
+                        'Für vergangene Conventsperioden stellt das Backend noch keine Daten bereit.',
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (_showPast)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 12, 8, 24),
-                child: Text(
-                  'Für vergangene Conventsperioden stellt das Backend noch keine Daten bereit.',
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
-}
-
-class _PaukstundenUserGroup {
-  final String userId;
-  final String username;
-  final String displayName;
-  final String memberStatus;
-  final List<PaukstundenEntryDto> entries = [];
-
-  _PaukstundenUserGroup({
-    required this.userId,
-    required this.username,
-    required this.displayName,
-    required this.memberStatus,
-  });
 }
