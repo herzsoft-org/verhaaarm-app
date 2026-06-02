@@ -132,3 +132,24 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+# Local Firebase / app config files
+android/app/google-services.json
+android/app/src/debug/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+.env
+.env.*
+
+# Local signing material
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# IDE files
+.idea/
+*.iml
