@@ -44,9 +44,9 @@ API base URL is configured via build-time config or a simple config file (decide
 
 ## License
 
-This project is proprietary and closed source.
+This project is licensed under the **GNU Affero General Public License v3.0
+only**.
 
-Copyright (c) 2026 Valentin Schecklein. All rights reserved.
+Copyright (c) 2026 Valentin Schecklein.
 
-No permission is granted to use, copy, modify, distribute, host, deploy, or
-otherwise exploit this software without prior written permission.
+See the `LICENSE` file for the full license text.
