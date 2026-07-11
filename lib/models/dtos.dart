@@ -1909,3 +1909,171 @@ class UserSettingPatchDto {
     'changedAt': changedAt.toUtc().toIso8601String(),
   };
 }
+
+// ---------------- SLUSHY RECIPES ----------------
+
+class SlushyIngredientDto {
+  final String? id;
+  final String name;
+  final String? amount;
+
+  const SlushyIngredientDto({this.id, required this.name, this.amount});
+
+  factory SlushyIngredientDto.fromJson(Map<String, dynamic> json) =>
+      SlushyIngredientDto(
+        id: _optString(json, 'id'),
+        name: _reqString(json, 'name'),
+        amount: _optString(json, 'amount'),
+      );
+
+  Map<String, dynamic> toJson() => {'name': name, if (amount != null) 'amount': amount};
+}
+
+class SlushyRecipeRatingDto {
+  final String userId;
+  final String displayName;
+  final int stars;
+  final String? comment;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const SlushyRecipeRatingDto({
+    required this.userId,
+    required this.displayName,
+    required this.stars,
+    this.comment,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory SlushyRecipeRatingDto.fromJson(Map<String, dynamic> json) =>
+      SlushyRecipeRatingDto(
+        userId: _reqString(json, 'userId'),
+        displayName: _reqString(json, 'displayName'),
+        stars: _optInt(json, 'stars'),
+        comment: _optString(json, 'comment'),
+        createdAt: _optDateTimeOrEpoch(json, 'createdAt'),
+        updatedAt: _optDateTimeOrEpoch(json, 'updatedAt'),
+      );
+}
+
+class SlushyRecipeRatingSummaryDto {
+  final double average;
+  final int count;
+  final int? myStars;
+  final String? myComment;
+
+  const SlushyRecipeRatingSummaryDto({
+    this.average = 0,
+    this.count = 0,
+    this.myStars,
+    this.myComment,
+  });
+
+  factory SlushyRecipeRatingSummaryDto.fromJson(Map<String, dynamic> json) {
+    final avg = json['average'];
+    return SlushyRecipeRatingSummaryDto(
+      average: avg is num ? avg.toDouble() : 0,
+      count: _optInt(json, 'count'),
+      myStars: _optionalIntField(json, 'myStars'),
+      myComment: _optString(json, 'myComment'),
+    );
+  }
+}
+
+class SlushyRecipeDto {
+  final String id;
+  final String title;
+  final String? description;
+  final List<SlushyIngredientDto> ingredients;
+  final String? createdByUserId;
+  final String? createdByDisplayName;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final SlushyRecipeRatingSummaryDto ratingSummary;
+  final List<SlushyRecipeRatingDto> ratings;
+
+  const SlushyRecipeDto({
+    required this.id,
+    required this.title,
+    this.description,
+    this.ingredients = const [],
+    this.createdByUserId,
+    this.createdByDisplayName,
+    required this.createdAt,
+    required this.updatedAt,
+    this.ratingSummary = const SlushyRecipeRatingSummaryDto(),
+    this.ratings = const [],
+  });
+
+  factory SlushyRecipeDto.fromJson(Map<String, dynamic> json) => SlushyRecipeDto(
+    id: _reqString(json, 'id'),
+    title: _reqString(json, 'title'),
+    description: _optString(json, 'description'),
+    ingredients: _optList(
+      json,
+      'ingredients',
+    ).map(SlushyIngredientDto.fromJson).toList(growable: false),
+    createdByUserId: _optString(json, 'createdByUserId'),
+    createdByDisplayName: _optString(json, 'createdByDisplayName'),
+    createdAt: _optDateTimeOrEpoch(json, 'createdAt'),
+    updatedAt: _optDateTimeOrEpoch(json, 'updatedAt'),
+    ratingSummary: json['ratingSummary'] is Map
+        ? SlushyRecipeRatingSummaryDto.fromJson(
+            (json['ratingSummary'] as Map).cast<String, dynamic>(),
+          )
+        : const SlushyRecipeRatingSummaryDto(),
+    ratings: _optList(
+      json,
+      'ratings',
+    ).map(SlushyRecipeRatingDto.fromJson).toList(growable: false),
+  );
+}
+
+class CreateSlushyRecipeRequest {
+  final String title;
+  final String? description;
+  final List<SlushyIngredientDto> ingredients;
+
+  CreateSlushyRecipeRequest({
+    required this.title,
+    this.description,
+    this.ingredients = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (description != null) 'description': description,
+    'ingredients': ingredients.map((i) => i.toJson()).toList(growable: false),
+  };
+}
+
+class UpdateSlushyRecipeRequest {
+  final String? title;
+  final String? description;
+  final List<SlushyIngredientDto>? ingredients;
+
+  UpdateSlushyRecipeRequest({this.title, this.description, this.ingredients});
+
+  Map<String, dynamic> toJson() {
+    final m = <String, dynamic>{};
+    if (title != null) m['title'] = title;
+    if (description != null) m['description'] = description;
+    if (ingredients != null) {
+      m['ingredients'] = ingredients!.map((i) => i.toJson()).toList(growable: false);
+    }
+    return m;
+  }
+}
+
+class RateSlushyRecipeRequest {
+  final int stars;
+  final String? comment;
+
+  RateSlushyRecipeRequest({required this.stars, this.comment});
+
+  Map<String, dynamic> toJson() => {
+    'stars': stars,
+    if (comment != null) 'comment': comment,
+  };
+}

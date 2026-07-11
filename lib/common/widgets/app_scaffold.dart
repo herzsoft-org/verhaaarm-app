@@ -105,6 +105,7 @@ const Set<String> _actionsTabRootPaths = {
   '/office',
   '/convent-protocols',
   '/legal-documents',
+  '/slushy-recipes',
 };
 
 String mainTabLocationForIndex(int index) {

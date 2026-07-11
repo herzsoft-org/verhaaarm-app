@@ -654,6 +654,23 @@ class ApiClient {
     return PaukstundenSummaryDto.fromJson(r.data);
   }
 
+  Future<List<PaukstundenEntryDto>> getPaukstundenForConventsperiode(
+    String periodId,
+  ) async {
+    final r = await dio.get('/paukstunden/conventsperiode/$periodId');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => PaukstundenEntryDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<PaukstundenSummaryDto> getPaukstundenSummaryForConventsperiode(
+    String periodId,
+  ) async {
+    final r = await dio.get('/paukstunden/summary/conventsperiode/$periodId');
+    return PaukstundenSummaryDto.fromJson(r.data);
+  }
+
   Future<PaukstundenEntryDto> updatePaukstunde(
     String id,
     UpdatePaukstundeRequest req,
@@ -846,6 +863,47 @@ class ApiClient {
 
   Future<void> deleteAllSolvedMyTasks() async {
     await dio.delete('/tasks/solved');
+  }
+
+  // ----------------------------
+  // SLUSHY RECIPES (/slushy-recipes, /slushy-recipes/{id}, /slushy-recipes/{id}/ratings)
+  // ----------------------------
+
+  Future<List<SlushyRecipeDto>> listSlushyRecipes() async {
+    final r = await dio.get('/slushy-recipes');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => SlushyRecipeDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<SlushyRecipeDto> getSlushyRecipe(String id) async {
+    final r = await dio.get('/slushy-recipes/$id');
+    return SlushyRecipeDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<SlushyRecipeDto> createSlushyRecipe(CreateSlushyRecipeRequest req) async {
+    final r = await dio.post('/slushy-recipes', data: req.toJson());
+    return SlushyRecipeDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<SlushyRecipeDto> updateSlushyRecipe(String id, UpdateSlushyRecipeRequest req) async {
+    final r = await dio.patch('/slushy-recipes/$id', data: req.toJson());
+    return SlushyRecipeDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteSlushyRecipe(String id) async {
+    await dio.delete('/slushy-recipes/$id');
+  }
+
+  Future<SlushyRecipeDto> rateSlushyRecipe(String id, RateSlushyRecipeRequest req) async {
+    final r = await dio.put('/slushy-recipes/$id/ratings', data: req.toJson());
+    return SlushyRecipeDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<SlushyRecipeDto> deleteSlushyRecipeRating(String id) async {
+    final r = await dio.delete('/slushy-recipes/$id/ratings');
+    return SlushyRecipeDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
   // ----------------------------

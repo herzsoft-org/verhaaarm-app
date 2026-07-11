@@ -133,4 +133,11 @@ class Roles {
         roles.contains(AppRole.senior) ||
         roles.contains(AppRole.housekeeping);
   }
+
+  // --- Slushy Rezepte (who can edit/delete recipes they don't own)
+  static bool canManageSlushyRecipes(Set<AppRole> roles) {
+    return roles.contains(AppRole.admin) ||
+        roles.contains(AppRole.senior) ||
+        roles.contains(AppRole.housekeeping);
+  }
 }

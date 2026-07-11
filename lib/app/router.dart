@@ -44,6 +44,10 @@ import '../features/tasks/tasks_page.dart';
 import '../features/tasks/task_form_page.dart';
 import '../features/office/tasks/office_tasks_page.dart';
 
+import '../features/slushy_recipes/slushy_recipes_page.dart';
+import '../features/slushy_recipes/slushy_recipe_detail_page.dart';
+import '../features/slushy_recipes/slushy_recipe_form_page.dart';
+
 import '../features/notifications/notifications_page.dart';
 import '../notifications/notification_center.dart';
 import '../notifications/notification_router.dart';
@@ -108,6 +112,9 @@ bool _canAccessLocation(String location, Set<AppRole> roles) {
   }
   if (location == '/events' || location.startsWith('/events/')) return true;
   if (location == '/tasks' || location.startsWith('/tasks/')) return true;
+  if (location == '/slushy-recipes' || location.startsWith('/slushy-recipes/')) {
+    return true;
+  }
   if (location == '/my-fines' || location.startsWith('/my-fines/')) return true;
   if (location == '/my-fine-suggestions' ||
       location.startsWith('/my-fine-suggestions/')) {
@@ -328,6 +335,33 @@ Future<GoRouter> buildRouter() async {
           );
         },
       ),
+      _actionSubRoute(
+        path: '/slushy-recipes',
+        builder: (context, state) => SlushyRecipesPage(api: api, authStore: authStore),
+      ),
+      _actionSubRoute(
+        path: '/slushy-recipes/new',
+        builder: (context, state) => SlushyRecipeFormPage(api: api, authStore: authStore),
+      ),
+      _actionSubRoute(
+        path: '/slushy-recipes/:id',
+        builder: (context, state) => SlushyRecipeDetailPage(
+          api: api,
+          authStore: authStore,
+          recipeId: state.pathParameters['id']!,
+          initialRecipe: state.extra is SlushyRecipeDto ? state.extra as SlushyRecipeDto : null,
+        ),
+      ),
+      _actionSubRoute(
+        path: '/slushy-recipes/:id/edit',
+        builder: (context, state) => SlushyRecipeFormPage(
+          api: api,
+          authStore: authStore,
+          recipeId: state.pathParameters['id']!,
+          initial: state.extra is SlushyRecipeDto ? state.extra as SlushyRecipeDto : null,
+        ),
+      ),
+
       _actionSubRoute(
         path: '/legal-documents',
         builder: (context, state) => const LegalDocumentsPage(),
