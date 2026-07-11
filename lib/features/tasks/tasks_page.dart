@@ -311,27 +311,36 @@ class _TaskCard extends StatelessWidget {
       return '(unbekannt)';
     }
 
-    final names = task.assignees.map(display).toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final sortedAssignees = task.assignees.toList()
+      ..sort((a, b) => display(a).toLowerCase().compareTo(display(b).toLowerCase()));
 
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Beauftragte Bbr. (${names.length})'),
+        title: Text('Beauftragte Bbr. (${sortedAssignees.length})'),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: names.isEmpty
+          child: sortedAssignees.isEmpty
               ? const Text('Keine Empfänger.')
               : SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final n in names)
+                for (final u in sortedAssignees)
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.person_outline_rounded),
-                    title: Text(n),
+                    title: Text(
+                      display(u),
+                      style: u.disabled
+                          ? TextStyle(
+                              decoration: TextDecoration.lineThrough,
+                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                            )
+                          : null,
+                    ),
+                    subtitle: u.disabled ? const Text('Gesperrt') : null,
                   ),
               ],
             ),

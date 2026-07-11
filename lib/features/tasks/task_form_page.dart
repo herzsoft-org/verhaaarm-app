@@ -714,7 +714,9 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
     setState(() => _loading = true);
     try {
       final hidePhilister = await MemberPickerSettings.hidePhilister();
-      final rawUsers = await widget.api.pickerUsers(query: query);
+      // includes disabled users too: an already-assigned user may since have been
+      // disabled, and they need to stay visible here so they can be unchecked/removed.
+      final rawUsers = await widget.api.pickerUsers(query: query, activeOnly: false);
       final users = rawUsers
           .where((u) {
             return MemberStatuses.shouldShowInPicker(
@@ -820,6 +822,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                         itemBuilder: (context, i) {
                           final u = _users[i];
                           final checked = _selected.contains(u.id);
+                          final cs = Theme.of(context).colorScheme;
                           return CheckboxListTile(
                             value: checked,
                             onChanged: (_) => _toggle(u),
@@ -828,8 +831,14 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                                 displayName: u.displayName,
                                 memberStatus: u.memberStatus,
                               ),
+                              style: u.disabled
+                                  ? TextStyle(
+                                      decoration: TextDecoration.lineThrough,
+                                      color: cs.onSurfaceVariant,
+                                    )
+                                  : null,
                             ),
-                            subtitle: null,
+                            subtitle: u.disabled ? const Text('Gesperrt') : null,
                             titleAlignment: ListTileTitleAlignment.center,
                           );
                         },

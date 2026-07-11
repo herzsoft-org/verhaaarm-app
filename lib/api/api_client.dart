@@ -92,12 +92,15 @@ class ApiClient {
   // USERS (swagger: /users, /users/{id}, /users/me, /users/*/balance, /users/{id}/password)
   // ----------------------------
 
-  Future<List<UserPickerDto>> pickerUsers({String? query}) async {
-    // swagger: GET /users?active=true&query=...
+  Future<List<UserPickerDto>> pickerUsers({
+    String? query,
+    bool activeOnly = true,
+  }) async {
+    // swagger: GET /users?active=true|false&query=...
     final r = await dio.get(
       '/users',
       queryParameters: {
-        'active': true,
+        'active': activeOnly,
         if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
       },
     );

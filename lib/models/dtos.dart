@@ -437,6 +437,7 @@ class UserPickerDto {
   final String displayName;
   final String memberStatus;
   final bool actividad;
+  final bool disabled;
 
   bool get aktivitas => actividad;
 
@@ -446,6 +447,7 @@ class UserPickerDto {
     required this.displayName,
     required this.memberStatus,
     required this.actividad,
+    this.disabled = false,
   });
 
   factory UserPickerDto.fromJson(Map<String, dynamic> json) => UserPickerDto(
@@ -454,6 +456,7 @@ class UserPickerDto {
     displayName: _reqString(json, 'displayName'),
     memberStatus: _memberStatusFromJson(json),
     actividad: _aktivitasFromJson(json),
+    disabled: _optBool(json, 'disabled'),
   );
 }
 
