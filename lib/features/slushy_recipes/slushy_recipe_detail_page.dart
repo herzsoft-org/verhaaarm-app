@@ -323,15 +323,15 @@ class _SlushyRecipeDetailPageState extends State<SlushyRecipeDetailPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 8,
                                   children: [
-                                    Expanded(
-                                      child: StarRatingDisplay(
-                                        average: recipe.ratingSummary.average,
-                                        count: recipe.ratingSummary.count,
-                                        size: 22,
-                                      ),
+                                    StarRatingDisplay(
+                                      average: recipe.ratingSummary.average,
+                                      count: recipe.ratingSummary.count,
+                                      size: 22,
                                     ),
                                     TextButton.icon(
                                       onPressed: () => setState(() => _showRatingInput = !_showRatingInput),

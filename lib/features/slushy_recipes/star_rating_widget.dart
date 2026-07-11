@@ -32,9 +32,13 @@ class StarRatingDisplay extends StatelessWidget {
           ),
         if (showLabel) ...[
           const SizedBox(width: 6),
-          Text(
-            count == 0 ? 'Noch keine Bewertungen' : '${average.toStringAsFixed(1)} ($count)',
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+          Flexible(
+            child: Text(
+              count == 0 ? 'Noch keine Bewertungen' : '${average.toStringAsFixed(1)} ($count)',
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
           ),
         ],
       ],
