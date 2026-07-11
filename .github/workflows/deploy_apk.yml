@@ -97,6 +97,36 @@ jobs:
           echo "Keystore + alias OK."
 
 
+      # --- FIREBASE / GOOGLE SERVICES SETUP ---
+      # The android/app build.gradle.kts applies the com.google.gms.google-services
+      # plugin unconditionally, so android/app/google-services.json must exist at
+      # build time. It's gitignored (it's per-environment Firebase config), so it
+      # has to be materialized here from a secret.
+      # Secret needed:
+      #   GOOGLE_SERVICES_JSON_B64   (base64 of your android/app/google-services.json,
+      #                               downloaded from Firebase console -> Project settings
+      #                               -> your Android app -> google-services.json)
+      - name: Write google-services.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p android/app
+
+          printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | tr -d '\r\n ' | base64 -d > android/app/google-services.json
+
+          if [ ! -s android/app/google-services.json ]; then
+            echo "android/app/google-services.json is empty - GOOGLE_SERVICES_JSON_B64 secret missing or empty."
+            exit 1
+          fi
+
+          if ! jq empty android/app/google-services.json; then
+            echo "android/app/google-services.json is not valid JSON - check the GOOGLE_SERVICES_JSON_B64 secret."
+            exit 1
+          fi
+
+          echo "google-services.json written and looks like valid JSON."
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
