@@ -16,6 +16,33 @@ BorderRadius positionalTileRadius({required bool isFirst, required bool isLast})
   );
 }
 
+/// Shifts a color's HSL lightness by [delta] (positive = brighter, negative
+/// = darker), clamped to a valid lightness.
+Color _adjustLightness(Color base, double delta) {
+  final hsl = HSLColor.fromColor(base);
+  return hsl.withLightness((hsl.lightness + delta).clamp(0.0, 1.0)).toColor();
+}
+
+/// The page/scaffold background. In dark mode Material 3's [ColorScheme.surface]
+/// already reads well, so it's used as-is. In light mode it's close to pure
+/// white and still carries the seed color's (cool, purple) hue, which reads
+/// as a pink/lilac tint once darkened - re-hue it to a warm, neutral
+/// eggshell off-white instead, independent of the seed color.
+Color _pageBackgroundColor(ColorScheme scheme) {
+  if (scheme.brightness == Brightness.dark) return scheme.surface;
+  return const HSLColor.fromAHSL(1.0, 45, 0.25, 0.93).toColor();
+}
+
+/// Nudges a surface-container color further away from the page background
+/// so that "boxes" (cards, dialogs, sheets, ...) read with more contrast
+/// against the page background: brighter in dark mode, darker in light mode.
+/// Applied on top of Material 3's tonal roles, which alone are too close to
+/// the background to read as clearly separated boxes.
+Color _boxSurfaceColor(Color base, Brightness brightness) {
+  final delta = brightness == Brightness.dark ? 0.045 : -0.075;
+  return _adjustLightness(base, delta);
+}
+
 ThemeData buildAppTheme(Brightness brightness) {
   const seed = Color(0xFF7B61FF);
 
@@ -23,6 +50,9 @@ ThemeData buildAppTheme(Brightness brightness) {
     seedColor: seed,
     brightness: brightness,
   );
+
+  final pageBackgroundColor = _pageBackgroundColor(scheme);
+  final boxColor = _boxSurfaceColor(scheme.surfaceContainerLow, brightness);
 
   final cardShape = RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(24));
   const buttonShape = StadiumBorder();
@@ -38,7 +68,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
-    scaffoldBackgroundColor: scheme.surface,
+    scaffoldBackgroundColor: pageBackgroundColor,
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
         TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
@@ -50,7 +80,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     cardTheme: CardThemeData(
       clipBehavior: Clip.antiAlias,
       elevation: 0,
-      color: scheme.surfaceContainerLow,
+      color: boxColor,
       shape: cardShape,
       // Obtainium uses margin: zero and manages spacing between cards at every
       // call site. This app doesn't do that consistently everywhere, so keep a
@@ -58,9 +88,10 @@ ThemeData buildAppTheme(Brightness brightness) {
       // safety net for screens that rely on it instead of explicit spacing.
       margin: const EdgeInsets.all(4),
     ),
-    dialogTheme: DialogThemeData(shape: dialogShape),
-    bottomSheetTheme: const BottomSheetThemeData(
-      shape: RoundedSuperellipseBorder(
+    dialogTheme: DialogThemeData(backgroundColor: boxColor, shape: dialogShape),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: boxColor,
+      shape: const RoundedSuperellipseBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
     ),

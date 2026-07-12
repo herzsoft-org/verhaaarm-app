@@ -58,6 +58,7 @@ import '../models/dtos.dart';
 import '../auth/roles.dart';
 
 import '../features/profile/sessions_page.dart';
+import '../features/profile/app_settings_page.dart';
 import '../features/office/session_stats_page.dart';
 
 import '../features/office/periods/period_protocol_page.dart';
@@ -299,6 +300,11 @@ Future<GoRouter> buildRouter() async {
       GoRoute(
         path: '/profile/sessions',
         builder: (context, state) => SessionsPage(api: api),
+      ),
+      GoRoute(
+        path: '/profile/app-settings',
+        builder: (context, state) =>
+            AppSettingsPage(api: api, authStore: authStore),
       ),
       GoRoute(
         path: '/notifications',
@@ -681,20 +687,6 @@ Future<GoRouter> buildRouter() async {
             api: api,
             authStore: authStore,
             periodId: state.pathParameters['id']!,
-          );
-        },
-      ),
-      _actionSubRoute(
-        path: '/office/periods/:id/protocol',
-        builder: (context, state) {
-          final period = state.extra is ConventPeriodDto
-              ? state.extra as ConventPeriodDto
-              : null;
-
-          return PeriodProtocolPage(
-            api: api,
-            periodId: state.pathParameters['id']!,
-            initialPeriod: period,
           );
         },
       ),

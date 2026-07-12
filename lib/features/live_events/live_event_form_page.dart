@@ -116,7 +116,7 @@ class _LiveEventFormPageState extends State<LiveEventFormPage> {
     final showDevModeNote = !isEdit && _sendNotificationsOnlyToMe;
 
     return AppScaffold(
-      title: isEdit ? 'Live-Event bearbeiten' : 'Live-Event erstellen',
+      title: isEdit ? 'Event bearbeiten' : 'Event erstellen',
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

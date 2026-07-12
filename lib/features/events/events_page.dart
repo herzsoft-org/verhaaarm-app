@@ -7,6 +7,7 @@ import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/busy_icon_button.dart';
 import '../../models/dtos.dart';
 
 class EventsPage extends StatefulWidget {
@@ -280,17 +281,16 @@ class _EventsPageState extends State<EventsPage> {
       }
     }
 
-    final known = _periodsSorted.where((p) => p.semester.trim().isNotEmpty).toList()
-      ..sort((a, b) {
-        final ka = _semesterKey(a.semester);
-        final kb = _semesterKey(b.semester);
+    // No active/current period covers "now" (e.g. a gap between semesters).
+    // Fall back to the most recently started period, never a future one -
+    // otherwise "past events" filtering would target a semester that has no
+    // past events at all.
+    final started = _periodsSorted
+        .where((p) => !DateTime.parse(p.startAt).isAfter(now))
+        .toList()
+      ..sort((a, b) => a.startAt.compareTo(b.startAt));
 
-        final c1 = ka.year.compareTo(kb.year);
-        if (c1 != 0) return c1;
-        return ka.term.compareTo(kb.term);
-      });
-
-    return known.isNotEmpty ? known.last.semester : null;
+    return started.isNotEmpty ? started.last.semester : null;
   }
 
   @override
@@ -309,10 +309,11 @@ class _EventsPageState extends State<EventsPage> {
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
-        IconButton(
+        BusyIconButton(
+          busy: _loading || _refreshing,
           tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : () => _load(force: true),
+          icon: Icons.refresh_rounded,
+          onPressed: () => _load(force: true),
         ),
         IconButton(
           tooltip:
@@ -363,11 +364,6 @@ class _EventsPageState extends State<EventsPage> {
           controller: _scrollController,
           padding: const EdgeInsets.all(12),
           children: [
-            if (_refreshing)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: LinearProgressIndicator(),
-              ),
             if (grouped.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(8),

@@ -39,6 +39,19 @@ class ActionsPage extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         children: [
           _Section(
+            title: 'Spaß',
+            children: [
+              ListTile(
+                leading: const Icon(Icons.ac_unit_rounded),
+                title: const Text('Slushy Rezepte'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                titleAlignment: ListTileTitleAlignment.center,
+                onTap: () => context.push('/slushy-recipes'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _Section(
             title: 'Allgemein',
             children: [
               ListTile(
@@ -63,19 +76,6 @@ class ActionsPage extends StatelessWidget {
                   titleAlignment: ListTileTitleAlignment.center,
                   onTap: () => context.push('/fines/new'),
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _Section(
-            title: 'Slushy Rezepte',
-            children: [
-              ListTile(
-                leading: const Icon(Icons.icecream_rounded),
-                title: const Text('Slushy Rezepte'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                titleAlignment: ListTileTitleAlignment.center,
-                onTap: () => context.push('/slushy-recipes'),
-              ),
             ],
           ),
           const SizedBox(height: 12),

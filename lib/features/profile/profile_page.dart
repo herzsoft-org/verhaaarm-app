@@ -14,10 +14,10 @@ import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/busy_icon_button.dart';
 import '../../common/widgets/schnupfspruch_button.dart';
 import '../../common/settings/app_settings_store.dart';
 import '../../models/member_status.dart';
-import '../../update/web_app_refresh.dart';
 import 'dart:async';
 
 class ProfilePage extends StatefulWidget {
@@ -44,7 +44,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _loading = true;
   bool _refreshing = false;
-  bool _forceReloadingWebApp = false;
 
   String _displayName = '—';
   String _username = '—';
@@ -285,9 +284,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return labels.isEmpty ? 'Mitglied' : labels.join(', ');
   }
 
-  Future<void> _openAppSettingsSheet() async {
-    final isAdmin = widget.authStore.currentRoles.contains(AppRole.admin);
-
+  Future<void> _openAppInfoSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -297,230 +294,72 @@ class _ProfilePageState extends State<ProfilePage> {
         final theme = Theme.of(sheetContext);
         final cs = theme.colorScheme;
 
-        return StatefulBuilder(
-          builder: (ctx, setStateSheet) {
-            Future<void> setHidePhilister(bool value) async {
-              await AppSettingsStore.I.setHidePhilister(widget.api, value);
-              setStateSheet(() {});
-            }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: ListView(
-                  shrinkWrap: true,
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: 16 + MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: cs.primaryContainer,
-                          foregroundColor: cs.onPrimaryContainer,
-                          child: const Icon(Icons.settings_rounded),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'App-Einstellungen',
-                                style: theme.textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Darstellung und Verhalten der App anpassen',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    CircleAvatar(
+                      backgroundColor: cs.primaryContainer,
+                      foregroundColor: cs.onPrimaryContainer,
+                      child: const Icon(Icons.info_outline_rounded),
                     ),
-                    const SizedBox(height: 16),
-                    Card(
-                      color: cs.surfaceContainerLow,
-                      child: Column(
-                        children: [
-                          AnimatedBuilder(
-                            animation: AppSettingsStore.I,
-                            builder: (context, _) {
-                              final selected =
-                                  AppSettingsStore.I.themeMode ==
-                                      ThemeMode.light
-                                  ? ThemeMode.light
-                                  : ThemeMode.dark;
-
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  14,
-                                  16,
-                                  16,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.contrast_rounded),
-                                        const SizedBox(width: 16),
-                                        Text(
-                                          'Darstellung',
-                                          style: theme.textTheme.titleMedium,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: SegmentedButton<ThemeMode>(
-                                        showSelectedIcon: false,
-                                        segments: const [
-                                          ButtonSegment<ThemeMode>(
-                                            value: ThemeMode.dark,
-                                            icon: Icon(Icons.dark_mode_rounded),
-                                            label: Text('Dunkel'),
-                                          ),
-                                          ButtonSegment<ThemeMode>(
-                                            value: ThemeMode.light,
-                                            icon: Icon(
-                                              Icons.light_mode_rounded,
-                                            ),
-                                            label: Text('Hell'),
-                                          ),
-                                        ],
-                                        selected: {selected},
-                                        onSelectionChanged: (selection) async {
-                                          await AppSettingsStore.I.setThemeMode(
-                                            widget.api,
-                                            selection.first,
-                                          );
-                                          setStateSheet(() {});
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                          const Divider(height: 1),
-                          AnimatedBuilder(
-                            animation: AppSettingsStore.I,
-                            builder: (context, _) {
-                              return SwitchListTile(
-                                secondary: const Icon(Icons.group_off_rounded),
-                                title: const Text(
-                                  'Philister in Auswahllisten ausblenden',
-                                ),
-                                subtitle: const Text(
-                                  'Gilt nur für Auswahlfenster, nicht für Berechtigungen.',
-                                ),
-                                value: AppSettingsStore.I.hidePhilister,
-                                onChanged: setHidePhilister,
-                              );
-                            },
-                          ),
-                          if (isAdmin) ...[
-                            const Divider(height: 1),
-                            AnimatedBuilder(
-                              animation: AppSettingsStore.I,
-                              builder: (context, _) {
-                                return SwitchListTile(
-                                  secondary: const Icon(
-                                    Icons.developer_mode_rounded,
-                                  ),
-                                  title: const Text('Dev-Modus'),
-                                  subtitle: const Text(
-                                    'Beim Erstellen von Live-Events, Strafen und Arbeitsaufträgen Benachrichtigungen nur an mich senden.',
-                                  ),
-                                  value: AppSettingsStore.I.devModeNotifyOnlyMe,
-                                  onChanged: (value) async {
-                                    await AppSettingsStore.I
-                                        .setDevModeNotifyOnlyMe(
-                                          widget.api,
-                                          value,
-                                        );
-                                    setStateSheet(() {});
-                                  },
-                                );
-                              },
-                            ),
-                          ],
-                          if (kIsWeb) ...[
-                            const Divider(height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.restart_alt_rounded),
-                              title: const Text('App vollständig neu laden'),
-                              subtitle: const Text(
-                                'Browser-Cache der App leeren, falls nach einem Update noch alte Inhalte erscheinen.',
-                              ),
-                              trailing: _forceReloadingWebApp
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.chevron_right_rounded),
-                              onTap: _forceReloadingWebApp
-                                  ? null
-                                  : _confirmForceReloadWebApp,
-                            ),
-                          ],
-                        ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'App-Informationen',
+                        style: theme.textTheme.titleLarge,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      color: cs.surfaceContainerLow,
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.info_outline_rounded),
-                            title: const Text('App-Version'),
-                            subtitle: Text(_appVersion),
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(Icons.phone_android_rounded),
-                            title: const Text('Plattform'),
-                            subtitle: Text(_platformLabel),
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(Icons.devices_other_rounded),
-                            title: const Text('Gerät'),
-                            subtitle: Text(_deviceLabel),
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(Icons.language_rounded),
-                            title: const Text('Sprache'),
-                            subtitle: Text(_localeLabel),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    FilledButton.icon(
-                      onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Fertig'),
                     ),
                   ],
                 ),
-              ),
-            );
-          },
+                const SizedBox(height: 16),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.info_outline_rounded),
+                        title: const Text('App-Version'),
+                        subtitle: Text(_appVersion),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.phone_android_rounded),
+                        title: const Text('Plattform'),
+                        subtitle: Text(_platformLabel),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.devices_other_rounded),
+                        title: const Text('Gerät'),
+                        subtitle: Text(_deviceLabel),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.language_rounded),
+                        title: const Text('Sprache'),
+                        subtitle: Text(_localeLabel),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Fertig'),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -693,50 +532,6 @@ class _ProfilePageState extends State<ProfilePage> {
     confirmCtrl.dispose();
   }
 
-  Future<void> _confirmForceReloadWebApp() async {
-    if (!kIsWeb || _forceReloadingWebApp) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('App vollständig neu laden?'),
-        content: const Text(
-          'Dadurch wird der Browser-Cache der PWA geleert und die App neu vom Server geladen. '
-          'Das hilft, wenn nach einem Update noch alte Funktionen angezeigt werden.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Neu laden'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    if (!mounted) return;
-    setState(() => _forceReloadingWebApp = true);
-
-    try {
-      await forceReloadWebApp();
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() => _forceReloadingWebApp = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('App konnte nicht vollständig neu geladen werden.'),
-        ),
-      );
-    }
-  }
-
   Future<void> _logout() async {
     final rt = widget.authStore.refreshToken;
     if (rt != null && rt.isNotEmpty) {
@@ -790,20 +585,16 @@ class _ProfilePageState extends State<ProfilePage> {
       onRefresh: () => _load(force: true),
       actions: [
         const SchnupfspruchButton(),
-        IconButton(
+        BusyIconButton(
+          busy: _loading || _refreshing,
           tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : () => _load(force: true),
+          icon: Icons.refresh_rounded,
+          onPressed: () => _load(force: true),
         ),
       ],
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_refreshing)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: LinearProgressIndicator(),
-            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -906,13 +697,21 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: const Text('App-Informationen'),
+                  subtitle: Text(_appVersion),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _openAppInfoSheet,
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.settings_rounded),
                   title: const Text('App-Einstellungen'),
                   subtitle: const Text(
                     'App-Verhalten und lokale Einstellungen',
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: _openAppSettingsSheet,
+                  onTap: () => context.push('/profile/app-settings'),
                 ),
               ],
             ),

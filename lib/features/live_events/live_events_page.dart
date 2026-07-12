@@ -7,6 +7,7 @@ import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/busy_icon_button.dart';
 import '../../models/dtos.dart';
 import 'live_event_reactions.dart';
 
@@ -198,10 +199,11 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
-        IconButton(
+        BusyIconButton(
+          busy: _loading || _refreshing,
           tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : () => _load(force: true),
+          icon: Icons.refresh_rounded,
+          onPressed: () => _load(force: true),
         ),
         IconButton(
           tooltip: 'Neu',
@@ -221,11 +223,6 @@ class _LiveEventsPageState extends State<LiveEventsPage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(12),
                 children: [
-                  if (_refreshing)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: LinearProgressIndicator(),
-                    ),
                   if (_items.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(8),

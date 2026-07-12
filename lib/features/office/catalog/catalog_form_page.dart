@@ -193,7 +193,7 @@ class _CatalogFormPageState extends State<CatalogFormPage> {
     final can = Roles.canManageCatalog(roles);
 
     return AppScaffold(
-      title: _isEdit ? 'Katalogeintrag bearbeiten' : 'Katalogeintrag anlegen',
+      title: _isEdit ? 'Eintrag bearbeiten' : 'Eintrag anlegen',
       actions: [
         if (can && _isEdit && !_isSystemAttendanceItem)
           IconButton(

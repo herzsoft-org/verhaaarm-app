@@ -496,7 +496,6 @@ class _PeriodSection extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Card(
         elevation: 0,
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
         child: ExpansionTile(
           key: PageStorageKey('period-${period.id}'),
           initiallyExpanded: initiallyExpanded,

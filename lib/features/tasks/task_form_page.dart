@@ -6,6 +6,7 @@ import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/settings/app_settings_store.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/busy_icon_button.dart';
 import '../../models/dtos.dart';
 import '../../common/member_picker_settings.dart';
 import '../../models/member_status.dart';
@@ -383,8 +384,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
   @override
   Widget build(BuildContext context) {
     final pageTitle = widget.isEdit
-        ? 'Arbeitsauftrag bearbeiten'
-        : 'Arbeitsauftrag erstellen';
+        ? 'Auftrag bearbeiten'
+        : 'Auftrag erstellen';
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final showDevModeNote = !widget.isEdit && _sendNotificationsOnlyToMe;
@@ -392,9 +393,10 @@ class _TaskFormPageState extends State<TaskFormPage> {
     return AppScaffold(
       title: pageTitle,
       actions: [
-        IconButton(
+        BusyIconButton(
+          busy: _saving,
           tooltip: 'Speichern',
-          icon: const Icon(Icons.save_rounded),
+          icon: Icons.save_rounded,
           onPressed: _canSubmit ? _save : null,
         ),
       ],
@@ -403,7 +405,6 @@ class _TaskFormPageState extends State<TaskFormPage> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            if (_saving) const LinearProgressIndicator(),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),

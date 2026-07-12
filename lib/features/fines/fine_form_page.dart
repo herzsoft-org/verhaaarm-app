@@ -499,9 +499,7 @@ class _FineFormPageState extends State<FineFormPage> {
   Widget build(BuildContext context) {
     final title = widget.mode == FineFormMode.official
         ? 'Beihängen'
-        : (_isSuggestionEdit
-              ? 'Vorschlag bearbeiten'
-              : 'Beihängung vorschlagen');
+        : (_isSuggestionEdit ? 'Vorschlag bearbeiten' : 'Vorschlagen');
     final showDevModeNote =
         widget.mode == FineFormMode.official && _sendNotificationsOnlyToMe;
 

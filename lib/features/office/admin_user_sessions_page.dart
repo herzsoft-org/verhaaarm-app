@@ -5,6 +5,7 @@ import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/busy_icon_button.dart';
 import '../../models/dtos.dart';
 
 class AdminUserSessionsPage extends StatefulWidget {
@@ -230,10 +231,11 @@ class _AdminUserSessionsPageState extends State<AdminUserSessionsPage> {
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
-        IconButton(
+        BusyIconButton(
+          busy: _loading || _busy,
           tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : _load,
+          icon: Icons.refresh_rounded,
+          onPressed: _load,
         ),
       ],
       body: _loading
@@ -243,11 +245,6 @@ class _AdminUserSessionsPageState extends State<AdminUserSessionsPage> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            if (_busy)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: LinearProgressIndicator(),
-              ),
             if (_sessions.isEmpty)
               const Card(
                 child: Padding(

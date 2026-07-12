@@ -69,7 +69,6 @@ class OtaUpdateBanner extends StatelessWidget {
         final showRedownloadOnly = (st.error != null) && !canInstallCached && !st.downloading;
 
         return Card(
-          color: cs.surfaceContainerLow,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

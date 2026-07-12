@@ -27,12 +27,11 @@ class _FechtwartPageState extends State<FechtwartPage> {
   PaukstundenSummaryDto? _summary;
   List<PaukstundenEntryDto> _entries = const [];
 
-  bool _loadingPeriods = false;
+  bool _loadingPastPeriods = false;
   List<ConventPeriodDto> _pastPeriods = const [];
-  ConventPeriodDto? _selectedPastPeriod;
-  bool _loadingPastData = false;
-  PaukstundenSummaryDto? _pastSummary;
-  List<PaukstundenEntryDto> _pastEntries = const [];
+  Map<String, PaukstundenSummaryDto> _pastSummaryByPeriodId = const {};
+  Map<String, List<PaukstundenEntryDto>> _pastEntriesByPeriodId = const {};
+  Set<String> _loadingPastEntriesForPeriodId = const {};
 
   @override
   void initState() {
@@ -79,7 +78,6 @@ class _FechtwartPageState extends State<FechtwartPage> {
     );
     if (changed == true && mounted) {
       await _load();
-      await _reloadSelectedPastPeriod();
     }
   }
 
@@ -90,25 +88,44 @@ class _FechtwartPageState extends State<FechtwartPage> {
     );
     if (changed == true && mounted) {
       await _load();
-      await _reloadSelectedPastPeriod();
+    }
+  }
+
+  Future<void> _openEditPast(PaukstundenEntryDto entry, String periodId) async {
+    final changed = await context.push<bool>(
+      '/office/fechtwart/paukstunden/${entry.id}/edit',
+      extra: entry,
+    );
+    if (changed == true && mounted) {
+      await _refreshPastPeriod(periodId);
     }
   }
 
   Future<void> _togglePast() async {
     setState(() => _showPast = !_showPast);
-    if (_showPast && _pastPeriods.isEmpty && !_loadingPeriods) {
-      await _loadPastPeriods();
+    if (_showPast && _pastSummaryByPeriodId.isEmpty && !_loadingPastPeriods) {
+      await _loadPastPeriodsWithSummaries();
     }
   }
 
-  Future<void> _loadPastPeriods() async {
-    setState(() => _loadingPeriods = true);
+  Future<void> _loadPastPeriodsWithSummaries() async {
+    setState(() => _loadingPastPeriods = true);
     try {
       final periods = await widget.api.listPeriods();
       final past = periods.where((p) => !p.active).toList()
         ..sort((a, b) => b.startDateLocal.compareTo(a.startDateLocal));
+
+      final summaries = await Future.wait(
+        past.map((p) => widget.api.getPaukstundenSummaryForConventsperiode(p.id)),
+      );
+
       if (!mounted) return;
-      setState(() => _pastPeriods = past);
+      setState(() {
+        _pastPeriods = past;
+        _pastSummaryByPeriodId = {
+          for (var i = 0; i < past.length; i++) past[i].id: summaries[i],
+        };
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,31 +139,34 @@ class _FechtwartPageState extends State<FechtwartPage> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _loadingPeriods = false);
+      if (mounted) setState(() => _loadingPastPeriods = false);
     }
   }
 
-  Future<void> _selectPastPeriod(ConventPeriodDto? period) async {
-    setState(() {
-      _selectedPastPeriod = period;
-      _pastSummary = null;
-      _pastEntries = const [];
-    });
+  Future<void> _ensurePastEntriesLoaded(String periodId) async {
+    if (_pastEntriesByPeriodId.containsKey(periodId) ||
+        _loadingPastEntriesForPeriodId.contains(periodId)) {
+      return;
+    }
 
-    if (period == null) return;
+    setState(
+      () => _loadingPastEntriesForPeriodId = {
+        ..._loadingPastEntriesForPeriodId,
+        periodId,
+      },
+    );
 
-    setState(() => _loadingPastData = true);
     try {
-      final results = await Future.wait<Object>([
-        widget.api.getPaukstundenSummaryForConventsperiode(period.id),
-        widget.api.getPaukstundenForConventsperiode(period.id),
-      ]);
-
+      final entries = await widget.api.getPaukstundenForConventsperiode(
+        periodId,
+      );
       if (!mounted) return;
-      setState(() {
-        _pastSummary = results[0] as PaukstundenSummaryDto;
-        _pastEntries = results[1] as List<PaukstundenEntryDto>;
-      });
+      setState(
+        () => _pastEntriesByPeriodId = {
+          ..._pastEntriesByPeriodId,
+          periodId: entries,
+        },
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -160,13 +180,46 @@ class _FechtwartPageState extends State<FechtwartPage> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _loadingPastData = false);
+      if (mounted) {
+        setState(
+          () => _loadingPastEntriesForPeriodId = {
+            ..._loadingPastEntriesForPeriodId,
+          }..remove(periodId),
+        );
+      }
     }
   }
 
-  Future<void> _reloadSelectedPastPeriod() async {
-    if (_selectedPastPeriod != null) {
-      await _selectPastPeriod(_selectedPastPeriod);
+  Future<void> _refreshPastPeriod(String periodId) async {
+    try {
+      final results = await Future.wait<Object>([
+        widget.api.getPaukstundenSummaryForConventsperiode(periodId),
+        widget.api.getPaukstundenForConventsperiode(periodId),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _pastSummaryByPeriodId = {
+          ..._pastSummaryByPeriodId,
+          periodId: results[0] as PaukstundenSummaryDto,
+        };
+        _pastEntriesByPeriodId = {
+          ..._pastEntriesByPeriodId,
+          periodId: results[1] as List<PaukstundenEntryDto>,
+        };
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFriendlyApiError(
+              e,
+              fallback: 'Paukstunden konnten nicht geladen werden.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -175,7 +228,59 @@ class _FechtwartPageState extends State<FechtwartPage> {
   }
 
   Future<void> _delete(PaukstundenEntryDto entry) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await _confirmDeletePaukstunde();
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.api.deletePaukstunde(entry.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Paukstunde gelöscht.')));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFriendlyApiError(
+              e,
+              fallback: 'Paukstunde konnte nicht gelöscht werden.',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deletePast(PaukstundenEntryDto entry, String periodId) async {
+    final confirmed = await _confirmDeletePaukstunde();
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.api.deletePaukstunde(entry.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Paukstunde gelöscht.')));
+      await _refreshPastPeriod(periodId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFriendlyApiError(
+              e,
+              fallback: 'Paukstunde konnte nicht gelöscht werden.',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<bool?> _confirmDeletePaukstunde() {
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Paukstunde löschen?'),
@@ -192,30 +297,6 @@ class _FechtwartPageState extends State<FechtwartPage> {
         ],
       ),
     );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await widget.api.deletePaukstunde(entry.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Paukstunde gelöscht.')));
-      await _load();
-      await _reloadSelectedPastPeriod();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userFriendlyApiError(
-              e,
-              fallback: 'Paukstunde konnte nicht gelöscht werden.',
-            ),
-          ),
-        ),
-      );
-    }
   }
 
   String _participants(PaukstundenEntryDto entry) {
@@ -246,10 +327,12 @@ class _FechtwartPageState extends State<FechtwartPage> {
     return grouped;
   }
 
-  List<Widget> _buildUserCards(
-    List<PaukstundenUserSummaryDto> users,
-    Map<String, List<PaukstundenEntryDto>> entriesByUserId,
-  ) {
+  List<Widget> _buildUserCards({
+    required List<PaukstundenUserSummaryDto> users,
+    required Map<String, List<PaukstundenEntryDto>> entriesByUserId,
+    required void Function(PaukstundenEntryDto entry) onEdit,
+    required void Function(PaukstundenEntryDto entry) onDelete,
+  }) {
     if (users.isEmpty) {
       return const [
         Padding(
@@ -289,9 +372,9 @@ class _FechtwartPageState extends State<FechtwartPage> {
                       tooltip: 'Aktionen',
                       onSelected: (value) {
                         if (value == 'edit') {
-                          _openEdit(entry);
+                          onEdit(entry);
                         } else if (value == 'delete') {
-                          _delete(entry);
+                          onDelete(entry);
                         }
                       },
                       itemBuilder: (context) => const [
@@ -304,6 +387,58 @@ class _FechtwartPageState extends State<FechtwartPage> {
                     ),
                     titleAlignment: ListTileTitleAlignment.center,
                   ),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _buildPastPeriodTiles() {
+    final visible = _pastPeriods.where((p) {
+      final summary = _pastSummaryByPeriodId[p.id];
+      return summary != null && summary.users.isNotEmpty;
+    }).toList();
+
+    if (visible.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('Keine vergangenen Paukstunden vorhanden.'),
+        ),
+      ];
+    }
+
+    return [
+      for (final p in visible)
+        Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: ExpansionTile(
+            key: PageStorageKey('past-period-${p.id}'),
+            onExpansionChanged: (expanded) {
+              if (expanded) _ensurePastEntriesLoaded(p.id);
+            },
+            leading: const Icon(Icons.calendar_month_rounded),
+            title: Text(_periodLabel(p)),
+            subtitle: Text(
+              '${_pastSummaryByPeriodId[p.id]!.users.length} Nutzer mit Paukstunden',
+            ),
+            children: [
+              if (_loadingPastEntriesForPeriodId.contains(p.id))
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_pastEntriesByPeriodId[p.id] == null)
+                const SizedBox.shrink()
+              else
+                ..._buildUserCards(
+                  users: _pastSummaryByPeriodId[p.id]!.users,
+                  entriesByUserId: _entriesByParticipantUserId(
+                    _pastEntriesByPeriodId[p.id]!,
+                  ),
+                  onEdit: (entry) => _openEditPast(entry, p.id),
+                  onDelete: (entry) => _deletePast(entry, p.id),
+                ),
             ],
           ),
         ),
@@ -381,7 +516,12 @@ class _FechtwartPageState extends State<FechtwartPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ..._buildUserCards(users, entriesByUserId),
+                  ..._buildUserCards(
+                    users: users,
+                    entriesByUserId: entriesByUserId,
+                    onEdit: _openEdit,
+                    onDelete: _delete,
+                  ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: _togglePast,
@@ -398,63 +538,15 @@ class _FechtwartPageState extends State<FechtwartPage> {
                   ),
                   if (_showPast) ...[
                     const SizedBox(height: 12),
-                    if (_loadingPeriods)
+                    if (_loadingPastPeriods)
                       const Center(
                         child: Padding(
                           padding: EdgeInsets.all(16),
                           child: CircularProgressIndicator(),
                         ),
                       )
-                    else if (_pastPeriods.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Text('Keine vergangenen Conventsperioden vorhanden.'),
-                      )
-                    else ...[
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.calendar_month_rounded),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: DropdownButton<ConventPeriodDto>(
-                                  isExpanded: true,
-                                  value: _selectedPastPeriod,
-                                  hint: const Text('Conventsperiode wählen'),
-                                  underline: const SizedBox.shrink(),
-                                  items: [
-                                    for (final p in _pastPeriods)
-                                      DropdownMenuItem(
-                                        value: p,
-                                        child: Text(_periodLabel(p)),
-                                      ),
-                                  ],
-                                  onChanged: _loadingPastData
-                                      ? null
-                                      : _selectPastPeriod,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_loadingPastData)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(),
-                          ),
-                        )
-                      else if (_selectedPastPeriod != null)
-                        ..._buildUserCards(
-                          _pastSummary?.users ??
-                              const <PaukstundenUserSummaryDto>[],
-                          _entriesByParticipantUserId(_pastEntries),
-                        ),
-                    ],
+                    else
+                      ..._buildPastPeriodTiles(),
                   ],
                 ],
               ),

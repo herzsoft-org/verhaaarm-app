@@ -235,7 +235,7 @@ class _FineSuggestionDetailPageState extends State<FineSuggestionDetailPage> {
     final canAdd = _isPending && !_photosMetaLoading && count < _maxPhotos;
 
     return AppScaffold(
-      title: 'Beihängungsvorschlag',
+      title: 'Vorschlag',
       showNotificationButton: false,
       showProfileButton: false,
       onRefresh: () => _load(force: true),

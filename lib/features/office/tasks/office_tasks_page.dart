@@ -5,6 +5,7 @@ import '../../../api/api_client.dart';
 import '../../../auth/auth_store.dart';
 import '../../../common/format.dart';
 import '../../../common/widgets/app_scaffold.dart';
+import '../../../common/widgets/busy_icon_button.dart';
 import '../../../models/dtos.dart';
 
 class OfficeTasksPage extends StatefulWidget {
@@ -172,10 +173,11 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
       showNotificationButton: false,
       showProfileButton: false,
       actions: [
-        IconButton(
+        BusyIconButton(
+          busy: _loading || _refreshing,
           tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : () => _load(force: true),
+          icon: Icons.refresh_rounded,
+          onPressed: () => _load(force: true),
         ),
         IconButton(
           tooltip: 'Neu',
@@ -190,12 +192,6 @@ class _OfficeTasksPageState extends State<OfficeTasksPage> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            if (_refreshing) ...[
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: LinearProgressIndicator(),
-              ),
-            ],
             if (_all.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
@@ -340,7 +336,7 @@ class _AdminTaskCard extends StatelessWidget {
     final recurringDays = task.recurringWeekdays.toList(growable: false)..sort((a, b) => a.compareTo(b));
 
     return Card(
-      color: task.solved ? cs.surfaceContainerLowest : cs.surfaceContainerLow,
+      color: task.solved ? cs.surfaceContainerLowest : null,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         child: Column(

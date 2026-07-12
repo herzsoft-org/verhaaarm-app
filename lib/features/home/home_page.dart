@@ -14,6 +14,7 @@ import '../../auth/auth_store.dart';
 import '../../common/cache/app_cache.dart';
 import '../../common/format.dart';
 import '../../common/widgets/app_scaffold.dart';
+import '../../common/widgets/busy_icon_button.dart';
 import '../../common/widgets/quote_of_the_day_card.dart';
 import '../live_events/live_event_reactions.dart';
 import '../../models/dtos.dart';
@@ -701,10 +702,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
         },
       ),
       actions: [
-        IconButton(
+        BusyIconButton(
+          busy: _loading || _refreshing,
           tooltip: 'Neu laden',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loading ? null : () => _load(force: true),
+          icon: Icons.refresh_rounded,
+          onPressed: () => _load(force: true),
         ),
       ],
       body: _loading
@@ -714,11 +716,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (_refreshing)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: LinearProgressIndicator(),
-                    ),
                   if (_isAndroidApp) ...[
                     OtaUpdateBanner(controller: _ota),
                     const SizedBox(height: 12),
@@ -750,7 +747,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
       borderRadius: BorderRadius.circular(12),
       onTap: () => GoRouter.of(context).push('/tasks'),
       child: Card(
-        color: cs.surfaceContainerLow,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -825,7 +821,6 @@ class _HomePageState extends State<HomePage> with RouteAware {
       borderRadius: BorderRadius.circular(12),
       onTap: () => GoRouter.of(context).push('/my-fines'),
       child: Card(
-        color: cs.surfaceContainerLow,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -882,7 +877,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final hasLiveEvents = _liveEvents.isNotEmpty;
     final liveCardColor = hasLiveEvents
         ? cs.tertiaryContainer.withValues(alpha: 0.45)
-        : cs.surfaceContainerLow;
+        : null;
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -950,9 +945,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
     final cs = Theme.of(context).colorScheme;
     final e = _nextEvent;
 
-    final cardColor = e == null
-        ? cs.surfaceContainerLow
-        : _cardColorForEvent(context, e);
+    final cardColor = e == null ? null : _cardColorForEvent(context, e);
     final iconColor = e == null ? cs.primary : _colorForEvent(context, e);
     final iconData = e == null ? Icons.event_rounded : _iconForEvent(e);
 

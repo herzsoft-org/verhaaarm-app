@@ -13,7 +13,6 @@ class QuoteOfTheDayCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
 
     return Card(
-      color: cs.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

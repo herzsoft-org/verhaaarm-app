@@ -277,7 +277,6 @@ class _ConventProtocolsPageState extends State<ConventProtocolsPage> {
     final cs = Theme.of(context).colorScheme;
 
     return Card(
-      color: cs.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
