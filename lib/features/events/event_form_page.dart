@@ -358,7 +358,7 @@ class _EventFormPageState extends State<EventFormPage> {
 
     final startsAtText = (_startsAtLocal == null)
         ? 'Nicht gesetzt'
-        : Format.dateTimeShort(_startsAtLocal!.toUtc().toIso8601String());
+        : '${Format.weekdayShort(_startsAtLocal!)}, ${Format.dateTimeShort(_startsAtLocal!.toUtc().toIso8601String())}';
 
     final derived = _derivedPeriodForLocal(_startsAtLocal);
     final derivedText = (derived == null)

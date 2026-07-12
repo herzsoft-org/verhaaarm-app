@@ -645,7 +645,7 @@ class _PeriodSection extends StatelessWidget {
                     final accent = _colorForEvent(context, e);
 
                     final subtitleParts = <String>[
-                      '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}',
+                      '${Format.weekdayShortFromIso(e.startsAt)}, ${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}',
                       if (e.mandatory) 'Pflichtveranstaltung',
                     ];
 

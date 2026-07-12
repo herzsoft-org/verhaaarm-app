@@ -260,7 +260,7 @@ class _SlushyRecipeDetailPageState extends State<SlushyRecipeDetailPage> {
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.icecream_rounded, color: cs.primary),
+                                    Icon(Icons.ac_unit_rounded, color: cs.primary),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(recipe.title, style: theme.textTheme.titleLarge),

@@ -987,7 +987,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}${e.mandatory ? ' · Pflicht' : ''}',
+                      '${Format.weekdayShortFromIso(e.startsAt)}, ${Format.dateShort(e.startsAt)} · ${Format.timeShort(e.startsAt)}${e.mandatory ? ' · Pflicht' : ''}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],

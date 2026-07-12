@@ -103,6 +103,17 @@ class Format {
     return f.format(dt);
   }
 
+  static const List<String> _weekdaysDe = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO'];
+
+  /// German two-letter weekday abbreviation (MO, DI, MI, ...) for a local DateTime.
+  static String weekdayShort(DateTime localDateTime) => _weekdaysDe[localDateTime.weekday - 1];
+
+  /// Same as [weekdayShort] but parses an ISO date-time string first.
+  static String weekdayShortFromIso(String isoDateTime) {
+    final dt = DateTime.parse(isoDateTime).toLocal();
+    return weekdayShort(dt);
+  }
+
   // ------------------------
   // Period membership helpers (date-only inclusive)
   // ------------------------

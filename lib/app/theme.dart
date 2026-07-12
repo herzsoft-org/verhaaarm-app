@@ -23,32 +23,76 @@ Color _adjustLightness(Color base, double delta) {
   return hsl.withLightness((hsl.lightness + delta).clamp(0.0, 1.0)).toColor();
 }
 
+/// Hue of the app's purple seed color, reused at near-zero saturation for the
+/// light-mode neutral scale below so backgrounds/surfaces stay in quiet
+/// harmony with the accent color while still reading as clean neutrals
+/// rather than tinted beige or lavender.
+const double _neutralHue = 250;
+
+Color _neutral(double saturation, double lightness) =>
+    HSLColor.fromAHSL(1.0, _neutralHue, saturation, lightness).toColor();
+
+/// Lightness of the light-mode "chrome" (scaffold background and, via
+/// [ColorScheme.surface], the app bar) - kept a clear step darker than the
+/// near-white "box" surfaces (cards, dialogs, ...) so boxes stand out.
+const double _lightChromeLightness = 0.85;
+
 /// The page/scaffold background. In dark mode Material 3's [ColorScheme.surface]
-/// already reads well, so it's used as-is. In light mode it's close to pure
-/// white and still carries the seed color's (cool, purple) hue, which reads
-/// as a pink/lilac tint once darkened - re-hue it to a warm, neutral
-/// eggshell off-white instead, independent of the seed color.
+/// already reads well, so it's used as-is. In light mode it uses a clean,
+/// neutral gray - clearly deeper than the near-white card surfaces - so
+/// cards visibly float above the page.
 Color _pageBackgroundColor(ColorScheme scheme) {
   if (scheme.brightness == Brightness.dark) return scheme.surface;
-  return const HSLColor.fromAHSL(1.0, 45, 0.25, 0.93).toColor();
+  return _neutral(0.02, _lightChromeLightness);
 }
 
-/// Nudges a surface-container color further away from the page background
-/// so that "boxes" (cards, dialogs, sheets, ...) read with more contrast
-/// against the page background: brighter in dark mode, darker in light mode.
-/// Applied on top of Material 3's tonal roles, which alone are too close to
-/// the background to read as clearly separated boxes.
+/// Nudges a surface-container color further away from the page background so
+/// that "boxes" (cards, dialogs, sheets, ...) read as clearly separated: in
+/// dark mode boxes are brightened relative to Material 3's tonal role, which
+/// alone sits too close to the background. In light mode the neutral
+/// [ColorScheme.surfaceContainerLow] override passed into [buildAppTheme] is
+/// already tuned to be near-white against the page background, so it's used
+/// as-is.
 Color _boxSurfaceColor(Color base, Brightness brightness) {
-  final delta = brightness == Brightness.dark ? 0.045 : -0.075;
-  return _adjustLightness(base, delta);
+  if (brightness == Brightness.light) return base;
+  return _adjustLightness(base, 0.045);
 }
 
 ThemeData buildAppTheme(Brightness brightness) {
   const seed = Color(0xFF7B61FF);
+  final isLight = brightness == Brightness.light;
 
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
+    // Light mode only: Material 3's seed-derived neutral tones carry a faint
+    // purple/lavender cast that clashed with the (formerly beige) page
+    // background. Replace just the neutral/neutral-variant-derived roles
+    // (surfaces + on-surface text/icons + outlines) with a clean, low-
+    // saturation neutral scale, and push text/icon roles darker for
+    // stronger contrast. Primary/secondary/tertiary/error (and their
+    // "on"/container pairs) are left as Material 3 computes them, so the
+    // purple accent and existing color-coding elsewhere stay unchanged.
+    // Dark mode passes null for all of these, so it is unaffected.
+    //
+    // The "chrome" roles (surface -> app bar; surfaceContainer ->
+    // NavigationBar, via their Material 3 defaults) sit at
+    // [_lightChromeLightness], a clear step darker than the "box" roles
+    // (surfaceContainerLow and above, used for cards/dialogs/sheets/the
+    // highlighted event card/snackbars), so boxes read as clearly raised
+    // above the scaffold background, header, and bottom navigation bar.
+    surface: isLight ? _neutral(0.02, _lightChromeLightness) : null,
+    surfaceDim: isLight ? _neutral(0.02, 0.76) : null,
+    surfaceBright: isLight ? _neutral(0.02, 0.96) : null,
+    surfaceContainerLowest: isLight ? _neutral(0.0, 1.0) : null,
+    surfaceContainerLow: isLight ? _neutral(0.02, 0.985) : null,
+    surfaceContainer: isLight ? _neutral(0.02, _lightChromeLightness - 0.01) : null,
+    surfaceContainerHigh: isLight ? _neutral(0.02, 0.96) : null,
+    surfaceContainerHighest: isLight ? _neutral(0.02, 0.97) : null,
+    onSurface: isLight ? _neutral(0.04, 0.12) : null,
+    onSurfaceVariant: isLight ? _neutral(0.04, 0.32) : null,
+    outline: isLight ? _neutral(0.03, 0.50) : null,
+    outlineVariant: isLight ? _neutral(0.03, 0.82) : null,
   );
 
   final pageBackgroundColor = _pageBackgroundColor(scheme);
