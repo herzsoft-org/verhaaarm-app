@@ -3,9 +3,12 @@ package moe.herz.verhaaarm
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -21,6 +24,13 @@ class MainActivity : FlutterActivity() {
             "moe.herz.verhaaarm.ACTION_INSTALL_COMMIT"
 
         private const val EXTRA_APK_PATH = "apk_path"
+        private const val EXTRA_SESSION_ID = "session_id"
+        private const val TAG = "VerhaaarmInstaller"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        handleInstallCommitIntent(intent)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -61,12 +71,14 @@ class MainActivity : FlutterActivity() {
                         try {
                             installApkPreferSilent(path)
                             result.success(true)
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
                             // Silent path failed immediately -> fall back to the old installer flow.
+                            Log.e(TAG, "Session install failed before commit; using legacy installer", e)
                             try {
                                 installApk(path)
                                 result.success(true)
                             } catch (e2: Exception) {
+                                Log.e(TAG, "Legacy installer fallback also failed", e2)
                                 result.error("INSTALL_FAILED", e2.toString(), null)
                             }
                         }
@@ -80,18 +92,17 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-
-        if (intent.action == ACTION_INSTALL_COMMIT) {
-            handleInstallCommitResult(intent)
-        }
+        handleInstallCommitIntent(intent)
     }
 
     private fun canInstallUnknownApps(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val allowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             packageManager.canRequestPackageInstalls()
         } else {
             true
         }
+        Log.i(TAG, "Unknown-app install permission allowed=$allowed sdk=${Build.VERSION.SDK_INT}")
+        return allowed
     }
 
     private fun openUnknownAppsSettings() {
@@ -106,6 +117,7 @@ class MainActivity : FlutterActivity() {
 
     private fun installApk(filePath: String) {
         val file = File(filePath)
+        Log.i(TAG, "Launching legacy installer for ${file.name} (${file.length()} bytes)")
         val uri = FileProvider.getUriForFile(
             this,
             "$packageName.fileprovider",
@@ -130,6 +142,10 @@ class MainActivity : FlutterActivity() {
             setAppPackageName(packageName)
             setSize(apkFile.length())
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                setInstallReason(PackageManager.INSTALL_REASON_USER)
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
             }
@@ -137,9 +153,20 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 setPackageSource(PackageInstaller.PACKAGE_SOURCE_STORE)
             }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                setRequestUpdateOwnership(true)
+            }
         }
 
         val sessionId = packageInstaller.createSession(params)
+        Log.i(
+            TAG,
+            "Created install session id=$sessionId file=${apkFile.name} " +
+                "size=${apkFile.length()} sdk=${Build.VERSION.SDK_INT} " +
+                "userActionNotRequired=${Build.VERSION.SDK_INT >= Build.VERSION_CODES.S} " +
+                "requestUpdateOwnership=${Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE}"
+        )
         var session: PackageInstaller.Session? = null
 
         try {
@@ -155,6 +182,7 @@ class MainActivity : FlutterActivity() {
             val callbackIntent = Intent(this, MainActivity::class.java).apply {
                 action = ACTION_INSTALL_COMMIT
                 putExtra(EXTRA_APK_PATH, filePath)
+                putExtra(EXTRA_SESSION_ID, sessionId)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
@@ -174,18 +202,30 @@ class MainActivity : FlutterActivity() {
             )
 
             session.commit(pendingIntent.intentSender)
+            Log.i(TAG, "Committed install session id=$sessionId")
         } catch (e: Exception) {
+            Log.e(TAG, "Install session id=$sessionId failed", e)
             try {
                 session?.abandon()
-            } catch (_: Exception) {
+            } catch (abandonError: Exception) {
+                Log.w(TAG, "Could not abandon failed install session id=$sessionId", abandonError)
             }
             throw e
         } finally {
             try {
                 session?.close()
-            } catch (_: Exception) {
+            } catch (closeError: Exception) {
+                Log.w(TAG, "Could not close install session id=$sessionId", closeError)
             }
         }
+    }
+
+    private fun handleInstallCommitIntent(intent: Intent?) {
+        if (intent?.action != ACTION_INSTALL_COMMIT) return
+
+        // Avoid processing the same PackageInstaller callback again after recreation.
+        intent.action = null
+        handleInstallCommitResult(intent)
     }
 
     private fun handleInstallCommitResult(intent: Intent) {
@@ -194,31 +234,46 @@ class MainActivity : FlutterActivity() {
             PackageInstaller.STATUS_FAILURE
         )
         val apkPath = intent.getStringExtra(EXTRA_APK_PATH)
+        val sessionId = intent.getIntExtra(EXTRA_SESSION_ID, -1)
+        val statusMessage = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+
+        Log.i(
+            TAG,
+            "Install session result id=$sessionId status=$status " +
+                "message=${statusMessage ?: "<none>"}"
+        )
 
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 val confirmIntent = getParcelableIntentExtra(intent, Intent.EXTRA_INTENT)
                 if (confirmIntent != null) {
+                    Log.i(TAG, "Session id=$sessionId requires user action; opening confirmation")
                     confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     startActivity(confirmIntent)
                 } else if (!apkPath.isNullOrBlank()) {
                     // Missing confirmation intent for some reason -> fall back.
+                    Log.w(TAG, "Session id=$sessionId requires user action but supplied no confirmation intent; using legacy installer")
                     installApk(apkPath)
+                } else {
+                    Log.e(TAG, "Session id=$sessionId requires user action but supplied neither confirmation intent nor APK path")
                 }
             }
 
             PackageInstaller.STATUS_SUCCESS -> {
-                // Nothing to do.
+                Log.i(TAG, "Install session id=$sessionId completed successfully")
             }
 
             else -> {
                 // Silent path did not complete -> fall back to the normal installer flow.
                 if (!apkPath.isNullOrBlank()) {
+                    Log.w(TAG, "Install session id=$sessionId failed with status=$status; using legacy installer")
                     try {
                         installApk(apkPath)
-                    } catch (_: Exception) {
-                        // Intentionally ignore to keep this path quiet.
+                    } catch (fallbackError: Exception) {
+                        Log.e(TAG, "Legacy installer fallback failed for session id=$sessionId", fallbackError)
                     }
+                } else {
+                    Log.e(TAG, "Install session id=$sessionId failed with status=$status and no APK path is available for fallback")
                 }
             }
         }
