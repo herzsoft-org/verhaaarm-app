@@ -109,6 +109,13 @@ class ActionsPage extends StatelessWidget {
                 titleAlignment: ListTileTitleAlignment.center,
                 onTap: () => context.push('/office/active-member-stats'),
               ),
+              ListTile(
+                leading: const Icon(Icons.badge_rounded),
+                title: const Text('Ämter'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                titleAlignment: ListTileTitleAlignment.center,
+                onTap: () => context.push('/amt'),
+              ),
               if (!isPhilister)
                 ListTile(
                   leading: const Icon(Icons.picture_as_pdf_rounded),

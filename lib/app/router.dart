@@ -16,6 +16,7 @@ import '../features/fines/fines_list_page.dart';
 import '../features/fines/fine_detail_page.dart';
 import '../features/fines/fine_form_page.dart';
 import '../features/fines/my_fines_page.dart';
+import '../features/amt/aemter_page.dart';
 import '../features/office/office_page.dart';
 import '../features/office/users/users_page.dart';
 import '../features/office/users/user_form_page.dart';
@@ -132,6 +133,10 @@ bool _canAccessLocation(String location, Set<AppRole> roles) {
     return true;
   }
   if (location.startsWith('/office/active-member-stats')) {
+    return true;
+  }
+
+  if (location == '/amt' || location.startsWith('/amt/')) {
     return true;
   }
 
@@ -739,6 +744,10 @@ Future<GoRouter> buildRouter() async {
         builder: (context, state) {
           return ActiveMemberStatsPage(api: api, authStore: authStore);
         },
+      ),
+      _actionSubRoute(
+        path: '/amt',
+        builder: (context, state) => AemterPage(api: api, authStore: authStore),
       ),
       _actionSubRoute(
         path: '/office/catalog',

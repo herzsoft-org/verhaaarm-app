@@ -5,6 +5,7 @@ import 'package:http_parser/http_parser.dart';
 import '../auth/auth_api.dart';
 import '../auth/auth_interceptor.dart';
 import '../auth/auth_store.dart';
+import '../common/connectivity/connectivity_center.dart';
 import '../models/dtos.dart';
 import '../auth/device_info_payload.dart';
 
@@ -38,6 +39,25 @@ class ApiClient {
           options.extra['_dio_instance'] = dio;
           _applySendTimeoutIfRequestHasBody(options);
           handler.next(options);
+        },
+        onResponse: (response, handler) {
+          ConnectivityCenter.I.reportSuccess();
+          handler.next(response);
+        },
+        onError: (error, handler) {
+          if (!ConnectivityCenter.isConnectionError(error)) {
+            ConnectivityCenter.I.reportSuccess();
+            handler.next(error);
+            return;
+          }
+
+          ConnectivityCenter.I.reportFailure(dio);
+          handler.next(
+            error.copyWith(
+              error: const ServerUnreachableException(),
+              message: const ServerUnreachableException().toString(),
+            ),
+          );
         },
       ),
     );
@@ -866,6 +886,39 @@ class ApiClient {
 
   Future<void> deleteAllSolvedMyTasks() async {
     await dio.delete('/tasks/solved');
+  }
+
+  // ----------------------------
+  // AEMTER (swagger: /amt, /amt/{amtType}/holders)
+  // ----------------------------
+
+  Future<AemterOverviewDto> getAemterOverview() async {
+    final r = await dio.get('/amt');
+    return AemterOverviewDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<AmtEntryDto> setAmtHolders({
+    required String amtType,
+    required List<String> userIds,
+  }) async {
+    final r = await dio.patch(
+      '/amt/$amtType/holders',
+      data: {'userIds': userIds},
+    );
+    return AmtEntryDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  // Sprecher/Fechtwart/Schmuckwart/Kassenwart: bulk-reassigns the underlying user role.
+  // Gated on the backend the same as user administration (ADMIN/SENIOR).
+  Future<AmtEntryDto> setAutoAmtHolders({
+    required String autoAmt,
+    required List<String> userIds,
+  }) async {
+    final r = await dio.patch(
+      '/amt/auto/$autoAmt/holders',
+      data: {'userIds': userIds},
+    );
+    return AmtEntryDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
   // ----------------------------

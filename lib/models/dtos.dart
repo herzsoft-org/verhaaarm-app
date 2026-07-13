@@ -2080,3 +2080,100 @@ class RateSlushyRecipeRequest {
     if (comment != null) 'comment': comment,
   };
 }
+
+// ---------- AEMTER ----------
+
+class AmtHolderDto {
+  final String userId;
+  final String displayName;
+
+  AmtHolderDto({required this.userId, required this.displayName});
+
+  factory AmtHolderDto.fromJson(Map<String, dynamic> json) => AmtHolderDto(
+    userId: _reqString(json, 'userId'),
+    displayName: _reqString(json, 'displayName'),
+  );
+}
+
+class AmtSubLineDto {
+  final String displayTitle;
+  final List<AmtHolderDto> holders;
+
+  AmtSubLineDto({required this.displayTitle, required this.holders});
+
+  factory AmtSubLineDto.fromJson(Map<String, dynamic> json) => AmtSubLineDto(
+    displayTitle: _reqString(json, 'displayTitle'),
+    holders: _optList(
+      json,
+      'holders',
+    ).map(AmtHolderDto.fromJson).toList(growable: false),
+  );
+}
+
+class AmtGroupLineDto {
+  final String amtType;
+  final String baseLabel;
+  final List<AmtSubLineDto> lines;
+
+  AmtGroupLineDto({
+    required this.amtType,
+    required this.baseLabel,
+    required this.lines,
+  });
+
+  factory AmtGroupLineDto.fromJson(Map<String, dynamic> json) =>
+      AmtGroupLineDto(
+        amtType: _reqString(json, 'amtType'),
+        baseLabel: _reqString(json, 'baseLabel'),
+        lines: _optList(
+          json,
+          'lines',
+        ).map(AmtSubLineDto.fromJson).toList(growable: false),
+      );
+}
+
+class AmtEntryDto {
+  final String amtType;
+  final String label;
+  final bool autoFromRole;
+  final bool mergedIntoEhrengericht;
+  final List<AmtHolderDto> holders;
+
+  AmtEntryDto({
+    required this.amtType,
+    required this.label,
+    required this.autoFromRole,
+    required this.mergedIntoEhrengericht,
+    required this.holders,
+  });
+
+  factory AmtEntryDto.fromJson(Map<String, dynamic> json) => AmtEntryDto(
+    amtType: _reqString(json, 'amtType'),
+    label: _reqString(json, 'label'),
+    autoFromRole: _optBool(json, 'autoFromRole'),
+    mergedIntoEhrengericht: _optBool(json, 'mergedIntoEhrengericht'),
+    holders: _optList(
+      json,
+      'holders',
+    ).map(AmtHolderDto.fromJson).toList(growable: false),
+  );
+}
+
+class AemterOverviewDto {
+  final List<AmtGroupLineDto> ehrengericht;
+  final List<AmtEntryDto> other;
+
+  AemterOverviewDto({required this.ehrengericht, required this.other});
+
+  factory AemterOverviewDto.fromJson(Map<String, dynamic> json) =>
+      AemterOverviewDto(
+        ehrengericht: _optList(
+          json,
+          'ehrengericht',
+        ).map(AmtGroupLineDto.fromJson).toList(growable: false),
+        other: _optList(
+          json,
+          'other',
+        ).map(AmtEntryDto.fromJson).toList(growable: false),
+      );
+}

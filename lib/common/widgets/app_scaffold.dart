@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../notifications/notification_center.dart';
+import '../connectivity/connectivity_center.dart';
 
 class AppScaffold extends StatelessWidget {
   final String title;
@@ -164,22 +165,59 @@ class _AppBodyWithNotificationReminder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kIsWeb || !enabled) return body;
+    final showWebReminder = kIsWeb && enabled;
 
     return Column(
       children: [
-        StreamBuilder<PushStatus>(
-          stream: NotificationCenter.I.pushStatusStream,
-          initialData: NotificationCenter.I.pushStatus,
+        StreamBuilder<bool>(
+          stream: ConnectivityCenter.I.reachableStream,
+          initialData: ConnectivityCenter.I.isReachable,
           builder: (context, snapshot) {
-            return _WebNotificationReminder(
-              status: snapshot.data ?? PushStatus.unknown,
-              location: GoRouterState.of(context).uri.toString(),
-            );
+            final reachable = snapshot.data ?? true;
+            return reachable ? const SizedBox.shrink() : const _ConnectivityBanner();
           },
         ),
+        if (showWebReminder)
+          StreamBuilder<PushStatus>(
+            stream: NotificationCenter.I.pushStatusStream,
+            initialData: NotificationCenter.I.pushStatus,
+            builder: (context, snapshot) {
+              return _WebNotificationReminder(
+                status: snapshot.data ?? PushStatus.unknown,
+                location: GoRouterState.of(context).uri.toString(),
+              );
+            },
+          ),
         Expanded(child: body),
       ],
+    );
+  }
+}
+
+class _ConnectivityBanner extends StatelessWidget {
+  const _ConnectivityBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Material(
+      color: cs.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off_rounded, color: cs.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Keine Serververbindung: kein Internet oder Server wird gerade gewartet.',
+                style: TextStyle(color: cs.onErrorContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
