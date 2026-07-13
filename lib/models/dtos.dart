@@ -2177,3 +2177,76 @@ class AemterOverviewDto {
         ).map(AmtEntryDto.fromJson).toList(growable: false),
       );
 }
+
+// ---------- FERIENVERTRETER ----------
+
+class FerienvertreterDto {
+  final String id;
+  final UserPickerDto person;
+
+  /// date-only: YYYY-MM-DD
+  final String fromDate;
+
+  /// date-only: YYYY-MM-DD
+  final String untilDate;
+
+  FerienvertreterDto({
+    required this.id,
+    required this.person,
+    required this.fromDate,
+    required this.untilDate,
+  });
+
+  DateTime get fromDateLocal => _parseLocalDate(fromDate);
+  DateTime get untilDateLocal => _parseLocalDate(untilDate);
+
+  factory FerienvertreterDto.fromJson(Map<String, dynamic> json) =>
+      FerienvertreterDto(
+        id: _reqString(json, 'id'),
+        person: UserPickerDto.fromJson(
+          (json['person'] as Map).cast<String, dynamic>(),
+        ),
+        fromDate: _reqString(json, 'fromDate'),
+        untilDate: _reqString(json, 'untilDate'),
+      );
+}
+
+class CreateFerienvertreterRequest {
+  final String userId;
+
+  /// date-only: YYYY-MM-DD
+  final String fromDate;
+
+  /// date-only: YYYY-MM-DD
+  final String untilDate;
+
+  CreateFerienvertreterRequest({
+    required this.userId,
+    required this.fromDate,
+    required this.untilDate,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'userId': userId,
+    'fromDate': fromDate,
+    'untilDate': untilDate,
+  };
+}
+
+class UpdateFerienvertreterRequest {
+  final String? userId;
+
+  /// date-only: YYYY-MM-DD
+  final String? fromDate;
+
+  /// date-only: YYYY-MM-DD
+  final String? untilDate;
+
+  UpdateFerienvertreterRequest({this.userId, this.fromDate, this.untilDate});
+
+  Map<String, dynamic> toJson() => {
+    if (userId != null) 'userId': userId,
+    if (fromDate != null) 'fromDate': fromDate,
+    if (untilDate != null) 'untilDate': untilDate,
+  };
+}

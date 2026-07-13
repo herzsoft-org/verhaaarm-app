@@ -100,7 +100,7 @@ class ActionsPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _Section(
-            title: 'Dokumente',
+            title: 'Offizielles',
             children: [
               ListTile(
                 leading: const Icon(Icons.groups_rounded),
@@ -116,6 +116,19 @@ class ActionsPage extends StatelessWidget {
                 titleAlignment: ListTileTitleAlignment.center,
                 onTap: () => context.push('/amt'),
               ),
+              ListTile(
+                leading: const Icon(Icons.beach_access_rounded),
+                title: const Text('Ferienvertreter'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                titleAlignment: ListTileTitleAlignment.center,
+                onTap: () => context.push('/ferienvertreter'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _Section(
+            title: 'Dokumente',
+            children: [
               if (!isPhilister)
                 ListTile(
                   leading: const Icon(Icons.picture_as_pdf_rounded),

@@ -249,7 +249,6 @@ class _EhrengerichtCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Card(
-      color: cs.tertiaryContainer,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -258,7 +257,7 @@ class _EhrengerichtCard extends StatelessWidget {
             child: Text(
               'Ehrengericht',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: cs.onTertiaryContainer,
+                color: cs.tertiary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -267,13 +266,7 @@ class _EhrengerichtCard extends StatelessWidget {
             if (i > 0 &&
                 _spitze.contains(groups[i - 1].amtType) &&
                 !_spitze.contains(groups[i].amtType))
-              Divider(
-                height: 17,
-                thickness: 1,
-                indent: 16,
-                endIndent: 16,
-                color: cs.onTertiaryContainer.withValues(alpha: 0.3),
-              ),
+              const Divider(height: 17, thickness: 1, indent: 16, endIndent: 16),
             // In edit mode every Ehrengericht slot is shown decoupled (its own plain
             // label, no "und X" combination) so it's never unclear that tapping it only
             // edits that one slot. Outside edit mode we keep the combined display.
@@ -309,17 +302,19 @@ class _EhrengerichtCard extends StatelessWidget {
 
     return ListTile(
       titleAlignment: ListTileTitleAlignment.center,
-      title: Text(title, style: TextStyle(color: cs.onTertiaryContainer)),
+      title: Text(title),
       subtitle: Text(
         namesOrNichtVergeben(holders),
-        style: TextStyle(
-          color: cs.onTertiaryContainer.withValues(alpha: unfilled ? 1 : 0.8),
-          fontStyle: unfilled ? FontStyle.italic : FontStyle.normal,
-          fontWeight: unfilled ? FontWeight.w600 : FontWeight.normal,
-        ),
+        style: unfilled
+            ? TextStyle(
+                color: cs.error,
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w600,
+              )
+            : null,
       ),
       trailing: onTap != null
-          ? Icon(Icons.chevron_right_rounded, color: cs.onTertiaryContainer)
+          ? const Icon(Icons.chevron_right_rounded)
           : null,
       onTap: onTap,
     );

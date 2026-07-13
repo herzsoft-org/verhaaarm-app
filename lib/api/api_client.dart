@@ -921,6 +921,45 @@ class ApiClient {
     return AmtEntryDto.fromJson((r.data as Map).cast<String, dynamic>());
   }
 
+  // Whether the current user currently holds some Amt (auto or manual) and may
+  // therefore manage Amt-gated resources (Ämter itself, Ferienvertreter, ...).
+  Future<bool> getAmtCanEdit() async {
+    final r = await dio.get('/amt/can-edit');
+    final data = (r.data as Map).cast<String, dynamic>();
+    return data['canEdit'] == true;
+  }
+
+  // ----------------------------
+  // FERIENVERTRETER (swagger: /ferienvertreter, /ferienvertreter/{id})
+  // ----------------------------
+
+  Future<List<FerienvertreterDto>> listFerienvertreter() async {
+    final r = await dio.get('/ferienvertreter');
+    final list = (r.data as List).cast<dynamic>();
+    return list
+        .map((e) => FerienvertreterDto.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<FerienvertreterDto> createFerienvertreter(
+    CreateFerienvertreterRequest req,
+  ) async {
+    final r = await dio.post('/ferienvertreter', data: req.toJson());
+    return FerienvertreterDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<FerienvertreterDto> updateFerienvertreter(
+    String id,
+    UpdateFerienvertreterRequest req,
+  ) async {
+    final r = await dio.patch('/ferienvertreter/$id', data: req.toJson());
+    return FerienvertreterDto.fromJson((r.data as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteFerienvertreter(String id) async {
+    await dio.delete('/ferienvertreter/$id');
+  }
+
   // ----------------------------
   // SLUSHY RECIPES (/slushy-recipes, /slushy-recipes/{id}, /slushy-recipes/{id}/ratings)
   // ----------------------------

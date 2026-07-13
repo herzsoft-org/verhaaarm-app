@@ -17,6 +17,8 @@ import '../features/fines/fine_detail_page.dart';
 import '../features/fines/fine_form_page.dart';
 import '../features/fines/my_fines_page.dart';
 import '../features/amt/aemter_page.dart';
+import '../features/ferienvertreter/ferienvertreter_page.dart';
+import '../features/ferienvertreter/ferienvertreter_form_page.dart';
 import '../features/office/office_page.dart';
 import '../features/office/users/users_page.dart';
 import '../features/office/users/user_form_page.dart';
@@ -137,6 +139,10 @@ bool _canAccessLocation(String location, Set<AppRole> roles) {
   }
 
   if (location == '/amt' || location.startsWith('/amt/')) {
+    return true;
+  }
+
+  if (location == '/ferienvertreter' || location.startsWith('/ferienvertreter/')) {
     return true;
   }
 
@@ -748,6 +754,26 @@ Future<GoRouter> buildRouter() async {
       _actionSubRoute(
         path: '/amt',
         builder: (context, state) => AemterPage(api: api, authStore: authStore),
+      ),
+      _actionSubRoute(
+        path: '/ferienvertreter',
+        builder: (context, state) =>
+            FerienvertreterPage(api: api, authStore: authStore),
+      ),
+      _actionSubRoute(
+        path: '/ferienvertreter/new',
+        builder: (context, state) =>
+            FerienvertreterFormPage(api: api, authStore: authStore),
+      ),
+      _actionSubRoute(
+        path: '/ferienvertreter/:id/edit',
+        builder: (context, state) => FerienvertreterFormPage(
+          api: api,
+          authStore: authStore,
+          editEntry: state.extra is FerienvertreterDto
+              ? state.extra as FerienvertreterDto
+              : null,
+        ),
       ),
       _actionSubRoute(
         path: '/office/catalog',
