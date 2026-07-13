@@ -39,6 +39,15 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "getInstallState" -> {
+                        try {
+                            result.success(getInstallState())
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Could not read app installation state", e)
+                            result.error("INSTALL_STATE_FAILED", e.toString(), null)
+                        }
+                    }
+
                     "canInstallUnknownApps" -> {
                         result.success(canInstallUnknownApps())
                     }
@@ -103,6 +112,68 @@ class MainActivity : FlutterActivity() {
         }
         Log.i(TAG, "Unknown-app install permission allowed=$allowed sdk=${Build.VERSION.SDK_INT}")
         return allowed
+    }
+
+    private fun getInstallState(): Map<String, Any?> {
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(
+                packageName,
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong())
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+        }
+        val declaredPermissions = packageInfo.requestedPermissions?.toSet().orEmpty()
+
+        var installingPackageName: String? = null
+        var initiatingPackageName: String? = null
+        var originatingPackageName: String? = null
+        var updateOwnerPackageName: String? = null
+        var packageSource: Int? = null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val sourceInfo = packageManager.getInstallSourceInfo(packageName)
+            installingPackageName = sourceInfo.installingPackageName
+            initiatingPackageName = sourceInfo.initiatingPackageName
+            originatingPackageName = sourceInfo.originatingPackageName
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageSource = sourceInfo.packageSource
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                updateOwnerPackageName = sourceInfo.updateOwnerPackageName
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            installingPackageName = packageManager.getInstallerPackageName(packageName)
+        }
+
+        fun isGranted(permission: String): Boolean =
+            packageManager.checkPermission(permission, packageName) ==
+                PackageManager.PERMISSION_GRANTED
+
+        return mapOf(
+            "packageName" to packageName,
+            "sdkInt" to Build.VERSION.SDK_INT,
+            "targetSdk" to applicationInfo.targetSdkVersion,
+            "canRequestPackageInstalls" to canInstallUnknownApps(),
+            "requestInstallPackagesDeclared" to
+                declaredPermissions.contains("android.permission.REQUEST_INSTALL_PACKAGES"),
+            "updateWithoutUserActionDeclared" to
+                declaredPermissions.contains("android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"),
+            "updateWithoutUserActionGranted" to
+                isGranted("android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"),
+            "enforceUpdateOwnershipDeclared" to
+                declaredPermissions.contains("android.permission.ENFORCE_UPDATE_OWNERSHIP"),
+            "enforceUpdateOwnershipGranted" to
+                isGranted("android.permission.ENFORCE_UPDATE_OWNERSHIP"),
+            "installingPackageName" to installingPackageName,
+            "initiatingPackageName" to initiatingPackageName,
+            "originatingPackageName" to originatingPackageName,
+            "updateOwnerPackageName" to updateOwnerPackageName,
+            "packageSource" to packageSource
+        )
     }
 
     private fun openUnknownAppsSettings() {

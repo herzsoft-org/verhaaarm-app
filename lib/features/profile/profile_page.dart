@@ -13,6 +13,7 @@ import '../../api/api_client.dart';
 import '../../auth/auth_store.dart';
 import '../../auth/roles.dart';
 import '../../common/cache/app_cache.dart';
+import '../../common/platform/android_install_state.dart';
 import '../../common/widgets/app_scaffold.dart';
 import '../../common/widgets/busy_icon_button.dart';
 import '../../common/widgets/schnupfspruch_button.dart';
@@ -53,7 +54,6 @@ class _ProfilePageState extends State<ProfilePage> {
   String _appVersion = '—';
   String _platformLabel = '—';
   String _deviceLabel = '—';
-  String _localeLabel = '—';
   String _sessionLabel = '—';
 
   @override
@@ -135,7 +135,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _appVersion = s.appVersion;
     _platformLabel = s.platformLabel;
     _deviceLabel = s.deviceLabel;
-    _localeLabel = s.localeLabel;
     _sessionLabel = s.sessionLabel;
   }
 
@@ -187,10 +186,6 @@ class _ProfilePageState extends State<ProfilePage> {
       final w = await deviceInfo.windowsInfo;
       deviceLabel = 'Windows (build ${w.buildNumber})';
     }
-
-    final locale = WidgetsBinding.instance.platformDispatcher.locale;
-    final localeLabel = '${locale.languageCode}_${locale.countryCode ?? ''}'
-        .trim();
 
     String displayName = '—';
     String username = '—';
@@ -255,7 +250,6 @@ class _ProfilePageState extends State<ProfilePage> {
       appVersion: appVersion,
       platformLabel: platformLabel,
       deviceLabel: deviceLabel,
-      localeLabel: localeLabel,
     );
   }
 
@@ -285,6 +279,21 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openAppInfoSheet() async {
+    final shouldLoadInstallState = !kIsWeb && Platform.isAndroid;
+    AndroidInstallState? installState;
+    var installStateUnavailable = false;
+
+    if (shouldLoadInstallState) {
+      try {
+        installState = await AndroidInstallState.load();
+        installStateUnavailable = installState == null;
+      } catch (_) {
+        installStateUnavailable = true;
+      }
+    }
+
+    if (!mounted) return;
+
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -342,15 +351,24 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: const Text('Gerät'),
                         subtitle: Text(_deviceLabel),
                       ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.language_rounded),
-                        title: const Text('Sprache'),
-                        subtitle: Text(_localeLabel),
-                      ),
                     ],
                   ),
                 ),
+                if (installState != null) ...[
+                  const SizedBox(height: 8),
+                  _AndroidInstallationInfoCard(state: installState),
+                ] else if (installStateUnavailable) ...[
+                  const SizedBox(height: 8),
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.warning_amber_rounded),
+                      title: Text('Android-Installationsstatus'),
+                      subtitle: Text(
+                        'Die Installationsinformationen konnten nicht ausgelesen werden.',
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 FilledButton.icon(
                   onPressed: () => Navigator.pop(sheetContext),
@@ -766,6 +784,130 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
+class _AndroidInstallationInfoCard extends StatelessWidget {
+  final AndroidInstallState state;
+
+  const _AndroidInstallationInfoCard({required this.state});
+
+  String _packageLabel(
+    String? packageName, {
+    String fallback = 'Nicht gesetzt',
+  }) {
+    if (packageName == null) return fallback;
+    return packageName == state.packageName
+        ? '$packageName (diese App)'
+        : packageName;
+  }
+
+  String _permissionLabel({required bool declared, required bool granted}) {
+    if (!declared) return 'Nicht deklariert';
+    return granted ? 'Erteilt' : 'Nicht erteilt';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final requiredTarget = state.requiredTargetSdkForSilentUpdate;
+    final silentRequirements = state.meetsSilentSelfUpdateRequirements;
+
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(
+              silentRequirements
+                  ? Icons.verified_rounded
+                  : Icons.info_outline_rounded,
+            ),
+            title: const Text('Prompt-freies Selbstupdate'),
+            subtitle: Text(
+              silentRequirements
+                  ? 'Öffentliche Android-Voraussetzungen erfüllt. Android oder Play Protect kann trotzdem eine Bestätigung verlangen.'
+                  : 'Voraussetzungen nicht vollständig erfüllt. Target SDK ${state.targetSdk}${requiredTarget == null ? '' : ' (benötigt: $requiredTarget)'} auf Android SDK ${state.sdkInt}.',
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.install_mobile_rounded),
+            title: const Text('Registrierter Installer'),
+            subtitle: Text(
+              _packageLabel(
+                state.installingPackageName,
+                fallback: 'Nicht verfügbar (z. B. ADB/System-App)',
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings_rounded),
+            title: const Text('Update-Eigentümer'),
+            subtitle: Text(
+              state.sdkInt < 34
+                  ? 'Von dieser Android-Version nicht unterstützt'
+                  : _packageLabel(
+                      state.updateOwnerPackageName,
+                      fallback: 'Nicht gesetzt (Ownership nicht aktiv)',
+                    ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.source_rounded),
+            title: const Text('Installationsquelle'),
+            subtitle: Text(state.packageSourceLabel),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.playlist_add_check_circle_rounded),
+            title: const Text('Installation initiiert durch'),
+            subtitle: Text(
+              _packageLabel(
+                state.initiatingPackageName,
+                fallback: 'Nicht verfügbar',
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.android_rounded),
+            title: const Text('Unbekannte Apps installieren'),
+            subtitle: Text(
+              !state.requestInstallPackagesDeclared
+                  ? 'Nicht deklariert'
+                  : state.canRequestPackageInstalls
+                  ? 'Vom Benutzer erlaubt'
+                  : 'Vom Benutzer nicht erlaubt',
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.system_update_alt_rounded),
+            title: const Text('Updates ohne Benutzeraktion'),
+            subtitle: Text(
+              _permissionLabel(
+                declared: state.updateWithoutUserActionDeclared,
+                granted: state.updateWithoutUserActionGranted,
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.verified_user_rounded),
+            title: const Text('Update-Ownership anfordern'),
+            subtitle: Text(
+              state.sdkInt < 34
+                  ? 'Von dieser Android-Version nicht unterstützt'
+                  : _permissionLabel(
+                      declared: state.enforceUpdateOwnershipDeclared,
+                      granted: state.enforceUpdateOwnershipGranted,
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileSnapshot {
   final String displayName;
   final String username;
@@ -775,7 +917,6 @@ class _ProfileSnapshot {
   final String appVersion;
   final String platformLabel;
   final String deviceLabel;
-  final String localeLabel;
   final String sessionLabel;
 
   const _ProfileSnapshot({
@@ -787,7 +928,6 @@ class _ProfileSnapshot {
     required this.appVersion,
     required this.platformLabel,
     required this.deviceLabel,
-    required this.localeLabel,
   });
 
   Map<String, dynamic> toJson() => {
@@ -798,7 +938,6 @@ class _ProfileSnapshot {
     'appVersion': appVersion,
     'platformLabel': platformLabel,
     'deviceLabel': deviceLabel,
-    'localeLabel': localeLabel,
     'sessionLabel': sessionLabel,
   };
 
@@ -812,6 +951,5 @@ class _ProfileSnapshot {
         appVersion: (json['appVersion'] as String?) ?? '—',
         platformLabel: (json['platformLabel'] as String?) ?? '—',
         deviceLabel: (json['deviceLabel'] as String?) ?? '—',
-        localeLabel: (json['localeLabel'] as String?) ?? '—',
       );
 }
