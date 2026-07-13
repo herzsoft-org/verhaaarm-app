@@ -23,7 +23,13 @@ class ConnectivityCenter {
 
   static const _retryInterval = Duration(seconds: 5);
 
+  // Brief blips (e.g. right after the app resumes from background, before the
+  // OS network stack has fully reconnected) shouldn't flash the banner - only
+  // show it if the failure is still happening after this grace period.
+  static const _graceBeforeShowingBanner = Duration(seconds: 3);
+
   bool _reachable = true;
+  Timer? _pendingUnreachableTimer;
   Timer? _retryTimer;
   Dio? _dio;
 
@@ -33,6 +39,8 @@ class ConnectivityCenter {
   Stream<bool> get reachableStream => _controller.stream;
 
   void reportSuccess() {
+    _pendingUnreachableTimer?.cancel();
+    _pendingUnreachableTimer = null;
     _retryTimer?.cancel();
     _retryTimer = null;
 
@@ -45,12 +53,21 @@ class ConnectivityCenter {
   void reportFailure(Dio dio) {
     _dio = dio;
 
-    if (_reachable) {
+    // Already showing the banner, or already waiting out the grace period -
+    // nothing new to do here.
+    if (!_reachable || _pendingUnreachableTimer != null) return;
+
+    _pendingUnreachableTimer = Timer(_graceBeforeShowingBanner, () {
+      _pendingUnreachableTimer = null;
       _reachable = false;
       _controller.add(false);
-    }
+      _retryTimer ??= Timer.periodic(_retryInterval, (_) => _pingOnce());
+    });
 
-    _retryTimer ??= Timer.periodic(_retryInterval, (_) => _pingOnce());
+    // Probe right away too: if the connection has already recovered by itself
+    // (the common resume-from-background case), this resolves and cancels the
+    // pending timer above before the banner ever shows.
+    unawaited(_pingOnce());
   }
 
   Future<void> _pingOnce() async {
