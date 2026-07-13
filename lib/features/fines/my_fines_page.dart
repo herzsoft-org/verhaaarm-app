@@ -579,10 +579,8 @@ class _MyFinesPageState extends State<MyFinesPage> {
     });
   }
 
-  // NEW: who may open fine details from "my fines"
   bool _canOpenFineDetails() {
-    final token = widget.api.authStore.accessToken;
-    final roles = Roles.fromAccessToken(token);
+    final roles = widget.api.authStore.currentRoles;
     return Roles.canViewFineDetails(roles);
   }
 
