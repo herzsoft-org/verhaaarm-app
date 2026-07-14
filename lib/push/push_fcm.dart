@@ -20,6 +20,7 @@ const _defaultPushChannelId = 'verhaarm_push';
 const _defaultPushChannelName = 'Push notifications';
 const _liveEventActionChannelId = 'verhaarm_live_events_actions_v2';
 const _liveEventActionChannelName = 'Live events';
+const _androidNotificationSmallIcon = 'ic_notification_zirkel';
 
 typedef PushTapHandler = Future<void> Function(Map<String, String> data);
 
@@ -244,7 +245,9 @@ int _notificationId(RemoteMessage m) {
 Future<void> _ensureLocalNotificationsInitialized({
   bool requestPermission = true,
 }) async {
-  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const androidInit = AndroidInitializationSettings(
+    _androidNotificationSmallIcon,
+  );
   const init = InitializationSettings(android: androidInit);
 
   await _ln.initialize(
@@ -381,6 +384,7 @@ AndroidNotificationDetails _androidDetailsForData(Map<String, dynamic> data) {
   return AndroidNotificationDetails(
     hasActions ? _liveEventActionChannelId : _defaultPushChannelId,
     hasActions ? _liveEventActionChannelName : _defaultPushChannelName,
+    icon: _androidNotificationSmallIcon,
     channelDescription: hasActions
         ? 'Live event notifications with quick action buttons'
         : 'Verhåårm push notifications',
